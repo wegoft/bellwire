@@ -36,6 +36,7 @@
 		B0000000000000000000001C /* BellwireWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000023 /* BellwireWidgets.swift */; };
 		B0000000000000000000001D /* BellwireWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = F00000000000000000000026 /* BellwireWidgets.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B0000000000000000000001E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000029 /* Localizable.strings */; };
+		B0000000000000000000001F /* ProjectLogoCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000002A /* ProjectLogoCache.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -110,6 +111,7 @@
 		F00000000000000000000026 /* BellwireWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BellwireWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00000000000000000000027 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		F00000000000000000000028 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		F0000000000000000000002A /* ProjectLogoCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectLogoCache.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -159,6 +161,7 @@
 				F00000000000000000000007 /* PushDelegate.swift */,
 				F00000000000000000000008 /* Theme.swift */,
 				F00000000000000000000009 /* Components.swift */,
+				F0000000000000000000002A /* ProjectLogoCache.swift */,
 				F0000000000000000000000A /* RootView.swift */,
 				F0000000000000000000000B /* OnboardingViews.swift */,
 				F0000000000000000000000C /* InboxViews.swift */,
@@ -372,6 +375,7 @@
 				B00000000000000000000007 /* PushDelegate.swift in Sources */,
 				B00000000000000000000008 /* Theme.swift in Sources */,
 				B00000000000000000000009 /* Components.swift in Sources */,
+				B0000000000000000000001F /* ProjectLogoCache.swift in Sources */,
 				B0000000000000000000000A /* RootView.swift in Sources */,
 				B0000000000000000000000B /* OnboardingViews.swift in Sources */,
 				B0000000000000000000000C /* InboxViews.swift in Sources */,
@@ -455,7 +459,7 @@
 			ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 			CODE_SIGN_ENTITLEMENTS = Bellwire/Bellwire.entitlements;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 8;
+			CURRENT_PROJECT_VERSION = 9;
 			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
 			ENABLE_PREVIEWS = YES;
 			GENERATE_INFOPLIST_FILE = NO;
@@ -476,7 +480,7 @@
 			ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 			CODE_SIGN_ENTITLEMENTS = Bellwire/Bellwire.entitlements;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 8;
+			CURRENT_PROJECT_VERSION = 9;
 			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
 			ENABLE_PREVIEWS = YES;
 			GENERATE_INFOPLIST_FILE = NO;
@@ -496,7 +500,7 @@
 			APPLICATION_EXTENSION_API_ONLY = YES;
 			CODE_SIGN_ENTITLEMENTS = BellwireNotificationService/BellwireNotificationService.entitlements;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 8;
+			CURRENT_PROJECT_VERSION = 9;
 			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
 			GENERATE_INFOPLIST_FILE = NO;
 			INFOPLIST_FILE = BellwireNotificationService/Info.plist;
@@ -515,7 +519,7 @@
 			APPLICATION_EXTENSION_API_ONLY = YES;
 			CODE_SIGN_ENTITLEMENTS = BellwireNotificationService/BellwireNotificationService.entitlements;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 8;
+			CURRENT_PROJECT_VERSION = 9;
 			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
 			GENERATE_INFOPLIST_FILE = NO;
 			INFOPLIST_FILE = BellwireNotificationService/Info.plist;
@@ -534,7 +538,7 @@
 			APPLICATION_EXTENSION_API_ONLY = YES;
 			CODE_SIGN_ENTITLEMENTS = BellwireWidgets/BellwireWidgets.entitlements;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 8;
+			CURRENT_PROJECT_VERSION = 9;
 			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
 			GENERATE_INFOPLIST_FILE = NO;
 			INFOPLIST_FILE = BellwireWidgets/Info.plist;
@@ -553,7 +557,7 @@
 			APPLICATION_EXTENSION_API_ONLY = YES;
 			CODE_SIGN_ENTITLEMENTS = BellwireWidgets/BellwireWidgets.entitlements;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 8;
+			CURRENT_PROJECT_VERSION = 9;
 			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
 			GENERATE_INFOPLIST_FILE = NO;
 			INFOPLIST_FILE = BellwireWidgets/Info.plist;

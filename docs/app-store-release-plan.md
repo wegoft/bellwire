@@ -1,12 +1,12 @@
 # Bellwire App Store 上架计划
 
-更新时间：2026-07-23
+更新时间：2026-07-25
 
-发布状态：已提交 App Store 审核，等待 Apple 审核结果。
+发布状态：App Review 草稿已创建；Build 9 与首个 Bellwire Pro 订阅待加入同一草稿后提交。
 
 ## 发布目标
 
-- 首发版本：1.0.0（build 5）
+- 首发版本：1.0.0（build 9）
 - Bundle ID：`app.bellwire`
 - 最低系统：iOS 17.0
 - 首发地区：除中国大陆外的可用国家和地区
@@ -30,8 +30,9 @@
 - [x] App Store Connect 创建 App 记录并设置销售地区
 - [x] 完成 App Privacy、年龄分级、出口合规与内容版权问卷
 - [x] 制作并上传 6.7 英寸 iPhone 截图
-- [x] 上传提交审核所用构建版本
-- [x] 提交审核
+- [ ] 上传并选择 1.0.0（9）
+- [ ] 将 Bellwire Pro 订阅组、月度和年度订阅加入同一审核草稿
+- [ ] 提交审核
 - [ ] 使用 TestFlight / App Store 构建在真机验证 production APNs
 - [ ] 跟进 Apple 审核结果与可能的 Resolution Center 回复
 

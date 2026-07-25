@@ -9,6 +9,7 @@ enum AppRoute: Hashable {
 struct ProjectsView: View {
     @EnvironmentObject private var model: AppModel
     @State private var filter: ProjectFilter = .all
+    @State private var isGeneratingBinding = false
 
     var body: some View {
         NavigationStack {
@@ -49,31 +50,48 @@ struct ProjectsView: View {
                             }
                         }
                         .padding(.horizontal, BellwireSpacing.standard)
-                        .bellwireSurface()
+                        .bellwireListGroup()
                     }
 
                     VStack(alignment: .leading, spacing: BellwireSpacing.compact) {
-                        SectionHeaderView(title: "Add a project")
-                        HStack(alignment: .top, spacing: BellwireSpacing.small) {
-                            Image(systemName: BellwireIcons.binding)
-                                .foregroundStyle(BellwireTheme.accent)
-                                .frame(width: 36, height: 36)
-                                .background(BellwireTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Ask your Agent")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(BellwireTheme.ink)
-                                Text("Generate a one-time binding code in Settings, then give it to Codex, Claude Code, or another Agent.")
-                                    .font(.caption)
-                                    .foregroundStyle(BellwireTheme.mutedInk)
-                                    .fixedSize(horizontal: false, vertical: true)
+                        SectionHeaderView(title: "Connect")
+                        Button {
+                            isGeneratingBinding = true
+                            Task {
+                                await model.createBinding()
+                                isGeneratingBinding = false
                             }
+                        } label: {
+                            HStack(spacing: BellwireSpacing.small) {
+                                Image(systemName: BellwireIcons.binding)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(BellwireTheme.accent)
+                                    .frame(width: 38, height: 38)
+                                    .background(BellwireTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(isGeneratingBinding ? "Generating binding code…" : "Connect a project")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(BellwireTheme.ink)
+                                    Text("Create a one-time code for your Agent.")
+                                        .font(.caption)
+                                        .foregroundStyle(BellwireTheme.mutedInk)
+                                }
+                                Spacer()
+                                if isGeneratingBinding {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(BellwireTheme.mutedInk)
+                                }
+                            }
+                            .padding(.horizontal, BellwireSpacing.standard)
+                            .frame(minHeight: 68)
+                            .contentShape(Rectangle())
                         }
-                        .padding(BellwireSpacing.standard)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: BellwireRadius.card, style: .continuous)
-                                .stroke(BellwireTheme.strongSeparator, style: StrokeStyle(lineWidth: 1, dash: [5, 5]))
-                        }
+                        .buttonStyle(PressableButtonStyle())
+                        .disabled(isGeneratingBinding)
+                        .bellwireListGroup()
                     }
                 }
                 .padding(.horizontal, BellwireSpacing.roomy)
@@ -83,6 +101,9 @@ struct ProjectsView: View {
             .bellwirePageBackground()
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { await model.loadDashboard() }
+            .sheet(item: $model.binding) { binding in
+                BindingCodeSheet(binding: binding)
+            }
             .navigationDestination(for: AppRoute.self) { route in
                 switch route {
                 case .project(let id): ProjectDetailView(projectID: id)
@@ -171,30 +192,24 @@ private struct ProjectListRow: View {
         HStack(spacing: BellwireSpacing.small) {
             ProjectAvatarView(name: project.name, icon: project.icon, size: 46, logoURL: project.logoUrl.flatMap(URL.init(string:)))
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: BellwireSpacing.compact) {
-                    Text(project.name)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(BellwireTheme.ink)
-                        .lineLimit(1)
-                    if project.isPaused {
-                        StatusBadgeView(text: "Paused", color: BellwireTheme.mutedInk, showsDot: false)
-                    }
-                    StatusBadgeView(
-                        text: project.deliveryMode == .private ? "Private" : "Hosted",
-                        color: project.deliveryMode == .private
-                            ? BellwireTheme.success
-                            : BellwireTheme.warning,
-                        showsDot: false
-                    )
-                }
-                Text(project.category.capitalized + " · " + latestDescription)
+                Text(project.name)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(BellwireTheme.ink)
+                    .lineLimit(1)
+                Text(project.category.capitalized + " · " + deliveryLabel + " · " + latestDescription)
                     .font(.caption)
                     .foregroundStyle(BellwireTheme.mutedInk)
                     .lineLimit(1)
             }
             Spacer(minLength: BellwireSpacing.compact)
             if isRunning {
-                StatusBadgeView(text: "Running", color: BellwireTheme.live)
+                Circle()
+                    .fill(BellwireTheme.live)
+                    .frame(width: 9, height: 9)
+                    .shadow(color: BellwireTheme.live.opacity(0.28), radius: 4)
+                    .accessibilityLabel("Running")
+            } else if project.isPaused {
+                StatusBadgeView(text: "Paused", color: BellwireTheme.mutedInk, showsDot: false)
             } else if unreadCount > 0 {
                 Text(unreadCount.formatted())
                     .font(.caption.weight(.bold))
@@ -219,6 +234,10 @@ private struct ProjectListRow: View {
         guard let latestEvent else { return "No recent events" }
         return latestEvent.displayTitle
     }
+
+    private var deliveryLabel: String {
+        project.deliveryMode == .private ? "Private" : "Hosted"
+    }
 }
 
 struct EventsView: View {
@@ -241,22 +260,22 @@ struct EventsView: View {
                                     if await model.markAllRead() > 0 { BellwireHaptics.success() }
                                 }
                             } label: {
-                                HStack(spacing: 6) {
+                                Group {
                                     if model.isMarkingAllRead {
-                                        ProgressView()
-                                            .controlSize(.small)
+                                        ProgressView().controlSize(.small)
                                     } else {
                                         Image(systemName: "checkmark.circle")
+                                            .font(.system(size: 18, weight: .medium))
                                     }
-                                    Text("Mark all read")
                                 }
-                                .font(.caption.weight(.semibold))
                                 .foregroundStyle(BellwireTheme.accent)
-                                .frame(minHeight: 44)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(PressableButtonStyle())
                             .disabled(model.unreadCount == 0 || model.isMarkingAllRead)
                             .opacity(model.unreadCount == 0 ? 0.42 : 1)
+                            .accessibilityLabel("Mark all read")
                             .accessibilityHint("Marks every unread event as read")
                         }
                         Picker("Event filter", selection: $filter) {
@@ -295,7 +314,7 @@ struct EventsView: View {
                             }
                         }
                         .padding(.horizontal, BellwireSpacing.standard)
-                        .bellwireSurface()
+                        .bellwireListGroup()
                     }
                 }
                 .padding(.horizontal, BellwireSpacing.roomy)
@@ -377,7 +396,7 @@ struct InboxView: View {
                             }
                         }
                         .padding(BellwireSpacing.standard)
-                        .bellwireSurface()
+                        .bellwireListGroup()
                     }
 
                     liveSection
@@ -536,7 +555,7 @@ struct InboxView: View {
                     }
                 }
                 .padding(.horizontal, BellwireSpacing.standard)
-                .bellwireSurface()
+                .bellwireListGroup()
             }
         }
     }

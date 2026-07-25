@@ -11,6 +11,9 @@ All notable changes to Bellwire are documented here. The project follows
 
 - Present Bellwire Pro as an adaptive large purchase sheet with a clearer
   Private-free / Hosted-Pro explanation and localized StoreKit pricing.
+- Refine the native iOS information hierarchy with flatter list groups,
+  collapsible technical details, clearer project actions, and standard
+  destructive-action confirmations.
 - Add a black-box Direct v2 conformance test for signed requests, endpoint
   coverage, replay protection, stale timestamps, unknown keys, and tampering.
 
@@ -18,6 +21,8 @@ All notable changes to Bellwire are documented here. The project follows
 
 - Show Pro content immediately while StoreKit products load instead of leaving
   the paywall visually empty on slow App Store connections.
+- Keep remote project logos available through a bounded HTTPS disk cache, and
+  distinguish an unavailable App Store region from a temporary StoreKit error.
 - Keep the newest verified Apple entitlement across multiple transaction
   chains, avoid duplicate background purchase analytics, and make atomic
   monthly usage increments unambiguous in PostgreSQL.

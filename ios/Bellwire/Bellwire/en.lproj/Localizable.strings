@@ -87,6 +87,7 @@
 "%@ per month · billed yearly" = "%@ per month · billed yearly";
 "7-day free trial · then billed yearly" = "7-day free trial · then billed yearly";
 "Loading App Store…" = "Loading App Store…";
+"Price unavailable" = "Price unavailable";
 "Start free trial" = "Start 7-day free trial";
 "Try again" = "Try again";
 "Continue with yearly" = "Continue with yearly";
@@ -96,6 +97,7 @@
 "Terms" = "Terms";
 "Privacy" = "Privacy";
 "Bellwire Pro products are temporarily unavailable. Please try again." = "Bellwire Pro products are temporarily unavailable. Please try again.";
+"Bellwire Pro is not available in your current App Store region." = "Bellwire Pro is not available in your current App Store region.";
 "Your purchase is pending approval." = "Your purchase is pending approval.";
 "The purchase could not be completed." = "The purchase could not be completed.";
 "The purchase could not be completed. Please try again." = "The purchase could not be completed. Please try again.";
@@ -142,6 +144,12 @@
 "Hosted history · %lld days" = "Hosted history · %lld days";
 "%lld/project" = "%lld/project";
 "Export project" = "Export project";
+"Export JSON" = "Export JSON";
+"Project actions" = "Project actions";
+"Pause project" = "Pause project";
+"Resume project" = "Resume project";
+"Pausing…" = "Pausing…";
+"Resuming…" = "Resuming…";
 "Exports Event and delivery history as JSON" = "Exports Event and delivery history as JSON";
 "Project export is included with Bellwire Pro." = "Project export is included with Bellwire Pro.";
 "Start Live Activity" = "Start Live Activity";

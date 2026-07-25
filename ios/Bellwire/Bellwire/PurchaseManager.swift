@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 import Foundation
+import OSLog
 import StoreKit
 
 enum BellwirePurchasePlan: String, CaseIterable, Identifiable {
@@ -34,6 +35,11 @@ enum BellwirePurchasePlan: String, CaseIterable, Identifiable {
 
 @MainActor
 final class PurchaseManager: ObservableObject {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "app.bellwire",
+        category: "StoreKit"
+    )
+
     enum LoadState: Equatable {
         case idle
         case loading
@@ -46,6 +52,7 @@ final class PurchaseManager: ObservableObject {
     @Published private(set) var purchasedProductIDs: Set<String> = []
     @Published private(set) var serverEntitlement: AccountEntitlement?
     @Published private(set) var loadState: LoadState = .idle
+    @Published private(set) var isUnavailableInCurrentStorefront = false
     @Published private(set) var isPurchasing = false
     @Published private(set) var isRestoring = false
     @Published var errorMessage: String?
@@ -100,12 +107,23 @@ final class PurchaseManager: ObservableObject {
     func loadProducts() async {
         guard loadState != .loading else { return }
         loadState = .loading
+        isUnavailableInCurrentStorefront = false
         errorMessage = nil
 
         do {
             let loaded = try await Product.products(for: Self.productIDs)
             products = Dictionary(uniqueKeysWithValues: loaded.map { ($0.id, $0) })
-            loadState = loaded.isEmpty ? .unavailable : .loaded
+            let missingProductIDs = Self.productIDs.subtracting(products.keys)
+            if missingProductIDs.isEmpty {
+                loadState = .loaded
+            } else {
+                loadState = .unavailable
+                isUnavailableInCurrentStorefront = true
+                errorMessage = "Bellwire Pro is not available in your current App Store region."
+                Self.logger.error(
+                    "StoreKit did not return configured products: \(missingProductIDs.sorted().joined(separator: ", "), privacy: .public)"
+                )
+            }
 
             var eligibleTrials = Set<String>()
             for product in loaded {
@@ -119,7 +137,11 @@ final class PurchaseManager: ObservableObject {
             eligibleTrialProductIDs = eligibleTrials
         } catch {
             loadState = .unavailable
+            isUnavailableInCurrentStorefront = false
             errorMessage = "Bellwire Pro products are temporarily unavailable. Please try again."
+            Self.logger.error(
+                "StoreKit product request failed: \(String(describing: error), privacy: .public)"
+            )
         }
     }
 

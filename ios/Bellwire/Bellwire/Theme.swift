@@ -40,7 +40,7 @@ enum BellwireTheme {
         dark: UIColor(red: 0.78, green: 0.745, blue: 0.69, alpha: 1)
     )
     static let mutedInk = adaptiveColor(
-        light: UIColor(red: 0.49, green: 0.455, blue: 0.405, alpha: 1),
+        light: UIColor(red: 0.45, green: 0.415, blue: 0.365, alpha: 1),
         dark: UIColor(red: 0.60, green: 0.57, blue: 0.52, alpha: 1)
     )
     static let separator = adaptiveColor(
@@ -103,7 +103,8 @@ enum BellwireTheme {
 enum BellwireTypography {
     static let hero = Font.system(.largeTitle, design: .serif, weight: .regular)
     static let pageTitle = Font.system(.largeTitle, design: .serif, weight: .regular)
-    static let sectionTitle = Font.system(size: 10, weight: .medium, design: .monospaced)
+    static let sectionTitle = Font.system(.subheadline, design: .default, weight: .semibold)
+    static let technicalLabel = Font.system(size: 10, weight: .medium, design: .monospaced)
     static let technical = Font.system(size: 11, weight: .regular, design: .monospaced)
     static let technicalStrong = Font.system(size: 11, weight: .semibold, design: .monospaced)
     static let metric = Font.system(.title, design: .serif, weight: .regular)
@@ -134,8 +135,8 @@ enum BellwireRadius {
 
 enum BellwireShadow {
     static var cardColor: Color { BellwireTheme.cardShadow }
-    static let cardRadius: CGFloat = 14
-    static let cardY: CGFloat = 5
+    static let cardRadius: CGFloat = 8
+    static let cardY: CGFloat = 3
 }
 
 enum BellwireAnimation {
@@ -188,8 +189,20 @@ private struct BellwireSurfaceModifier: ViewModifier {
 }
 
 extension View {
-    func bellwireSurface(radius: CGFloat = BellwireRadius.largeCard, elevated: Bool = true) -> some View {
+    func bellwireSurface(radius: CGFloat = BellwireRadius.card, elevated: Bool = false) -> some View {
         modifier(BellwireSurfaceModifier(radius: radius, elevated: elevated))
+    }
+
+    func bellwireListGroup() -> some View {
+        bellwireSurface(radius: BellwireRadius.card, elevated: false)
+            .overlay {
+                RoundedRectangle(cornerRadius: BellwireRadius.card, style: .continuous)
+                    .stroke(BellwireTheme.separator, lineWidth: 1)
+            }
+    }
+
+    func bellwireFeatureSurface() -> some View {
+        bellwireSurface(radius: BellwireRadius.card, elevated: true)
     }
 
     func bellwirePageBackground() -> some View {
@@ -197,7 +210,7 @@ extension View {
     }
 
     func bellwireTechnicalLabel() -> some View {
-        font(BellwireTypography.sectionTitle)
+        font(BellwireTypography.technicalLabel)
             .textCase(.uppercase)
             .tracking(1.8)
             .foregroundStyle(BellwireTheme.mutedInk)

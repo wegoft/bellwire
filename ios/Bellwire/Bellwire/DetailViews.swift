@@ -19,8 +19,13 @@ struct EventDetailView: View {
                     header(detail)
                     fields(detail)
                     delivery(detail)
-                    identifiers(detail)
-                    rawJSON(detail)
+                    TechnicalDisclosure(title: "Technical details") {
+                        VStack(alignment: .leading, spacing: BellwireSpacing.roomy) {
+                            identifiers(detail)
+                            rawJSON(detail)
+                        }
+                        .padding(.vertical, BellwireSpacing.standard)
+                    }
                 } else if let loadError {
                     EmptyState(icon: "wifi.exclamationmark", title: "Event unavailable", message: loadError)
                         .bellwireSurface(elevated: false)
@@ -107,7 +112,7 @@ struct EventDetailView: View {
                 }
             }
             .padding(.horizontal, BellwireSpacing.standard)
-            .bellwireSurface(radius: BellwireRadius.card, elevated: false)
+            .bellwireListGroup()
         }
     }
 
@@ -125,7 +130,7 @@ struct EventDetailView: View {
                 }
             }
             .padding(BellwireSpacing.standard)
-            .bellwireSurface(radius: BellwireRadius.card, elevated: false)
+            .bellwireListGroup()
         }
     }
 
@@ -162,7 +167,7 @@ struct EventDetailView: View {
                     .foregroundStyle(BellwireTheme.ink)
             }
             .padding(BellwireSpacing.standard)
-            .background(Color.black.opacity(0.2), in: RoundedRectangle(cornerRadius: BellwireRadius.card, style: .continuous))
+            .background(BellwireTheme.raisedSurface, in: RoundedRectangle(cornerRadius: BellwireRadius.card, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: BellwireRadius.card, style: .continuous)
                     .stroke(BellwireTheme.separator, lineWidth: 1)
@@ -181,7 +186,7 @@ struct EventDetailView: View {
                 }
             }
             .padding(.horizontal, BellwireSpacing.standard)
-            .bellwireSurface(radius: BellwireRadius.card, elevated: false)
+            .bellwireListGroup()
         }
     }
 
@@ -241,13 +246,18 @@ struct ProjectDetailView: View {
                         ErrorBanner(message: errorMessage) { self.errorMessage = nil }
                     }
                     projectHeader(overview)
-                    deliveryMode(overview)
                     planUsage(overview)
                     health(overview)
                     liveSurfaces(overview)
                     recentEvents
-                    eventTypes(overview)
-                    endpoint(overview)
+                    TechnicalDisclosure(title: "Technical details") {
+                        VStack(alignment: .leading, spacing: BellwireSpacing.roomy) {
+                            deliveryMode(overview)
+                            eventTypes(overview)
+                            endpoint(overview)
+                        }
+                        .padding(.vertical, BellwireSpacing.standard)
+                    }
                     dangerZone
                 } else if let errorMessage {
                     EmptyState(icon: "wifi.exclamationmark", title: "Project unavailable", message: errorMessage)
@@ -265,28 +275,39 @@ struct ProjectDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let project = overview {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        export(project)
-                    } label: {
-                        if isExporting {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: "square.and.arrow.up")
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            export(project)
+                        } label: {
+                            Label("Export JSON", systemImage: "arrow.down.doc")
                         }
-                    }
-                    .disabled(isExporting || isDeleting)
-                    .accessibilityLabel("Export project")
-                    .accessibilityHint("Exports Event and delivery history as JSON")
+                        .disabled(isExporting || isDeleting)
 
-                    Button(project.status == "paused" ? "Resume" : "Pause") {
-                        Task { await togglePause(project) }
+                        Button {
+                            isUpdating = true
+                            Task { await togglePause(project) }
+                        } label: {
+                            Label(
+                                project.status == "paused" ? "Resume project" : "Pause project",
+                                systemImage: project.status == "paused" ? "play.fill" : "pause.fill"
+                            )
+                        }
+                        .disabled(isUpdating || isDeleting)
+                    } label: {
+                        Group {
+                            if isExporting || isUpdating {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "ellipsis.circle")
+                            }
+                        }
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                     }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(BellwireTheme.accent)
-                    .disabled(isUpdating || isDeleting)
-                    .accessibilityHint(project.status == "paused" ? "Resumes project notifications" : "Pauses project notifications")
+                    .accessibilityLabel("Project actions")
+                    .disabled(isUpdating || isExporting || isDeleting)
                 }
             }
         }
@@ -327,10 +348,27 @@ struct ProjectDetailView: View {
                     .foregroundStyle(BellwireTheme.ink)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: BellwireSpacing.compact) {
-                    StatusBadgeView(
-                        text: project.status == "paused" ? "Paused" : "Active",
-                        color: project.status == "paused" ? BellwireTheme.mutedInk : BellwireTheme.success
-                    )
+                    if isUpdating {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .controlSize(.mini)
+                                .tint(BellwireTheme.accent)
+                            Text(project.status == "paused" ? "Resuming…" : "Pausing…")
+                        }
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(BellwireTheme.accent)
+                        .padding(.horizontal, 9)
+                        .frame(minHeight: 26)
+                        .background(
+                            BellwireTheme.accent.opacity(0.13),
+                            in: RoundedRectangle(cornerRadius: BellwireRadius.small, style: .continuous)
+                        )
+                    } else {
+                        StatusBadgeView(
+                            text: project.status == "paused" ? "Paused" : "Active",
+                            color: project.status == "paused" ? BellwireTheme.mutedInk : BellwireTheme.success
+                        )
+                    }
                     StatusBadgeView(
                         text: project.deliveryMode == .private ? "Private" : "Hosted",
                         color: project.deliveryMode == .private
@@ -509,9 +547,13 @@ struct ProjectDetailView: View {
             )
             HStack(spacing: 10) {
                 healthMetric(project.deliveryHealth.accepted, "Accepted", BellwireTheme.success)
+                Divider().overlay(BellwireTheme.separator).frame(height: 48)
                 healthMetric(project.deliveryHealth.queued, "Queued", BellwireTheme.warning)
+                Divider().overlay(BellwireTheme.separator).frame(height: 48)
                 healthMetric(project.deliveryHealth.failed, "Failed", BellwireTheme.danger)
             }
+            .padding(.horizontal, BellwireSpacing.standard)
+            .bellwireListGroup()
         }
     }
 
@@ -527,8 +569,7 @@ struct ProjectDetailView: View {
         }
         .foregroundStyle(BellwireTheme.ink)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .bellwireSurface(radius: BellwireRadius.card, elevated: false)
+        .padding(.vertical, 14)
         .accessibilityElement(children: .combine)
     }
 
@@ -655,7 +696,7 @@ struct ProjectDetailView: View {
                     }
                 }
                 .padding(.horizontal, BellwireSpacing.standard)
-                .bellwireSurface()
+                .bellwireListGroup()
             }
         }
     }

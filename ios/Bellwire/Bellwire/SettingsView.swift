@@ -17,7 +17,6 @@ struct SettingsView: View {
     @State private var showsFeedbackMail = false
     @State private var showsFeedbackFallback = false
     @State private var feedbackEmailCopied = false
-    @State private var pendingAgentRevocation: AgentConnectionRecord?
     @State private var pendingDeviceDeletion: DeviceRecord?
     @AppStorage(AppLanguage.storageKey) private var appLanguage = AppLanguage.system.rawValue
     @AppStorage(AppAppearance.storageKey) private var appAppearance = AppAppearance.system.rawValue
@@ -35,17 +34,15 @@ struct SettingsView: View {
                         .foregroundStyle(BellwireTheme.ink)
                         .accessibilityAddTraits(.isHeader)
 
-                    accountCard
-                    proSection
-                    usageSection
+                    accountOverviewSection
                     if !model.pendingModeRequests.isEmpty {
                         modeRequestsSection
                     }
                     connectionSection
+                    devicesSection
                     notificationsSection
                     appPreferencesSection
                     supportSection
-                    devicesSection
                     accountSection
 
                     if let error = model.errorMessage {
@@ -124,16 +121,6 @@ struct SettingsView: View {
             } message: {
                 Text("Private notification and Inbox details cached on this iPhone will be removed. Your service data is not affected.")
             }
-            .alert(item: $pendingAgentRevocation) { connection in
-                Alert(
-                    title: Text("Disconnect Agent?"),
-                    message: Text("“\(connection.name)” will immediately lose access to Bellwire. Your projects and data will remain."),
-                    primaryButton: .destructive(Text("Disconnect")) {
-                        Task { await model.revokeAgentConnection(id: connection.id) }
-                    },
-                    secondaryButton: .cancel()
-                )
-            }
             .alert(item: $pendingDeviceDeletion) { device in
                 Alert(
                     title: Text("Remove device?"),
@@ -146,6 +133,92 @@ struct SettingsView: View {
             }
             .navigationDestination(isPresented: $showsDeleteAccountPage) {
                 DeleteAccountView()
+            }
+        }
+    }
+
+    private var accountOverviewSection: some View {
+        VStack(alignment: .leading, spacing: BellwireSpacing.small) {
+            SectionHeaderView(title: "Account & plan")
+            VStack(spacing: 0) {
+                HStack(spacing: BellwireSpacing.standard) {
+                    Text(accountInitial)
+                        .font(.system(.title3, design: .serif, weight: .regular))
+                        .foregroundStyle(BellwireTheme.accentInk)
+                        .frame(width: 44, height: 44)
+                        .background(BellwireTheme.accent, in: Circle())
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(accountName)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(BellwireTheme.ink)
+                            .lineLimit(1)
+                        Text("Signed in with Apple")
+                            .font(.caption)
+                            .foregroundStyle(BellwireTheme.mutedInk)
+                    }
+                    Spacer()
+                    StatusBadgeView(
+                        text: hasPro ? "Pro" : "Free",
+                        color: hasPro ? BellwireTheme.accent : BellwireTheme.mutedInk,
+                        showsDot: false
+                    )
+                }
+                .padding(.vertical, 14)
+
+                Divider().overlay(BellwireTheme.separator)
+
+                Button {
+                    if hasPro {
+                        Task { await model.captureProductEvent("subscription_managed", source: "settings") }
+                        openURL(URL(string: "https://apps.apple.com/account/subscriptions")!)
+                    } else {
+                        Task { await model.captureProductEvent("upgrade_clicked", source: "settings") }
+                        showsPaywall = true
+                    }
+                } label: {
+                    SettingsRowView(
+                        icon: hasPro ? "checkmark.seal.fill" : "sparkles",
+                        title: hasPro ? "Manage Bellwire Pro" : "Upgrade to Bellwire Pro",
+                        hint: hasPro ? "Your Pro access is active" : "More projects, events, devices, and history"
+                    ) {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(BellwireTheme.accent)
+                    }
+                }
+                .buttonStyle(PressableButtonStyle())
+
+                if let entitlement = model.entitlement {
+                    Divider().overlay(BellwireTheme.separator).padding(.leading, 44)
+                    VStack(alignment: .leading, spacing: BellwireSpacing.compact) {
+                        HStack {
+                            Text("Monthly Signals")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(BellwireTheme.ink)
+                            Spacer()
+                            Text("\(entitlement.usage.acceptedSignals.formatted()) / \(entitlement.limits.monthlySignals.formatted())")
+                                .font(BellwireTypography.technicalStrong)
+                                .foregroundStyle(signalUsageColor(entitlement))
+                        }
+                        ProgressView(value: signalUsagePercent(entitlement))
+                            .tint(signalUsageColor(entitlement))
+                    }
+                    .padding(.vertical, 14)
+                }
+            }
+            .padding(.horizontal, BellwireSpacing.standard)
+            .bellwireListGroup()
+
+            if let entitlement = model.entitlement, let notice = quotaNotice(entitlement) {
+                Label {
+                    Text(notice.message)
+                        .font(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: notice.icon)
+                }
+                .foregroundStyle(notice.color)
+                .padding(.horizontal, BellwireSpacing.standard)
             }
         }
     }
@@ -177,7 +250,7 @@ struct SettingsView: View {
             StatusBadgeView(text: "Connected", color: BellwireTheme.success)
         }
         .padding(BellwireSpacing.standard)
-        .bellwireSurface()
+        .bellwireListGroup()
         .accessibilityElement(children: .combine)
     }
 
@@ -562,7 +635,7 @@ struct SettingsView: View {
                 .buttonStyle(PressableButtonStyle())
             }
             .padding(.horizontal, BellwireSpacing.standard)
-            .bellwireSurface()
+            .bellwireListGroup()
 
             if !model.agentConnections.isEmpty {
                 VStack(spacing: 0) {
@@ -573,7 +646,9 @@ struct SettingsView: View {
                             connection: connection,
                             isRevoking: model.revokingAgentConnectionID == connection.id
                         ) {
-                            pendingAgentRevocation = connection
+                            Task {
+                                await model.revokeAgentConnection(id: connection.id)
+                            }
                         }
                         if index < model.agentConnections.count - 1 {
                             Divider()
@@ -628,7 +703,7 @@ struct SettingsView: View {
                 .buttonStyle(PressableButtonStyle())
             }
             .padding(.horizontal, BellwireSpacing.standard)
-            .bellwireSurface()
+            .bellwireListGroup()
 
             Text("Hosted projects are clearly labeled and only enabled after your approval.")
                 .font(.caption)
@@ -660,7 +735,7 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.horizontal, BellwireSpacing.standard)
-                .bellwireSurface()
+                .bellwireListGroup()
             }
         }
     }
@@ -736,7 +811,7 @@ struct SettingsView: View {
                 .accessibilityHint("Changes Bellwire between light and dark appearance")
             }
             .padding(.horizontal, BellwireSpacing.standard)
-            .bellwireSurface()
+            .bellwireListGroup()
         }
     }
 
@@ -773,7 +848,7 @@ struct SettingsView: View {
                 .accessibilityHint("Opens an email to Bellwire support")
             }
             .padding(.horizontal, BellwireSpacing.standard)
-            .bellwireSurface()
+            .bellwireListGroup()
         }
     }
 
@@ -837,7 +912,7 @@ struct SettingsView: View {
                 .buttonStyle(PressableButtonStyle())
             }
             .padding(.horizontal, BellwireSpacing.standard)
-            .bellwireSurface()
+            .bellwireListGroup()
         }
     }
 
@@ -940,6 +1015,7 @@ struct SettingsView: View {
 
 private struct AgentConnectionRowView: View {
     @Environment(\.locale) private var locale
+    @State private var showsDisconnectConfirmation = false
     let connection: AgentConnectionRecord
     let isRevoking: Bool
     let disconnect: () -> Void
@@ -976,7 +1052,9 @@ private struct AgentConnectionRowView: View {
                 showsDot: true
             )
 
-            Button(role: .destructive, action: disconnect) {
+            Button(role: .destructive) {
+                showsDisconnectConfirmation = true
+            } label: {
                 Group {
                     if isRevoking {
                         ProgressView()
@@ -1000,6 +1078,12 @@ private struct AgentConnectionRowView: View {
             .accessibilityHint("Revokes this Agent’s Bellwire access")
         }
         .padding(.vertical, BellwireSpacing.compact)
+        .alert("Disconnect Agent?", isPresented: $showsDisconnectConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Disconnect", role: .destructive, action: disconnect)
+        } message: {
+            Text("“\(connection.name)” will immediately lose access to Bellwire. Your projects and data will remain.")
+        }
     }
 
     @ViewBuilder
@@ -1042,16 +1126,42 @@ private struct DeleteAccountView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                VStack(alignment: .leading, spacing: BellwireSpacing.standard) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text("This will delete")
-                        .bellwireTechnicalLabel()
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(BellwireTheme.secondaryInk)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, BellwireSpacing.standard)
+                        .padding(.top, BellwireSpacing.standard)
+                        .padding(.bottom, BellwireSpacing.small)
+
+                    Divider()
+                        .overlay(BellwireTheme.separator)
                     deletionItem(icon: "square.stack.3d.up", title: "Projects and live cards")
+                    deletionDivider
                     deletionItem(icon: "tray.full", title: "Events and notification history")
+                    deletionDivider
                     deletionItem(icon: "iphone", title: "Registered devices")
+                    deletionDivider
                     deletionItem(icon: "link", title: "Agent connections and access tokens")
                 }
-                .padding(BellwireSpacing.standard)
-                .bellwireSurface(elevated: false)
+                .background(
+                    BellwireTheme.surface,
+                    in: RoundedRectangle(
+                        cornerRadius: BellwireRadius.card,
+                        style: .continuous
+                    )
+                )
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: BellwireRadius.card,
+                        style: .continuous
+                    )
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: BellwireRadius.card, style: .continuous)
+                        .stroke(BellwireTheme.separator, lineWidth: 1)
+                }
 
                 HStack(alignment: .top, spacing: BellwireSpacing.small) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -1115,13 +1225,29 @@ private struct DeleteAccountView: View {
             Image(systemName: icon)
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(BellwireTheme.danger)
-                .frame(width: 28, height: 28)
-                .background(BellwireTheme.danger.opacity(0.1), in: RoundedRectangle(cornerRadius: BellwireRadius.small, style: .continuous))
+                .frame(width: 32, height: 32)
+                .background(
+                    BellwireTheme.danger.opacity(0.09),
+                    in: RoundedRectangle(
+                        cornerRadius: BellwireRadius.small,
+                        style: .continuous
+                    )
+                )
             Text(LocalizedStringKey(title))
                 .font(.subheadline)
                 .foregroundStyle(BellwireTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+        .padding(.horizontal, BellwireSpacing.standard)
         .accessibilityElement(children: .combine)
+    }
+
+    private var deletionDivider: some View {
+        Divider()
+            .overlay(BellwireTheme.separator)
+            .padding(.leading, 60)
     }
 
     private func deleteAccount() {

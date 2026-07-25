@@ -14,13 +14,10 @@ struct PaywallView: View {
 
     let appAccountToken: UUID?
 
-    private let benefits: [(icon: String, title: LocalizedStringKey)] = [
-        ("square.grid.2x2", "Up to 20 connected projects"),
-        ("bolt.horizontal.circle", "50,000 Signals every month"),
-        ("iphone.gen3", "Keep 3 iPhones in sync"),
-        ("clock.arrow.circlepath", "90 days of Hosted history"),
-        ("rectangle.3.group", "10 custom Surfaces per project"),
-        ("rectangle.stack.badge.play", "Widgets, Live Activities, export, and diagnostics"),
+    private let benefits: [(icon: String, title: String)] = [
+        ("square.grid.2x2", "20 projects · 50,000 monthly Signals"),
+        ("clock.arrow.circlepath", "90-day history · 3 iPhones in sync"),
+        ("rectangle.stack.badge.play", "10 Surfaces · Live Activities · export"),
     ]
 
     var body: some View {
@@ -44,19 +41,23 @@ struct PaywallView: View {
                         .padding(.top, BellwireSpacing.roomy)
                         .paywallEntrance(appeared: appeared, delay: 0.16, reduceMotion: reduceMotion)
 
-                    purchaseButton
+                    footer
                         .padding(.top, BellwireSpacing.roomy)
                         .paywallEntrance(appeared: appeared, delay: 0.22, reduceMotion: reduceMotion)
-
-                    footer
-                        .padding(.top, BellwireSpacing.standard)
-                        .paywallEntrance(appeared: appeared, delay: 0.28, reduceMotion: reduceMotion)
                 }
                 .padding(.horizontal, BellwireSpacing.roomy)
                 .padding(.top, BellwireSpacing.compact)
-                .padding(.bottom, BellwireSpacing.large)
+                .padding(.bottom, BellwireSpacing.section)
             }
             .scrollIndicators(.hidden)
+        }
+        .safeAreaInset(edge: .bottom) {
+            purchaseButton
+                .padding(.horizontal, BellwireSpacing.roomy)
+                .padding(.top, BellwireSpacing.small)
+                .padding(.bottom, BellwireSpacing.compact)
+                .background(.ultraThinMaterial)
+                .paywallEntrance(appeared: appeared, delay: 0.18, reduceMotion: reduceMotion)
         }
         .task {
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.38)) {
@@ -100,7 +101,7 @@ struct PaywallView: View {
 
     private var topBar: some View {
         ZStack {
-            Text("Bellwire Pro")
+            Text(localized("Bellwire Pro"))
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(BellwireTheme.ink)
 
@@ -122,7 +123,7 @@ struct PaywallView: View {
                         }
                 }
                 .buttonStyle(PressableButtonStyle())
-                .accessibilityLabel("Close")
+                .accessibilityLabel(localized("Close"))
 
                 Spacer()
             }
@@ -141,13 +142,13 @@ struct PaywallView: View {
                     .shadow(color: BellwireTheme.brandOrange.opacity(0.22), radius: 18, y: 8)
             }
 
-            Text("More room for every signal.")
+            Text(localized("More room for every signal."))
                 .font(.system(.title2, design: .serif, weight: .semibold))
                 .foregroundStyle(BellwireTheme.ink)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Pro expands Hosted capacity and history. Private delivery and 30 days on this iPhone stay free.")
+            Text(localized("Pro expands Hosted capacity and history. Private delivery and 30 days on this iPhone stay free."))
                 .font(.subheadline)
                 .foregroundStyle(BellwireTheme.secondaryInk)
                 .multilineTextAlignment(.center)
@@ -165,7 +166,7 @@ struct PaywallView: View {
                         .foregroundStyle(BellwireTheme.accent)
                         .frame(width: 26)
 
-                    Text(benefit.title)
+                    Text(localized(benefit.title))
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(BellwireTheme.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -194,7 +195,7 @@ struct PaywallView: View {
             RoundedRectangle(cornerRadius: BellwireRadius.largeCard, style: .continuous)
                 .stroke(BellwireTheme.strongSeparator.opacity(0.48), lineWidth: 1)
         }
-        .shadow(color: BellwireTheme.cardShadow, radius: 18, y: 8)
+        .shadow(color: BellwireTheme.cardShadow, radius: BellwireShadow.cardRadius, y: BellwireShadow.cardY)
     }
 
     private var planOptions: some View {
@@ -215,7 +216,8 @@ struct PaywallView: View {
                         previewMonthlyEquivalent: Self.isScreenshotPreview && plan == .yearly
                             ? String(localized: "$2.50", locale: locale)
                             : nil,
-                        previewSavings: Self.isScreenshotPreview ? 37 : nil
+                        previewSavings: Self.isScreenshotPreview ? 37 : nil,
+                        loadState: purchaseManager.loadState
                     )
                 }
                 .buttonStyle(PressableButtonStyle())
@@ -227,7 +229,7 @@ struct PaywallView: View {
     private var purchaseButton: some View {
         VStack(spacing: BellwireSpacing.small) {
             if let errorMessage = purchaseManager.errorMessage {
-                Text(LocalizedStringKey(errorMessage))
+                Text(localized(errorMessage))
                     .font(.caption)
                     .foregroundStyle(BellwireTheme.danger)
                     .multilineTextAlignment(.center)
@@ -235,6 +237,10 @@ struct PaywallView: View {
             }
 
             Button {
+                if purchaseManager.isUnavailableInCurrentStorefront {
+                    dismiss()
+                    return
+                }
                 guard let product = selectedProduct else {
                     Task { await purchaseManager.loadProducts() }
                     return
@@ -283,7 +289,7 @@ struct PaywallView: View {
                             .controlSize(.small)
                             .tint(BellwireTheme.accent)
                     }
-                    Text("Restore Purchases")
+                    Text(localized("Restore Purchases"))
                         .font(.subheadline.weight(.medium))
                 }
                 .foregroundStyle(BellwireTheme.accent)
@@ -292,17 +298,17 @@ struct PaywallView: View {
             .buttonStyle(PressableButtonStyle())
             .disabled(purchaseManager.isPurchasing || purchaseManager.isRestoring)
 
-            Text(subscriptionDisclosure)
+            Text(localized("Subscriptions renew automatically unless canceled at least 24 hours before the current period ends. Manage or cancel in Apple ID settings."))
                 .font(.caption2)
                 .foregroundStyle(BellwireTheme.mutedInk)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: BellwireSpacing.roomy) {
-                Button("Terms") {
+                Button(localized("Terms")) {
                     openURL(URL(string: "https://bellwire.app/terms")!)
                 }
-                Button("Privacy") {
+                Button(localized("Privacy")) {
                     openURL(URL(string: "https://bellwire.app/privacy")!)
                 }
             }
@@ -320,6 +326,9 @@ struct PaywallView: View {
         if purchaseManager.loadState == .loading {
             return String(localized: "Loading App Store…", locale: locale)
         }
+        if purchaseManager.isUnavailableInCurrentStorefront {
+            return String(localized: "Close", locale: locale)
+        }
         if purchaseManager.isTrialEligible(for: selectedPlan)
             || (Self.isScreenshotPreview && selectedPlan == .yearly) {
             return String(localized: "Start free trial", locale: locale)
@@ -335,8 +344,8 @@ struct PaywallView: View {
         }
     }
 
-    private var subscriptionDisclosure: LocalizedStringKey {
-        return "Subscriptions renew automatically unless canceled at least 24 hours before the current period ends. Manage or cancel in Apple ID settings."
+    private func localized(_ key: String) -> String {
+        String(localized: String.LocalizationValue(key), locale: locale)
     }
 
     private static var isScreenshotPreview: Bool {
@@ -364,6 +373,7 @@ private struct PaywallPlanRow: View {
     let previewPrice: String?
     let previewMonthlyEquivalent: String?
     let previewSavings: Int?
+    let loadState: PurchaseManager.LoadState
 
     var body: some View {
         HStack(spacing: BellwireSpacing.standard) {
@@ -400,11 +410,17 @@ private struct PaywallPlanRow: View {
                     Text(previewPrice)
                         .font(.system(.title3, design: .rounded, weight: .bold))
                         .monospacedDigit()
-                } else {
+                } else if loadState == .loading || loadState == .idle {
                     ProgressView()
                         .controlSize(.small)
                         .tint(BellwireTheme.accent)
-                        .accessibilityLabel("Loading App Store…")
+                        .accessibilityLabel(
+                            String(localized: "Loading App Store…", locale: locale)
+                        )
+                } else {
+                    Text(String(localized: "Price unavailable", locale: locale))
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(BellwireTheme.secondaryInk)
                 }
             }
             .foregroundStyle(BellwireTheme.ink)

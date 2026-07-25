@@ -73,15 +73,22 @@ describe("iOS Inbox preview", () => {
     expect(push.match(/handleRemoteNotification/gu)).toHaveLength(2);
   });
 
-  it("keeps the project fallback visible until a remote logo succeeds", () => {
+  it("keeps the project fallback visible and persists successful remote logos", () => {
     const components = readFileSync("ios/Bellwire/Bellwire/Components.swift", "utf8");
-    const successBranch = components.indexOf("if case .success(let image) = phase");
-    const logoBackground = components.indexOf(".background(BellwireTheme.surface)", successBranch);
-    const asyncImageEnd = components.indexOf(".frame(width: size, height: size)", successBranch);
+    const cache = readFileSync(
+      "ios/Bellwire/Bellwire/ProjectLogoCache.swift",
+      "utf8",
+    );
+    const fallback = components.indexOf("Text(initials)");
+    const cachedLogo = components.indexOf("CachedProjectLogo(url: logoURL)");
 
-    expect(successBranch).toBeGreaterThan(-1);
-    expect(logoBackground).toBeGreaterThan(successBranch);
-    expect(logoBackground).toBeLessThan(asyncImageEnd);
+    expect(fallback).toBeGreaterThan(-1);
+    expect(cachedLogo).toBeGreaterThan(fallback);
+    expect(components).not.toContain("AsyncImage");
+    expect(cache).toContain("urls(for: .cachesDirectory");
+    expect(cache).toContain("downloaded.write(to: fileURL, options: .atomic)");
+    expect(cache).toContain("private var inFlight: [URL: Task<Data?, Never>]");
+    expect(cache).toContain("data.count <= maximumImageBytes");
   });
 
   it("presents the paywall immediately while StoreKit loads in a large sheet", () => {
@@ -108,11 +115,64 @@ describe("iOS Inbox preview", () => {
     expect(paywall).toContain(
       'String(localized: "Continue with yearly", locale: locale)',
     );
-    expect(paywall).toContain("Text(LocalizedStringKey(errorMessage))");
+    expect(paywall).toContain("Text(localized(errorMessage))");
+    expect(paywall).toContain('Text(localized("More room for every signal."))');
+    expect(paywall).toContain(
+      'Text(String(localized: "Price unavailable", locale: locale))',
+    );
+    expect(paywall).toContain(
+      "purchaseManager.isUnavailableInCurrentStorefront",
+    );
     expect(purchases).toContain("func title(locale: Locale) -> String");
     expect(purchases).not.toContain("errorMessage = String(localized:");
     expect(chinese).toContain(
       '"Bellwire could not refresh your plan status." = "Bellwire 暂时无法刷新你的套餐状态。";',
     );
+  });
+
+  it("uses a structured delete-account summary card that remains readable on small screens", () => {
+    const settings = readFileSync("ios/Bellwire/Bellwire/SettingsView.swift", "utf8");
+    const deletePage = settings.slice(settings.indexOf("private struct DeleteAccountView"));
+
+    expect(deletePage).not.toContain('Image(systemName: "trash.fill")');
+    expect(deletePage).toContain('Text("This will delete")');
+    expect(deletePage).toContain(".font(.subheadline.weight(.semibold))");
+    expect(deletePage).toContain(".padding(.top, BellwireSpacing.standard)");
+    expect(deletePage).toContain(".padding(.bottom, BellwireSpacing.small)");
+    expect(deletePage).toContain("deletionDivider");
+    expect(deletePage).toContain(".frame(maxWidth: .infinity, minHeight: 56");
+    expect(deletePage).toContain(".fixedSize(horizontal: false, vertical: true)");
+    expect(deletePage).toContain(".padding(.leading, 60)");
+  });
+
+  it("keeps routine groups flat and collapses technical detail by default", () => {
+    const theme = readFileSync("ios/Bellwire/Bellwire/Theme.swift", "utf8");
+    const components = readFileSync("ios/Bellwire/Bellwire/Components.swift", "utf8");
+    const inbox = readFileSync("ios/Bellwire/Bellwire/InboxViews.swift", "utf8");
+    const details = readFileSync("ios/Bellwire/Bellwire/DetailViews.swift", "utf8");
+    const paywall = readFileSync("ios/Bellwire/Bellwire/PaywallView.swift", "utf8");
+    const chinese = readFileSync(
+      "ios/Bellwire/Bellwire/zh-Hans.lproj/Localizable.strings",
+      "utf8",
+    );
+
+    expect(theme).toContain("func bellwireListGroup()");
+    expect(theme).toContain("elevated: Bool = false");
+    expect(components).toContain("struct TechnicalDisclosure");
+    expect(components).toContain("@State private var isExpanded = false");
+    expect(
+      details.match(/TechnicalDisclosure\(title: "Technical details"\)/gu),
+    ).toHaveLength(2);
+    expect(details).toContain('Image(systemName: "ellipsis.circle")');
+    expect(details).toContain(
+      'Text(project.status == "paused" ? "Resuming…" : "Pausing…")',
+    );
+    expect(details).toContain(
+      ".disabled(isUpdating || isExporting || isDeleting)",
+    );
+    expect(inbox).toContain('"Connect a project"');
+    expect(inbox).not.toContain("StrokeStyle(lineWidth: 1, dash:");
+    expect(paywall).toContain(".safeAreaInset(edge: .bottom)");
+    expect(chinese).toContain('"Technical details" = "技术详情";');
   });
 });

@@ -43,26 +43,24 @@ struct ProjectAvatarView: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
-                .fill(avatarGradient)
-            Text(initials)
-                .font(.system(size: size * 0.34, weight: .semibold, design: .default))
-                .tracking(-0.35)
-                .minimumScaleFactor(0.7)
+                .fill(BellwireTheme.raisedSurface)
+            if hasValidSymbol {
+                Image(systemName: icon)
+                    .font(.system(size: size * 0.39, weight: .semibold))
+                    .foregroundStyle(BellwireTheme.secondaryInk)
+            } else {
+                Text(initials)
+                    .font(.system(size: size * 0.34, weight: .semibold, design: .default))
+                    .tracking(-0.35)
+                    .minimumScaleFactor(0.7)
+                    .foregroundStyle(BellwireTheme.secondaryInk)
+            }
             if let logoURL {
-                AsyncImage(url: logoURL, transaction: Transaction(animation: BellwireAnimation.quick)) { phase in
-                    if case .success(let image) = phase {
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .background(BellwireTheme.surface)
-                            .transition(.opacity)
-                    }
-                }
+                CachedProjectLogo(url: logoURL)
                 .frame(width: size, height: size)
                 .clipped()
             }
         }
-        .foregroundStyle(BellwireTheme.accentInk)
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.27, style: .continuous))
         .overlay {
@@ -85,37 +83,39 @@ struct ProjectAvatarView: View {
         return value.isEmpty ? "BW" : value
     }
 
-    private var avatarGradient: LinearGradient {
-        let colors = avatarColors
-        return LinearGradient(
-            colors: colors,
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+    private var hasValidSymbol: Bool {
+        !icon.isEmpty && UIImage(systemName: icon) != nil
     }
+}
 
-    private var avatarColors: [Color] {
-        let normalized = name.lowercased()
-        if normalized.contains("videosays") {
-            return [Color(red: 0.96, green: 0.67, blue: 0.16), Color(red: 0.76, green: 0.43, blue: 0.05)]
+private struct CachedProjectLogo: View {
+    let url: URL
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .background(BellwireTheme.surface)
+                    .transition(.opacity)
+            } else {
+                Color.clear
+            }
         }
-        if normalized.contains("content") || normalized.contains("growth") {
-            return [Color(red: 0.48, green: 0.79, blue: 0.43), Color(red: 0.25, green: 0.60, blue: 0.31)]
+        .task(id: url) {
+            image = nil
+            guard let data = await ProjectLogoCache.shared.data(for: url),
+                  !Task.isCancelled,
+                  let loadedImage = UIImage(data: data)
+            else {
+                return
+            }
+            withAnimation(BellwireAnimation.quick) {
+                image = loadedImage
+            }
         }
-        if normalized.contains("bellwire") {
-            return [Color(red: 0.42, green: 0.72, blue: 0.88), Color(red: 0.22, green: 0.51, blue: 0.72)]
-        }
-        if normalized.contains("production") {
-            return [Color(red: 0.71, green: 0.61, blue: 0.88), Color(red: 0.48, green: 0.36, blue: 0.70)]
-        }
-        if normalized.contains("reddit") {
-            return [Color(red: 0.83, green: 0.48, blue: 0.38), Color(red: 0.62, green: 0.29, blue: 0.23)]
-        }
-        let hue = Double(abs(name.hashValue % 360)) / 360
-        return [
-            Color(hue: hue, saturation: 0.38, brightness: 0.88),
-            Color(hue: hue, saturation: 0.52, brightness: 0.66),
-        ]
     }
 }
 
@@ -135,7 +135,8 @@ struct SectionHeaderView: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(LocalizedStringKey(title))
-                .bellwireTechnicalLabel()
+                .font(BellwireTypography.sectionTitle)
+                .foregroundStyle(BellwireTheme.secondaryInk)
             Spacer()
             if let hint, !hint.isEmpty {
                 Text(LocalizedStringKey(hint))
@@ -144,6 +145,35 @@ struct SectionHeaderView: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+struct TechnicalDisclosure<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+    @State private var isExpanded = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 0) {
+                Divider().overlay(BellwireTheme.separator)
+                content()
+            }
+            .padding(.top, BellwireSpacing.compact)
+        } label: {
+            Label {
+                Text(LocalizedStringKey(title))
+                    .font(.subheadline.weight(.medium))
+            } icon: {
+                Image(systemName: "terminal")
+                    .foregroundStyle(BellwireTheme.mutedInk)
+            }
+            .foregroundStyle(BellwireTheme.ink)
+            .frame(minHeight: 48)
+        }
+        .tint(BellwireTheme.mutedInk)
+        .padding(.horizontal, BellwireSpacing.standard)
+        .bellwireListGroup()
     }
 }
 
@@ -255,15 +285,16 @@ struct SecondaryButton: View {
 
 struct ErrorBanner: View {
     let message: String
+    var title = "Something went wrong"
     let dismiss: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: BellwireSpacing.small) {
-            Image(systemName: "wifi.exclamationmark")
+            Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(BellwireTheme.danger)
                 .frame(width: 24, height: 24)
             VStack(alignment: .leading, spacing: 3) {
-                Text("Connection issue")
+                Text(LocalizedStringKey(title))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(BellwireTheme.ink)
                 Text(LocalizedStringKey(message))
@@ -344,7 +375,7 @@ struct LoadingEventRows: View {
             }
         }
         .padding(.horizontal, BellwireSpacing.standard)
-        .bellwireSurface()
+        .bellwireListGroup()
         .redacted(reason: .placeholder)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading")

@@ -24,9 +24,9 @@ struct WelcomeView: View {
                     }
 
                     VStack(alignment: .leading, spacing: BellwireSpacing.roomy) {
-                        (Text("Signals from\n")
+                        (Text("Signals from ")
                             + Text("every project,").foregroundColor(BellwireTheme.accent)
-                            + Text("\non your iPhone."))
+                            + Text(" on your iPhone."))
                             .font(BellwireTypography.hero)
                             .fontWeight(.regular)
                             .tracking(-0.8)
@@ -42,13 +42,14 @@ struct WelcomeView: View {
                     }
                     .padding(.top, 46)
 
-                    VStack(spacing: 10) {
+                    VStack(spacing: 0) {
                         WelcomePreviewRow(
                             icon: "creditcard.fill",
                             title: "Payment received",
                             detail: "Revenue signal · just now",
                             tint: BellwireTheme.accent
                         )
+                        Divider().overlay(BellwireTheme.separator).padding(.leading, 58)
                         WelcomePreviewRow(
                             icon: "gearshape.2.fill",
                             title: "Agent run in progress",
@@ -56,13 +57,16 @@ struct WelcomeView: View {
                             tint: BellwireTheme.live,
                             isLive: true
                         )
+                        Divider().overlay(BellwireTheme.separator).padding(.leading, 58)
                         WelcomePreviewRow(
                             icon: "shippingbox.fill",
                             title: "Deployment completed",
                             detail: "Production · just now",
-                            tint: Color.cyan
+                            tint: BellwireTheme.secondaryInk
                         )
                     }
+                    .padding(.horizontal, BellwireSpacing.standard)
+                    .bellwireListGroup()
                     .padding(.top, 34)
 
                     if let error = model.errorMessage {
@@ -89,7 +93,11 @@ struct WelcomeView: View {
                                 .foregroundStyle(BellwireTheme.mutedInk)
                         }
 
-                        Text("By continuing you agree to Bellwire’s Terms and Privacy Policy. Event payloads are encrypted in transit, and sensitive fields stay redacted until you reveal them.")
+                        (Text("By continuing you agree to Bellwire’s ")
+                            + Text("[Terms](https://bellwire.app/terms)")
+                            + Text(" and ")
+                            + Text("[Privacy Policy](https://bellwire.app/privacy)")
+                            + Text(". Sensitive fields stay redacted until you reveal them."))
                             .font(.caption2)
                             .foregroundStyle(BellwireTheme.mutedInk)
                             .multilineTextAlignment(.center)
@@ -139,9 +147,7 @@ private struct WelcomePreviewRow: View {
                 .font(BellwireTypography.technical)
                 .foregroundStyle(BellwireTheme.mutedInk)
         }
-        .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .bellwireSurface(radius: BellwireRadius.card, elevated: false)
         .accessibilityElement(children: .combine)
     }
 }
@@ -158,9 +164,6 @@ struct NotificationOnboardingView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Step 2 of 3")
-                        .bellwireTechnicalLabel()
-
                     Image(systemName: "bell.badge.waveform.fill")
                         .font(.system(size: 26, weight: .medium))
                         .foregroundStyle(BellwireTheme.accent)
@@ -184,23 +187,27 @@ struct NotificationOnboardingView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, BellwireSpacing.standard)
 
-                    VStack(spacing: 10) {
+                    VStack(spacing: 0) {
                         NotificationValueRow(
                             icon: "creditcard.fill",
                             title: "Business signals",
                             detail: "Payments, subscriptions, refunds, and churn"
                         )
+                        Divider().overlay(BellwireTheme.separator).padding(.leading, 52)
                         NotificationValueRow(
                             icon: "gearshape.2.fill",
                             title: "Agent runs",
                             detail: "Tasks started, completed, failed, or waiting"
                         )
+                        Divider().overlay(BellwireTheme.separator).padding(.leading, 52)
                         NotificationValueRow(
                             icon: "exclamationmark.triangle.fill",
                             title: "Ops & alerts",
                             detail: "Deploys, cron jobs, thresholds, and incidents"
                         )
                     }
+                    .padding(.horizontal, BellwireSpacing.standard)
+                    .bellwireListGroup()
                     .padding(.top, 30)
 
                     if let error = model.errorMessage {
@@ -266,8 +273,7 @@ private struct NotificationValueRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
-        .bellwireSurface(radius: BellwireRadius.card, elevated: false)
+        .padding(.vertical, 14)
         .accessibilityElement(children: .combine)
     }
 }

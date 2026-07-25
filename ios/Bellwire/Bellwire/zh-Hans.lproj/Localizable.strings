@@ -229,6 +229,7 @@
 "%@ per month · billed yearly" = "折合每月 %@ · 按年付费";
 "7-day free trial · then billed yearly" = "免费试用 7 天 · 之后按年付费";
 "Loading App Store…" = "正在连接 App Store…";
+"Price unavailable" = "价格暂不可用";
 "Start free trial" = "开始 7 天免费试用";
 "Try again" = "重新加载";
 "Continue with yearly" = "继续选择年度方案";
@@ -238,6 +239,7 @@
 "Terms" = "服务条款";
 "Privacy" = "隐私政策";
 "Bellwire Pro products are temporarily unavailable. Please try again." = "Bellwire Pro 商品暂时无法加载，请稍后重试。";
+"Bellwire Pro is not available in your current App Store region." = "Bellwire Pro 暂未在你当前的 App Store 地区开放。";
 "Your purchase is pending approval." = "购买正在等待批准。";
 "The purchase could not be completed." = "未能完成购买。";
 "The purchase could not be completed. Please try again." = "未能完成购买，请重试。";
@@ -284,6 +286,12 @@
 "Hosted history · %lld days" = "Hosted 历史 · %lld 天";
 "%lld/project" = "每项目 %lld 个";
 "Export project" = "导出项目";
+"Export JSON" = "导出 JSON";
+"Project actions" = "项目操作";
+"Pause project" = "暂停项目";
+"Resume project" = "恢复项目";
+"Pausing…" = "正在暂停…";
+"Resuming…" = "正在恢复…";
 "Exports Event and delivery history as JSON" = "将 Event 和投递历史导出为 JSON";
 "Project export is included with Bellwire Pro." = "项目导出包含在 Bellwire Pro 中。";
 "Start Live Activity" = "开始实时活动";
@@ -322,6 +330,19 @@
 "Code copied" = "绑定码已复制";
 "Instruct your Agent" = "让 Agent 接入";
 "1. Generate a binding code.\n2. Open the project with your Agent.\n3. Say: “Connect Bellwire with code …”\n4. Let the Agent configure the supported event and live-surface calls." = "1. 生成一个绑定码。\n2. 使用 Agent 打开项目。\n3. 告诉它：‘使用绑定码……连接 Bellwire。’\n4. 让 Agent 配置需要的事件和实时卡片。";
+
+"Account & plan" = "账户与套餐";
+"Monthly Signals" = "每月 Signal";
+"Manage Bellwire Pro" = "管理 Bellwire Pro";
+"Upgrade to Bellwire Pro" = "升级到 Bellwire Pro";
+"Connect" = "连接";
+"Connect a project" = "连接项目";
+"Create a one-time code for your Agent." = "为你的 Agent 创建一次性绑定码。";
+"Technical details" = "技术详情";
+"Something went wrong" = "出现问题";
+"20 projects · 50,000 monthly Signals" = "20 个项目 · 每月 50,000 个 Signal";
+"90-day history · 3 iPhones in sync" = "90 天历史 · 同步 3 台 iPhone";
+"10 Surfaces · Live Activities · export" = "10 张卡片 · 实时活动 · 导出";
 
 "Connection issue" = "连接异常";
 "Dismiss error" = "关闭错误提示";
