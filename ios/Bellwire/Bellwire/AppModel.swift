@@ -205,20 +205,27 @@ final class AppModel: ObservableObject {
         defer { isAuthenticating = false }
         do {
             let authorization = try result.get()
-            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
-                  let tokenData = credential.identityToken,
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential
+            else { throw ClientError.api(code: "APPLE_CREDENTIAL_INVALID", message: "Apple did not return a valid sign-in credential.") }
+            guard let tokenData = credential.identityToken,
                   let identityToken = String(data: tokenData, encoding: .utf8),
-                  let codeData = credential.authorizationCode,
-                  let authorizationCode = String(data: codeData, encoding: .utf8),
-                  let nonce = currentNonce
-            else { throw ClientError.api(code: "APPLE_TOKEN_MISSING", message: "Apple did not return valid authorization credentials.") }
+                  !identityToken.isEmpty
+            else { throw ClientError.api(code: "APPLE_TOKEN_MISSING", message: "Apple did not return a valid identity token.") }
+            guard let nonce = currentNonce
+            else { throw ClientError.api(code: "APPLE_NONCE_MISSING", message: "Apple sign-in could not verify this request. Please try again.") }
+            let authorizationCode = credential.authorizationCode
+                .flatMap { String(data: $0, encoding: .utf8) }
+                .flatMap { $0.isEmpty ? nil : $0 }
             let newSession = try await api.exchangeAppleIdentityToken(identityToken, nonce: nonce)
             try saveSession(newSession)
-            do {
-                try await api.saveAppleAuthorizationCode(authorizationCode)
-            } catch {
-                signOut()
-                throw error
+            if let authorizationCode {
+                do {
+                    try await api.saveAppleAuthorizationCode(authorizationCode)
+                } catch {
+#if DEBUG
+                    print("Could not persist Apple authorization code: \(error)")
+#endif
+                }
             }
             await loadDashboard(showLoading: true)
             if let apnsToken {

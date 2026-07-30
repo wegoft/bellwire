@@ -73,6 +73,23 @@ describe("iOS Inbox preview", () => {
     expect(push.match(/handleRemoteNotification/gu)).toHaveLength(2);
   });
 
+  it("does not require Apple's optional authorization code to sign in", () => {
+    const model = readFileSync("ios/Bellwire/Bellwire/AppModel.swift", "utf8");
+    const signIn = model.slice(
+      model.indexOf("func completeAppleAuthorization"),
+      model.indexOf("func loadDashboard"),
+    );
+
+    expect(signIn).toContain("guard let tokenData = credential.identityToken");
+    expect(signIn).toContain("guard let nonce = currentNonce");
+    expect(signIn).toContain(
+      "let authorizationCode = credential.authorizationCode",
+    );
+    expect(signIn).toContain("if let authorizationCode");
+    expect(signIn).not.toContain("let codeData = credential.authorizationCode");
+    expect(signIn).not.toContain("signOut()");
+  });
+
   it("keeps the project fallback visible and persists successful remote logos", () => {
     const components = readFileSync("ios/Bellwire/Bellwire/Components.swift", "utf8");
     const cache = readFileSync(
