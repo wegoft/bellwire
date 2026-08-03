@@ -88,8 +88,8 @@ describe("iOS Inbox preview", () => {
       model.indexOf("func loadEvent(id:"),
     );
 
-    expect(dashboardLoad).toContain("await registerCurrentDeviceKey(userID: userID)");
-    expect(dashboardLoad.indexOf("await registerCurrentDeviceKey(userID: userID)")).toBeLessThan(
+    expect(dashboardLoad).toContain("try? await registerCurrentDeviceKey(userID: userID)");
+    expect(dashboardLoad.indexOf("try? await registerCurrentDeviceKey(userID: userID)")).toBeLessThan(
       dashboardLoad.indexOf("async let projectRequest"),
     );
     expect(recovery).toContain("project.deliveryMode == .private");

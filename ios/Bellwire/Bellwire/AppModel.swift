@@ -273,7 +273,7 @@ final class AppModel: ObservableObject {
             liveSurfaces.filter { directProjectIDs.contains($0.projectId) }
         )
         do {
-            try await registerCurrentDeviceKey(userID: userID)
+            try? await registerCurrentDeviceKey(userID: userID)
             async let projectRequest: ProjectsResponse = api.request("v1/projects")
             async let surfaceRequest: LiveSurfacesResponse = api.request("v1/surfaces")
             async let inboxRequest: InboxResponse = api.request("v1/inbox?limit=60")

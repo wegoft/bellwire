@@ -916,10 +916,29 @@ describe("Bellwire MVP API", () => {
     });
     expect(await repository.getDeviceKey(deviceKeyId, userPrincipal.userId)).toBeDefined();
 
+    const rotatedKeyRecovery = await app.request(
+      `/v1/projects/${projectId}/direct-connection-recovery`,
+      {
+        method: "POST",
+        headers: { authorization: "Bearer test", "content-type": "application/json" },
+        body: JSON.stringify({
+          deviceKeyId: recoveryDeviceKeyId,
+          installationId,
+          appVersion: "1.0.1",
+          buildNumber: "11",
+          notificationAuthorization: "denied",
+        }),
+      },
+    );
+    expect(rotatedKeyRecovery.status).toBe(409);
+    expect(await rotatedKeyRecovery.json()).toMatchObject({
+      error: { code: "PRIVATE_READINESS_REQUIRED" },
+    });
+
     const recoveryBody = {
-      deviceKeyId: recoveryDeviceKeyId,
+      deviceKeyId,
       installationId,
-      appVersion: "1.0.0",
+      appVersion: "1.0.1",
       buildNumber: "11",
       notificationAuthorization: "denied",
     };
@@ -940,7 +959,7 @@ describe("Bellwire MVP API", () => {
     }>();
     expect(recovery).toMatchObject({
       projectId,
-      deviceKeyId: recoveryDeviceKeyId,
+      deviceKeyId,
       status: "pending",
     });
     expect(recovery).not.toHaveProperty("userId");
@@ -966,16 +985,16 @@ describe("Bellwire MVP API", () => {
       requests: [{
         projectId,
         deviceKey: {
-          id: recoveryDeviceKeyId,
+          id: deviceKeyId,
           installationId,
-          agreementPublicKey: recoveryPublicKey,
-          signingPublicKey: recoveryPublicKey,
+          agreementPublicKey: publicKey,
+          signingPublicKey: publicKey,
           algorithm: "p256",
         },
         requestedAt: recovery.requestedAt,
       }],
     });
-    expect(JSON.stringify(recoveriesBody).includes(deviceKeyId)).toBe(false);
+    expect(JSON.stringify(recoveriesBody).includes(recoveryDeviceKeyId)).toBe(false);
 
     const recoveredEnvelope = await agentApp.request("/v1/direct-connections", {
       method: "POST",
@@ -986,7 +1005,7 @@ describe("Bellwire MVP API", () => {
       body: JSON.stringify({
         projectId,
         manifestVersion: 2,
-        deviceKeyId: recoveryDeviceKeyId,
+        deviceKeyId,
         algorithm: "p256-hkdf-sha256-aes-gcm",
         ephemeralPublicKey,
         sealedBox,
@@ -1074,31 +1093,19 @@ describe("Bellwire MVP API", () => {
         body: JSON.stringify({
           projectId,
           manifestVersion: 2,
-          deviceKeyId: recoveryDeviceKeyId,
+          deviceKeyId,
           algorithm: "p256-hkdf-sha256-aes-gcm",
           ephemeralPublicKey,
           sealedBox,
         }),
       })).status).toBe(201);
     }
-    const rotatedDeviceKeyId = "77777777-7777-4777-8777-777777777777";
-    expect((await app.request("/v1/device-keys", {
-      method: "POST",
-      headers: { authorization: "Bearer test", "content-type": "application/json" },
-      body: JSON.stringify({
-        id: rotatedDeviceKeyId,
-        installationId,
-        agreementPublicKey: recoveryPublicKey,
-        signingPublicKey: recoveryPublicKey,
-        algorithm: "p256",
-      }),
-    })).status).toBe(201);
     const rateLimitedRecovery = await app.request(
       `/v1/projects/${projectId}/direct-connection-recovery`,
       {
         method: "POST",
         headers: { authorization: "Bearer test", "content-type": "application/json" },
-        body: JSON.stringify({ ...recoveryBody, deviceKeyId: rotatedDeviceKeyId }),
+        body: JSON.stringify(recoveryBody),
       },
     );
     expect(rateLimitedRecovery.status).toBe(429);

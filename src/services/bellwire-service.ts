@@ -607,21 +607,15 @@ export class BellwireService {
       throw invalidRequest("Device key is not available for this installation");
     }
     const readinessRecords = await this.repository.listPrivateConnectionReadiness(project.id);
-    const readyDeviceKeys = await Promise.all(
-      readinessRecords
-        .filter((readiness) => readiness.userId === principal.userId)
-        .map((readiness) =>
-          this.repository.getDeviceKey(readiness.deviceKeyId, principal.userId)
-        ),
+    const hasReadinessForCurrentKey = readinessRecords.some(
+      (readiness) =>
+        readiness.userId === principal.userId && readiness.deviceKeyId === deviceKeyId,
     );
-    const hadReadyKeyOnInstallation = readyDeviceKeys.some(
-      (readyDeviceKey) => readyDeviceKey?.installationId === installationId,
-    );
-    if (!hadReadyKeyOnInstallation) {
+    if (!hasReadinessForCurrentKey) {
       throw new ServiceError(
         409,
         "PRIVATE_READINESS_REQUIRED",
-        "Only an installation with a previously acknowledged Direct manifest can be recovered",
+        "Only a previously acknowledged Direct device key can be recovered",
       );
     }
     const appVersion = readOptionalBoundedString(body.appVersion, "App version", 40);
