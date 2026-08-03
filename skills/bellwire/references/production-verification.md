@@ -25,8 +25,11 @@ Use this gate before describing Bellwire as actually connected to a product.
    manual Surface upsert.
 8. **Mode-specific readback:** for Private, verify the outbox reference, wake
    acceptance, Direct v2 signed fetch, local Inbox/Surface result, and absence of
-   content in Bellwire. For Hosted, verify the expected Event data, live Surface
-   values, idempotency behavior, and Delivery status.
+   content in Bellwire. After re-pairing or key rotation, verify the source service
+   trusts the exact new `deviceKeyId` and signing public key before treating manifest
+   ACK as success; ACK proves decryption and persistence, not source-side signature
+   acceptance. For Hosted, verify the expected Event data, live Surface values,
+   idempotency behavior, and Delivery status.
 9. **Device presentation:** report `accepted_by_apns` as provider acceptance.
    Claim that the phone displayed the notification only after user confirmation
    or direct device evidence.

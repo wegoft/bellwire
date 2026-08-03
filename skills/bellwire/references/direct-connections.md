@@ -10,7 +10,7 @@ directly from the user's HTTPS service to the iPhone.
    `agreementPublicKey`, `signingPublicKey`, `installationId`, and `algorithm`.
 2. Store `deviceKey.id`, `deviceKey.signingPublicKey`, account/project ownership,
    and revocation state in the user's database. One row per device is required.
-3. Implement all three signed HTTPS endpoints described below.
+3. Implement all three signed HTTPS endpoints described below. If the source verifier pins one device in secrets or environment variables instead of using a trusted-key table, update `deviceKey.id` and `deviceKey.signingPublicKey` together with an atomic/bulk secret operation before publishing the manifest. A newly paired key cannot inherit the old key's verifier configuration.
 4. Create a manifest v2 from
    `examples/templates/direct-connection.manifest.json`. It contains only public
    display identity and endpoint paths—never a bearer token, cookie, password,
