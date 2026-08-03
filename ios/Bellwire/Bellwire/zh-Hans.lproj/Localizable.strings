@@ -67,6 +67,7 @@
 "Deployment completed" = "部署已完成";
 "Production · just now" = "生产环境 · 刚刚";
 "now" = "现在";
+"Just now" = "刚刚";
 "Signing in…" = "正在登录…";
 "Signs in using your Apple ID" = "使用你的 Apple ID 登录";
 "By continuing you agree to Bellwire’s Terms and Privacy Policy. Event payloads are encrypted in transit, and sensitive fields stay redacted until you reveal them." = "继续即表示你同意 Bellwire 的服务条款和隐私政策。事件数据在传输过程中会加密，敏感字段在你主动查看前会保持隐藏。";
@@ -334,6 +335,7 @@
 "Account & plan" = "账户与套餐";
 "Monthly Signals" = "每月 Signal";
 "Manage Bellwire Pro" = "管理 Bellwire Pro";
+"PRO ACTIVE" = "PRO 已生效";
 "Upgrade to Bellwire Pro" = "升级到 Bellwire Pro";
 "Connect" = "连接";
 "Connect a project" = "连接项目";

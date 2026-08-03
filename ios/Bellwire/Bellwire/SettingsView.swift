@@ -176,14 +176,18 @@ struct SettingsView: View {
                         showsPaywall = true
                     }
                 } label: {
-                    SettingsRowView(
-                        icon: hasPro ? "checkmark.seal.fill" : "sparkles",
-                        title: hasPro ? "Manage Bellwire Pro" : "Upgrade to Bellwire Pro",
-                        hint: hasPro ? "Your Pro access is active" : "More projects, events, devices, and history"
-                    ) {
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(BellwireTheme.accent)
+                    if hasPro {
+                        ProActiveSettingsRow()
+                    } else {
+                        SettingsRowView(
+                            icon: "sparkles",
+                            title: "Upgrade to Bellwire Pro",
+                            hint: "More projects, events, devices, and history"
+                        ) {
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(BellwireTheme.accent)
+                        }
                     }
                 }
                 .buttonStyle(PressableButtonStyle())
@@ -1013,6 +1017,70 @@ struct SettingsView: View {
     }
 }
 
+private struct ProActiveSettingsRow: View {
+    var body: some View {
+        HStack(spacing: BellwireSpacing.small) {
+            ZStack {
+                RoundedRectangle(cornerRadius: BellwireRadius.small, style: .continuous)
+                    .fill(BellwireTheme.surface)
+                RoundedRectangle(cornerRadius: BellwireRadius.small, style: .continuous)
+                    .stroke(BellwireTheme.proActiveBorder, lineWidth: 1)
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(.body, design: .default, weight: .semibold))
+                    .foregroundStyle(BellwireTheme.proActiveInk)
+            }
+            .frame(width: 40, height: 40)
+
+            VStack(alignment: .leading, spacing: 3) {
+                activeBadge
+                Text("Manage Bellwire Pro")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(BellwireTheme.ink)
+                Text("Your Pro access is active")
+                    .font(.caption)
+                    .foregroundStyle(BellwireTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Image(systemName: "chevron.right")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(BellwireTheme.proActiveInk)
+                .frame(width: 24)
+                .frame(minHeight: 44)
+        }
+        .padding(.horizontal, BellwireSpacing.small)
+        .padding(.vertical, BellwireSpacing.compact)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: BellwireRadius.control, style: .continuous)
+                .fill(BellwireTheme.proActiveSurface)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: BellwireRadius.control, style: .continuous)
+                .stroke(BellwireTheme.proActiveBorder, lineWidth: 1)
+        }
+        .padding(.vertical, BellwireSpacing.compact)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Manage Bellwire Pro"))
+        .accessibilityValue(Text("Your Pro access is active"))
+    }
+
+    private var activeBadge: some View {
+        Text("PRO ACTIVE")
+            .font(.caption2.weight(.bold))
+            .tracking(0.7)
+            .foregroundStyle(BellwireTheme.proActiveInk)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(BellwireTheme.accent.opacity(0.12), in: Capsule())
+            .overlay {
+                Capsule().stroke(BellwireTheme.proActiveBorder, lineWidth: 1)
+            }
+    }
+}
+
 private struct AgentConnectionRowView: View {
     @Environment(\.locale) private var locale
     @State private var showsDisconnectConfirmation = false
@@ -1371,7 +1439,11 @@ struct BindingCodeSheet: View {
                     .bellwireTechnicalLabel()
                 Spacer()
                 if let expiryDate {
-                    Text(BellwireDateFormatting.relative(expiryDate, locale: locale))
+                    Text(BellwireDateFormatting.relative(
+                        expiryDate,
+                        locale: locale,
+                        clampsNearNow: false
+                    ))
                         .font(BellwireTypography.technicalStrong)
                         .monospacedDigit()
                         .foregroundStyle(BellwireTheme.accent)

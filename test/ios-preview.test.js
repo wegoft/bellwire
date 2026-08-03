@@ -57,6 +57,15 @@ describe("iOS Inbox preview", () => {
       } finally {
         rmSync(temporaryDirectory, { recursive: true, force: true });
       }
+      const settings = readFileSync(
+        "ios/Bellwire/Bellwire/SettingsView.swift",
+        "utf8",
+      );
+      const bindingSheet = settings.slice(
+        settings.indexOf("struct BindingCodeSheet"),
+        settings.indexOf("private enum CopiedBindingAction"),
+      );
+      expect(bindingSheet).toContain("clampsNearNow: false");
     },
     30_000,
   );
@@ -109,7 +118,7 @@ describe("iOS Inbox preview", () => {
     const buildNumbers = [...project.matchAll(/CURRENT_PROJECT_VERSION = ([^;]+);/gu)]
       .map((match) => match[1]);
     expect(buildNumbers.length).toBeGreaterThan(0);
-    expect(new Set(buildNumbers)).toEqual(new Set(["11"]));
+    expect(new Set(buildNumbers)).toEqual(new Set(["12"]));
 
     const marketingVersions = [...project.matchAll(/MARKETING_VERSION = ([^;]+);/gu)]
       .map((match) => match[1]);
@@ -235,5 +244,64 @@ describe("iOS Inbox preview", () => {
     expect(inbox).not.toContain("StrokeStyle(lineWidth: 1, dash:");
     expect(paywall).toContain(".safeAreaInset(edge: .bottom)");
     expect(chinese).toContain('"Technical details" = "技术详情";');
+  });
+
+  it("uses a dedicated warm foreground for primary button content", () => {
+    const theme = readFileSync("ios/Bellwire/Bellwire/Theme.swift", "utf8");
+    const components = readFileSync("ios/Bellwire/Bellwire/Components.swift", "utf8");
+    const primaryButton = components.slice(
+      components.indexOf("struct PrimaryButton"),
+      components.indexOf("struct SecondaryButton"),
+    );
+
+    expect(primaryButton).not.toContain("BellwireTheme.accentInk");
+    expect(primaryButton).not.toContain("BellwireTheme.accent, in:");
+    expect(theme).toContain("static let primaryButtonForeground = adaptiveColor(");
+    expect(theme).toContain("static let primaryButtonBackground = adaptiveColor(");
+    expect(primaryButton).toContain("BellwireTheme.primaryButtonBackground");
+    expect(
+      primaryButton.match(/BellwireTheme\.primaryButtonForeground/gu),
+    ).toHaveLength(2);
+  });
+
+  it("gives active Pro a dedicated premium settings row without changing the free row", () => {
+    const settings = readFileSync("ios/Bellwire/Bellwire/SettingsView.swift", "utf8");
+    const theme = readFileSync("ios/Bellwire/Bellwire/Theme.swift", "utf8");
+    const zhHans = readFileSync(
+      "ios/Bellwire/Bellwire/zh-Hans.lproj/Localizable.strings",
+      "utf8",
+    );
+    const accountOverview = settings.slice(
+      settings.indexOf("private var accountOverviewSection"),
+      settings.indexOf("private var accountCard"),
+    );
+    const proActiveRow = settings.slice(
+      settings.indexOf("private struct ProActiveSettingsRow"),
+      settings.indexOf("private struct AgentConnectionRowView"),
+    );
+
+    expect(accountOverview).toContain("if hasPro {");
+    expect(accountOverview).toContain("ProActiveSettingsRow()\n                    } else {");
+    expect(accountOverview).toContain("SettingsRowView(\n                            icon: \"sparkles\"");
+    expect(accountOverview).toContain('title: "Upgrade to Bellwire Pro"');
+    expect(accountOverview).not.toContain('icon: hasPro ? "checkmark.seal.fill" : "sparkles"');
+
+    expect(theme).toContain("static let proActiveSurface = adaptiveColor(");
+    expect(theme).toContain("static let proActiveBorder = adaptiveColor(");
+    expect(theme).toContain("static let proActiveInk = adaptiveColor(");
+    expect(proActiveRow).not.toContain(".foregroundStyle(BellwireTheme.accent)");
+    expect(
+      proActiveRow.match(/\.foregroundStyle\(BellwireTheme\.proActiveInk\)/gu),
+    ).toHaveLength(3);
+    expect(proActiveRow).toContain('Image(systemName: "checkmark.seal.fill")');
+    expect(proActiveRow).toContain('Text("PRO ACTIVE")');
+    expect(proActiveRow).toContain(".fill(BellwireTheme.proActiveSurface)");
+    expect(proActiveRow).toContain(".stroke(BellwireTheme.proActiveBorder");
+    expect(proActiveRow).toContain('Image(systemName: "chevron.right")');
+    expect(proActiveRow).toContain(".frame(maxWidth: .infinity, minHeight: 52");
+    expect(proActiveRow).toContain(".font(.caption2.weight(.bold))");
+    expect(proActiveRow).toContain('.accessibilityLabel(Text("Manage Bellwire Pro"))');
+    expect(proActiveRow).toContain('.accessibilityValue(Text("Your Pro access is active"))');
+    expect(zhHans).toContain('"PRO ACTIVE" = "PRO 已生效";');
   });
 });

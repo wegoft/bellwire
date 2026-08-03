@@ -15,6 +15,26 @@ enum BellwireTheme {
         light: UIColor(red: 0.13, green: 0.09, blue: 0.04, alpha: 1),
         dark: UIColor(red: 0.13, green: 0.09, blue: 0.04, alpha: 1)
     )
+    static let primaryButtonForeground = adaptiveColor(
+        light: UIColor(red: 1.00, green: 0.97, blue: 0.91, alpha: 1),
+        dark: UIColor(red: 1.00, green: 0.97, blue: 0.91, alpha: 1)
+    )
+    static let primaryButtonBackground = adaptiveColor(
+        light: UIColor(red: 0.66, green: 0.36, blue: 0.03, alpha: 1),
+        dark: UIColor(red: 0.62, green: 0.34, blue: 0.03, alpha: 1)
+    )
+    static let proActiveSurface = adaptiveColor(
+        light: UIColor(red: 0.985, green: 0.955, blue: 0.89, alpha: 1),
+        dark: UIColor(red: 0.235, green: 0.205, blue: 0.16, alpha: 1)
+    )
+    static let proActiveBorder = adaptiveColor(
+        light: UIColor(red: 0.64, green: 0.38, blue: 0.09, alpha: 0.34),
+        dark: UIColor(red: 0.95, green: 0.69, blue: 0.27, alpha: 0.48)
+    )
+    static let proActiveInk = adaptiveColor(
+        light: UIColor(red: 0.56, green: 0.29, blue: 0.02, alpha: 1),
+        dark: UIColor(red: 0.96, green: 0.66, blue: 0.18, alpha: 1)
+    )
     static let background = adaptiveColor(
         light: UIColor(red: 0.955, green: 0.942, blue: 0.912, alpha: 1),
         dark: UIColor(red: 0.145, green: 0.139, blue: 0.129, alpha: 1)

@@ -66,8 +66,13 @@ enum BellwireDateFormatting {
         _ date: Date,
         relativeTo referenceDate: Date = .now,
         locale: Locale,
-        unitsStyle: RelativeDateTimeFormatter.UnitsStyle = .abbreviated
+        unitsStyle: RelativeDateTimeFormatter.UnitsStyle = .abbreviated,
+        clampsNearNow: Bool = true
     ) -> String {
+        let interval = date.timeIntervalSince(referenceDate)
+        if clampsNearNow, abs(interval) < 30 {
+            return String(localized: "Just now", locale: locale)
+        }
         let formatter = RelativeDateTimeFormatter()
         formatter.locale = locale
         formatter.unitsStyle = unitsStyle

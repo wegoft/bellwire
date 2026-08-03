@@ -245,17 +245,17 @@ struct PrimaryButton: View {
         Button(action: action) {
             HStack(spacing: BellwireSpacing.compact) {
                 if isLoading {
-                    ProgressView().tint(BellwireTheme.accentInk)
+                    ProgressView().tint(BellwireTheme.primaryButtonForeground)
                 } else if let systemImage {
                     Image(systemName: systemImage)
                 }
                 Text(LocalizedStringKey(title))
                     .font(.body.weight(.semibold))
             }
-            .foregroundStyle(BellwireTheme.accentInk)
+            .foregroundStyle(BellwireTheme.primaryButtonForeground)
             .frame(maxWidth: .infinity)
             .frame(minHeight: 52)
-            .background(BellwireTheme.accent, in: RoundedRectangle(cornerRadius: BellwireRadius.control, style: .continuous))
+            .background(BellwireTheme.primaryButtonBackground, in: RoundedRectangle(cornerRadius: BellwireRadius.control, style: .continuous))
         }
         .buttonStyle(PressableButtonStyle())
         .disabled(isDisabled || isLoading)
