@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 export const compatibility = {
-  appVersion: "1.0.0",
+  appVersion: "1.0.1",
   apiVersion: "v1",
-  schemaMigration: "202607250001",
+  schemaMigration: "202608030001",
 } as const;

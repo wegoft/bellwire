@@ -38,6 +38,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var privateLastSyncAt: [String: Date] = [:]
     @Published private(set) var revokingAgentConnectionID: String?
     @Published private(set) var notificationPermission: NotificationPermissionState = .unknown
+    @Published private(set) var notificationAuthorizationDiagnostic = "unknown"
     @Published private(set) var isLoading = false
     @Published private(set) var isAuthenticating = false
     @Published private(set) var isMarkingAllRead = false
@@ -185,6 +186,7 @@ final class AppModel: ObservableObject {
         devices = [
             DeviceRecord(
                 id: "iphone", name: "iPhone", platform: "ios", apnsEnvironment: "sandbox", appVersion: "1.0",
+                buildNumber: "11", notificationAuthorization: "authorized",
                 lastActiveAt: now, pushEnabled: true
             )
         ]
@@ -271,6 +273,7 @@ final class AppModel: ObservableObject {
             liveSurfaces.filter { directProjectIDs.contains($0.projectId) }
         )
         do {
+            try await registerCurrentDeviceKey(userID: userID)
             async let projectRequest: ProjectsResponse = api.request("v1/projects")
             async let surfaceRequest: LiveSurfacesResponse = api.request("v1/surfaces")
             async let inboxRequest: InboxResponse = api.request("v1/inbox?limit=60")
@@ -301,6 +304,19 @@ final class AppModel: ObservableObject {
             )
             guard !Task.isCancelled, session?.user.id == userID else { return }
             let orderedProjects = projectResponse.projects.sorted(by: stableProjectOrder)
+            let missingManifestProjects = orderedProjects.filter { project in
+                project.deliveryMode == .private && !directProjectIDs.contains(project.id)
+            }
+            let privateProjectIDs = Set(
+                orderedProjects.filter { project in
+                    project.deliveryMode == .private
+                }.map(\.id)
+            )
+            let hostedProjectIDs = Set(
+                orderedProjects.filter { project in
+                    project.deliveryMode == .hosted
+                }.map(\.id)
+            )
             let projectOrders = Dictionary(uniqueKeysWithValues: orderedProjects.map { ($0.id, $0.displayOrder) })
             let orderedSurfaces = surfaceResponse.surfaces.sorted { left, right in
                 let leftProjectOrder = projectOrders[left.projectId] ?? Int.max
@@ -309,9 +325,19 @@ final class AppModel: ObservableObject {
                 if left.displayOrder != right.displayOrder { return left.displayOrder < right.displayOrder }
                 return left.id < right.id
             }
-            let cloudProjects = orderedProjects.filter { !directProjectIDs.contains($0.id) }
-            let cloudSurfaces = orderedSurfaces.filter { !directProjectIDs.contains($0.projectId) }
-            projects = deduplicatedProjects(cloudProjects + cachedDirectProjects)
+            let cloudProjects = orderedProjects.filter { project in
+                project.deliveryMode == .hosted || !directProjectIDs.contains(project.id)
+            }
+            let cloudSurfaces = orderedSurfaces.filter {
+                hostedProjectIDs.contains($0.projectId)
+            }
+            let currentDirectProjects = cachedDirectProjects.filter {
+                privateProjectIDs.contains($0.id)
+            }
+            let currentDirectSurfaces = cachedDirectSurfaces.filter {
+                privateProjectIDs.contains($0.projectId)
+            }
+            projects = deduplicatedProjects(cloudProjects + currentDirectProjects)
                 .sorted(by: stableProjectOrder)
             for project in projects where project.deliveryMode == .private {
                 if let fetchedAt = privateEventStore.lastFetchedAt(
@@ -322,7 +348,7 @@ final class AppModel: ObservableObject {
                 }
             }
             liveSurfaces = sortedSurfaces(
-                deduplicatedSurfaces(cloudSurfaces + cachedDirectSurfaces),
+                deduplicatedSurfaces(cloudSurfaces + currentDirectSurfaces),
                 projects: projects
             )
             let cachedPrivateEvents = privateEventStore.inboxEvents(
@@ -337,6 +363,9 @@ final class AppModel: ObservableObject {
             if let modeResponse { pendingModeRequests = modeResponse.requests }
             lastDashboardRefreshAt = Date()
             errorMessage = nil
+            for project in missingManifestProjects {
+                await requestDirectConnectionRecovery(project: project, userID: userID)
+            }
             await refreshDirectConnections(userID: userID)
             await synchronizeNativeDisplays()
         } catch {
@@ -766,10 +795,24 @@ final class AppModel: ObservableObject {
     func refreshNotificationStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         switch settings.authorizationStatus {
-        case .notDetermined: notificationPermission = .notDetermined
-        case .denied: notificationPermission = .denied
-        case .authorized, .provisional, .ephemeral: notificationPermission = .authorized
-        @unknown default: notificationPermission = .unknown
+        case .notDetermined:
+            notificationPermission = .notDetermined
+            notificationAuthorizationDiagnostic = "not_determined"
+        case .denied:
+            notificationPermission = .denied
+            notificationAuthorizationDiagnostic = "denied"
+        case .authorized:
+            notificationPermission = .authorized
+            notificationAuthorizationDiagnostic = "authorized"
+        case .provisional:
+            notificationPermission = .authorized
+            notificationAuthorizationDiagnostic = "provisional"
+        case .ephemeral:
+            notificationPermission = .authorized
+            notificationAuthorizationDiagnostic = "ephemeral"
+        @unknown default:
+            notificationPermission = .unknown
+            notificationAuthorizationDiagnostic = "unknown"
         }
     }
 
@@ -917,9 +960,12 @@ final class AppModel: ObservableObject {
             let apnsToken: String
             let apnsEnvironment: String
             let appVersion: String
+            let buildNumber: String
+            let notificationAuthorization: String
             let installationId: String
         }
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
 #if DEBUG
         let environment = "sandbox"
 #else
@@ -935,6 +981,8 @@ final class AppModel: ObservableObject {
                     apnsToken: token,
                     apnsEnvironment: environment,
                     appVersion: version,
+                    buildNumber: buildNumber,
+                    notificationAuthorization: notificationAuthorizationDiagnostic,
                     installationId: installationId
                 )
             )
@@ -993,7 +1041,9 @@ final class AppModel: ObservableObject {
                       manifest.capabilities.contains("surfaces"),
                       manifest.capabilities.contains("inbox")
                 else { continue }
-                manifests.removeAll { $0.connectionId == manifest.connectionId }
+                manifests.removeAll {
+                    $0.project.id == manifest.project.id || $0.connectionId == manifest.connectionId
+                }
                 manifests.append(manifest)
                 do {
                     try keychain.saveDirectConnectionManifests(manifests, userID: userID)
@@ -1050,6 +1100,49 @@ final class AppModel: ObservableObject {
         let hostedEvents = events.filter { !$0.id.hasPrefix("private:") }
         events = (hostedEvents + privateEventStore.inboxEvents(accountID: userID, projects: projects))
             .sorted { $0.receivedAt > $1.receivedAt }
+    }
+
+    private func registerCurrentDeviceKey(userID: String) async throws {
+        let installationID = try keychain.installationID()
+        let identity = try keychain.deviceIdentity(userID: userID)
+        try await api.requestVoid(
+            "v1/device-keys",
+            method: .post,
+            body: identity.descriptor(installationID: installationID)
+        )
+    }
+
+    private func requestDirectConnectionRecovery(
+        project: ProjectSummary,
+        userID: String
+    ) async {
+        guard let identity = try? keychain.deviceIdentity(userID: userID),
+              let installationId = try? keychain.installationID()
+        else { return }
+        struct Payload: Encodable {
+            let deviceKeyId: String
+            let installationId: String
+            let appVersion: String
+            let buildNumber: String
+            let notificationAuthorization: String
+        }
+        let appVersion = Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleShortVersionString"
+        ) as? String ?? "unknown"
+        let buildNumber = Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleVersion"
+        ) as? String ?? "unknown"
+        try? await api.requestVoid(
+            "v1/projects/\(project.id)/direct-connection-recovery",
+            method: .post,
+            body: Payload(
+                deviceKeyId: identity.id,
+                installationId: installationId,
+                appVersion: appVersion,
+                buildNumber: buildNumber,
+                notificationAuthorization: notificationAuthorizationDiagnostic
+            )
+        )
     }
 
     private func fetchDirectSurfaces(

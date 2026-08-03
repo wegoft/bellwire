@@ -26,4 +26,18 @@ describe("published compatibility metadata", () => {
     expect(compatibility).toContain(`appVersion: "${appVersions[0]}"`);
     expect(compatibility).toContain(`schemaMigration: "${latestMigration}"`);
   });
+
+  it("preserves prior device keys when one installation rotates its current identity", () => {
+    const migration = readFileSync(
+      join(repositoryRoot, "supabase/migrations/202608030001_private_manifest_recovery.sql"),
+      "utf8",
+    );
+
+    expect(migration).toContain(
+      "drop constraint if exists device_keys_user_id_installation_id_key",
+    );
+    expect(migration).not.toContain(
+      "create unique index if not exists device_keys_user_id_installation_unique",
+    );
+  });
 });

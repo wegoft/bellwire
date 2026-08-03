@@ -12,6 +12,8 @@ and Surface writes use the narrower project-scoped `bw_live_...` token.
 | `POST` | `/v1/direct-connections` | Publish an encrypted Direct connection manifest for the bound device |
 | `GET` | `/v1/direct-connections?deviceKeyId={id}` | Fetch pending encrypted manifests as the signed-in user |
 | `POST` | `/v1/direct-connections/{id}/ack` | Atomically record readiness and consume a Direct v2 envelope |
+| `POST` | `/v1/projects/{id}/direct-connection-recovery` | Idempotently report one previously acknowledged manifest missing on the signed-in installation |
+| `GET` | `/v1/direct-connection-recoveries` | List pending device-scoped re-issuance requests as the connected Agent |
 | `POST` | `/v1/projects` | Create a project |
 | `GET` | `/v1/projects` | List projects |
 | `GET` | `/v1/projects/{id}` | Read schema, Surface, and delivery health |

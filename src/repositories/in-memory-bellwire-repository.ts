@@ -11,6 +11,7 @@ import type {
   DeviceBinding,
   DeviceKey,
   DirectConnectionEnvelope,
+  DirectConnectionRecoveryRequest,
   EventListOptions,
   EventListPage,
   EventSchema,
@@ -43,6 +44,10 @@ export class InMemoryBellwireRepository implements BellwireRepository {
   private readonly deviceKeys = new Map<string, DeviceKey>();
   private readonly directConnectionEnvelopes = new Map<string, DirectConnectionEnvelope>();
   private readonly privateConnectionReadiness = new Map<string, PrivateConnectionReadiness>();
+  private readonly directConnectionRecoveryRequests = new Map<
+    string,
+    DirectConnectionRecoveryRequest
+  >();
   private readonly deliveryModeChangeRequests = new Map<string, DeliveryModeChangeRequest>();
   private readonly agentTokens = new Map<string, AgentToken>();
   private readonly eventSchemas = new Map<string, EventSchema[]>();
@@ -148,6 +153,9 @@ export class InMemoryBellwireRepository implements BellwireRepository {
     for (const [key, readiness] of this.privateConnectionReadiness) {
       if (readiness.projectId === projectId) this.privateConnectionReadiness.delete(key);
     }
+    for (const [key, request] of this.directConnectionRecoveryRequests) {
+      if (request.projectId === projectId) this.directConnectionRecoveryRequests.delete(key);
+    }
     for (const [requestId, request] of this.deliveryModeChangeRequests) {
       if (request.projectId === projectId) this.deliveryModeChangeRequests.delete(requestId);
     }
@@ -228,6 +236,11 @@ export class InMemoryBellwireRepository implements BellwireRepository {
         this.privateConnectionReadiness.delete(readinessKey);
       }
     }
+    for (const [requestKey, request] of this.directConnectionRecoveryRequests) {
+      if (deletedKeyIds.has(request.deviceKeyId)) {
+        this.directConnectionRecoveryRequests.delete(requestKey);
+      }
+    }
   }
 
   async saveDeviceBinding(binding: DeviceBinding): Promise<DeviceBinding> {
@@ -297,11 +310,6 @@ export class InMemoryBellwireRepository implements BellwireRepository {
   }
 
   async saveDeviceKey(key: DeviceKey): Promise<DeviceKey> {
-    const existing = [...this.deviceKeys.values()]
-      .find((candidate) =>
-        candidate.userId === key.userId && candidate.installationId === key.installationId
-      );
-    if (existing && existing.id !== key.id) this.deviceKeys.delete(existing.id);
     this.deviceKeys.set(key.id, copy(key));
     return copy(key);
   }
@@ -379,6 +387,42 @@ export class InMemoryBellwireRepository implements BellwireRepository {
     return [...this.privateConnectionReadiness.values()]
       .filter((readiness) => readiness.projectId === projectId)
       .map(copy);
+  }
+
+  async getDirectConnectionRecoveryRequest(
+    projectId: string,
+    deviceKeyId: string,
+  ): Promise<DirectConnectionRecoveryRequest | undefined> {
+    return this.cloneFrom(
+      this.directConnectionRecoveryRequests,
+      this.projectTypeKey(projectId, deviceKeyId),
+    );
+  }
+
+  async saveDirectConnectionRecoveryRequestIfAbsent(
+    request: DirectConnectionRecoveryRequest,
+  ): Promise<{ request: DirectConnectionRecoveryRequest; created: boolean }> {
+    const key = this.projectTypeKey(request.projectId, request.deviceKeyId);
+    const existing = this.directConnectionRecoveryRequests.get(key);
+    if (existing) return { request: copy(existing), created: false };
+    this.directConnectionRecoveryRequests.set(key, copy(request));
+    return { request: copy(request), created: true };
+  }
+
+  async listDirectConnectionRecoveryRequests(
+    userId: string,
+  ): Promise<DirectConnectionRecoveryRequest[]> {
+    return [...this.directConnectionRecoveryRequests.values()]
+      .filter((request) => request.userId === userId)
+      .sort((left, right) => left.requestedAt.localeCompare(right.requestedAt))
+      .map(copy);
+  }
+
+  async deleteDirectConnectionRecoveryRequest(
+    projectId: string,
+    deviceKeyId: string,
+  ): Promise<void> {
+    this.directConnectionRecoveryRequests.delete(this.projectTypeKey(projectId, deviceKeyId));
   }
 
   async saveDeliveryModeChangeRequest(

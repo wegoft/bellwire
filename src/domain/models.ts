@@ -63,10 +63,23 @@ export interface Device {
   apnsToken: string;
   apnsEnvironment: "sandbox" | "production";
   appVersion?: string;
+  buildNumber?: string;
+  notificationAuthorization?: NotificationAuthorizationDiagnostic;
   lastActiveAt: string;
   pushEnabled: boolean;
   createdAt: string;
 }
+
+export const NOTIFICATION_AUTHORIZATION_DIAGNOSTICS = [
+  "unknown",
+  "not_determined",
+  "denied",
+  "authorized",
+  "provisional",
+  "ephemeral",
+] as const;
+export type NotificationAuthorizationDiagnostic =
+  (typeof NOTIFICATION_AUTHORIZATION_DIAGNOSTICS)[number];
 
 export interface DeviceBinding {
   id: string;
@@ -133,6 +146,17 @@ export interface PrivateConnectionReadiness {
   lastVerifiedAt: string;
   lastSyncAt?: string;
   lastErrorCode?: string;
+}
+
+export interface DirectConnectionRecoveryRequest {
+  userId: string;
+  projectId: string;
+  deviceKeyId: string;
+  installationId: string;
+  appVersion?: string;
+  buildNumber?: string;
+  notificationAuthorization?: NotificationAuthorizationDiagnostic;
+  requestedAt: string;
 }
 
 export interface DeliveryModeChangeRequest {

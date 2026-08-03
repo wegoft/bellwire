@@ -93,6 +93,36 @@ export function createApp(dependencies: {
     );
   });
 
+  app.post("/v1/projects/:projectId/direct-connection-recovery", async (context) => {
+    const principal = await authenticate(context, dependencies.authenticator);
+    return context.json(
+      await dependencies.service.requestDirectConnectionRecovery(
+        principal,
+        context.req.param("projectId"),
+        await readLimitedJson(context.req.raw, 2_048),
+      ),
+      202,
+    );
+  });
+
+  app.get("/v1/direct-connection-recoveries", async (context) => {
+    const principal = await scopedPrincipal(context, dependencies.authenticator, "config:read");
+    return context.json(
+      await dependencies.service.listDirectConnectionRecoveryRequests(principal),
+    );
+  });
+
+  app.post("/v1/device-keys", async (context) => {
+    const principal = await authenticate(context, dependencies.authenticator);
+    return context.json(
+      await dependencies.service.registerDeviceKey(
+        principal,
+        await readLimitedJson(context.req.raw, 2_048),
+      ),
+      201,
+    );
+  });
+
   app.post("/v1/devices", async (context) => {
     const principal = await authenticate(context, dependencies.authenticator);
     return context.json(

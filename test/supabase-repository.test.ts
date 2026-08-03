@@ -115,6 +115,8 @@ describe("SupabaseBellwireRepository", () => {
       apns_token: "a".repeat(64),
       apns_environment: "sandbox",
       app_version: "1.1",
+      build_number: "11",
+      notification_authorization: "provisional",
       last_active_at: "2026-07-20T12:00:00.000Z",
       push_enabled: true,
       created_at: "2026-07-19T12:00:00.000Z",
@@ -137,6 +139,8 @@ describe("SupabaseBellwireRepository", () => {
       apnsToken: "a".repeat(64),
       apnsEnvironment: "sandbox",
       appVersion: "1.1",
+      buildNumber: "11",
+      notificationAuthorization: "provisional",
       lastActiveAt: "2026-07-20T12:00:00.000Z",
       pushEnabled: true,
       createdAt: "2026-07-20T12:00:00.000Z",
@@ -151,11 +155,16 @@ describe("SupabaseBellwireRepository", () => {
       p_installation_id: input.installationId,
       p_apns_token: input.apnsToken,
       p_apns_environment: input.apnsEnvironment,
+      p_app_version: input.appVersion,
+      p_build_number: input.buildNumber,
+      p_notification_authorization: input.notificationAuthorization,
       p_name: input.name,
     });
     expect(saved).toMatchObject({
       id: "stored-device-id",
       apnsEnvironment: "sandbox",
+      buildNumber: "11",
+      notificationAuthorization: "provisional",
       createdAt: storedRow.created_at,
     });
     expect(request?.url).toContain("/rpc/register_device");
@@ -448,11 +457,70 @@ describe("SupabaseBellwireRepository", () => {
       "2026-07-23T12:05:00.000Z",
     )).toBe(envelopeRow.project_id);
 
-    expect(requests[0]?.url).toContain("/device_keys?on_conflict=user_id,installation_id");
+    expect(requests[0]?.url).toContain("/device_keys?on_conflict=user_id,id");
     expect(requests[1]?.url).toContain("/direct_connection_envelopes");
     expect(requests[2]?.url).toContain("expires_at=gt.2026-07-23T12%3A00%3A00.000Z");
     expect(requests[3]?.method).toBe("POST");
     expect(requests[3]?.url).toContain("/rpc/ack_direct_connection_envelope");
+  });
+
+  it("creates, lists, and resolves one opaque Direct recovery request", async () => {
+    const requests: Request[] = [];
+    const row = {
+      user_id: "user-id",
+      project_id: "44444444-4444-4444-8444-444444444444",
+      device_key_id: "11111111-1111-4111-8111-111111111111",
+      installation_id: "22222222-2222-4222-8222-222222222222",
+      app_version: "1.0.0",
+      build_number: "11",
+      notification_authorization: "denied",
+      requested_at: "2026-08-03T01:00:00.000Z",
+    };
+    const repository = new SupabaseBellwireRepository(
+      "https://example.supabase.co",
+      "service-role-key",
+      async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(request);
+        if (request.method === "DELETE") return new Response(null, { status: 204 });
+        return Response.json([row]);
+      },
+    );
+
+    const saved = await repository.saveDirectConnectionRecoveryRequestIfAbsent({
+      userId: row.user_id,
+      projectId: row.project_id,
+      deviceKeyId: row.device_key_id,
+      installationId: row.installation_id,
+      appVersion: row.app_version,
+      buildNumber: row.build_number,
+      notificationAuthorization: "denied",
+      requestedAt: row.requested_at,
+    });
+    expect(saved).toMatchObject({
+      created: true,
+      request: {
+        projectId: row.project_id,
+        deviceKeyId: row.device_key_id,
+        buildNumber: "11",
+        notificationAuthorization: "denied",
+      },
+    });
+    expect(await repository.listDirectConnectionRecoveryRequests(row.user_id))
+      .toHaveLength(1);
+    await repository.deleteDirectConnectionRecoveryRequest(
+      row.project_id,
+      row.device_key_id,
+    );
+
+    expect(requests[0]?.url).toContain(
+      "/direct_connection_recovery_requests?on_conflict=project_id,device_key_id",
+    );
+    expect(requests[0]?.headers.get("prefer"))
+      .toBe("resolution=ignore-duplicates,return=representation");
+    expect(JSON.stringify(await requests[0]?.json())).not.toContain("sealed_box");
+    expect(requests[1]?.url).toContain("user_id=eq.user-id");
+    expect(requests[2]?.method).toBe("DELETE");
   });
 
   it("fetches the latest notification Surface before evaluating enabled", async () => {

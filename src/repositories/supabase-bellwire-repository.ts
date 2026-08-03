@@ -11,6 +11,7 @@ import type {
   DeviceBinding,
   DeviceKey,
   DirectConnectionEnvelope,
+  DirectConnectionRecoveryRequest,
   EventListOptions,
   EventListPage,
   EventSchema,
@@ -159,6 +160,8 @@ export class SupabaseBellwireRepository implements BellwireRepository {
         p_apns_token: device.apnsToken,
         p_apns_environment: device.apnsEnvironment,
         p_app_version: device.appVersion ?? null,
+        p_build_number: device.buildNumber ?? null,
+        p_notification_authorization: device.notificationAuthorization ?? null,
         p_last_active_at: device.lastActiveAt,
         p_push_enabled: device.pushEnabled,
         p_created_at: device.createdAt,
@@ -275,7 +278,7 @@ export class SupabaseBellwireRepository implements BellwireRepository {
   }
 
   async saveDeviceKey(key: DeviceKey): Promise<DeviceKey> {
-    const rows = await this.request<JsonRecord[]>("/device_keys?on_conflict=user_id,installation_id", {
+    const rows = await this.request<JsonRecord[]>("/device_keys?on_conflict=user_id,id", {
       method: "POST",
       body: deviceKeyRow(key),
       prefer: "resolution=merge-duplicates,return=representation",
@@ -356,6 +359,55 @@ export class SupabaseBellwireRepository implements BellwireRepository {
       order: "ready_at.asc",
     });
     return rows.map(toPrivateConnectionReadiness);
+  }
+
+  async getDirectConnectionRecoveryRequest(
+    projectId: string,
+    deviceKeyId: string,
+  ): Promise<DirectConnectionRecoveryRequest | undefined> {
+    return this.one(
+      "/direct_connection_recovery_requests",
+      { project_id: `eq.${projectId}`, device_key_id: `eq.${deviceKeyId}` },
+      toDirectConnectionRecoveryRequest,
+    );
+  }
+
+  async saveDirectConnectionRecoveryRequestIfAbsent(
+    request: DirectConnectionRecoveryRequest,
+  ): Promise<{ request: DirectConnectionRecoveryRequest; created: boolean }> {
+    const rows = await this.request<JsonRecord[]>(
+      "/direct_connection_recovery_requests?on_conflict=project_id,device_key_id",
+      {
+        method: "POST",
+        body: directConnectionRecoveryRequestRow(request),
+        prefer: "resolution=ignore-duplicates,return=representation",
+      },
+    );
+    const saved = rows[0]
+      ? toDirectConnectionRecoveryRequest(rows[0])
+      : await this.getDirectConnectionRecoveryRequest(request.projectId, request.deviceKeyId);
+    if (!saved) throw new Error("Supabase did not return the recovery request");
+    return { request: saved, created: rows.length > 0 };
+  }
+
+  async listDirectConnectionRecoveryRequests(
+    userId: string,
+  ): Promise<DirectConnectionRecoveryRequest[]> {
+    const rows = await this.getRows("/direct_connection_recovery_requests", {
+      user_id: `eq.${userId}`,
+      order: "requested_at.asc",
+    });
+    return rows.map(toDirectConnectionRecoveryRequest);
+  }
+
+  async deleteDirectConnectionRecoveryRequest(
+    projectId: string,
+    deviceKeyId: string,
+  ): Promise<void> {
+    await this.request(`/direct_connection_recovery_requests?${params({
+      project_id: `eq.${projectId}`,
+      device_key_id: `eq.${deviceKeyId}`,
+    })}`, { method: "DELETE" });
   }
 
   async saveDeliveryModeChangeRequest(
@@ -1083,6 +1135,10 @@ function toDevice(row: JsonRecord): Device {
     apnsToken: String(row.apns_token),
     apnsEnvironment: row.apns_environment === "sandbox" ? "sandbox" : "production",
     appVersion: optionalString(row.app_version),
+    buildNumber: optionalString(row.build_number),
+    notificationAuthorization: toNotificationAuthorizationDiagnostic(
+      row.notification_authorization,
+    ),
     lastActiveAt: String(row.last_active_at), pushEnabled: row.push_enabled === true,
     createdAt: String(row.created_at),
   };
@@ -1174,6 +1230,43 @@ function toPrivateConnectionReadiness(row: JsonRecord): PrivateConnectionReadine
     lastSyncAt: optionalString(row.last_sync_at),
     lastErrorCode: optionalString(row.last_error_code),
   };
+}
+
+function directConnectionRecoveryRequestRow(
+  value: DirectConnectionRecoveryRequest,
+): JsonRecord {
+  return {
+    user_id: value.userId,
+    project_id: value.projectId,
+    device_key_id: value.deviceKeyId,
+    installation_id: value.installationId,
+    app_version: value.appVersion ?? null,
+    build_number: value.buildNumber ?? null,
+    notification_authorization: value.notificationAuthorization ?? null,
+    requested_at: value.requestedAt,
+  };
+}
+
+function toDirectConnectionRecoveryRequest(row: JsonRecord): DirectConnectionRecoveryRequest {
+  return {
+    userId: String(row.user_id),
+    projectId: String(row.project_id),
+    deviceKeyId: String(row.device_key_id),
+    installationId: String(row.installation_id),
+    appVersion: optionalString(row.app_version),
+    buildNumber: optionalString(row.build_number),
+    notificationAuthorization: toNotificationAuthorizationDiagnostic(
+      row.notification_authorization,
+    ),
+    requestedAt: String(row.requested_at),
+  };
+}
+
+function toNotificationAuthorizationDiagnostic(value: unknown) {
+  return value === "unknown" || value === "not_determined" || value === "denied" ||
+      value === "authorized" || value === "provisional" || value === "ephemeral"
+    ? value
+    : undefined;
 }
 
 function deliveryModeChangeRequestRow(value: DeliveryModeChangeRequest): JsonRecord {

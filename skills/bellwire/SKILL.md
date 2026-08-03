@@ -62,6 +62,7 @@ node <skill-dir>/scripts/bellwire.mjs create-schema --project <id> --file event-
 node <skill-dir>/scripts/bellwire.mjs create-token --project <id> --name production
 node <skill-dir>/scripts/bellwire.mjs upsert-surface --project <id> --key prod-api --file surface.json
 node <skill-dir>/scripts/bellwire.mjs list-surfaces --project <id>
+node <skill-dir>/scripts/bellwire.mjs list-direct-recoveries
 node <skill-dir>/scripts/bellwire.mjs set-surface-order --project <id> --key prod-api --order 20
 node <skill-dir>/scripts/bellwire.mjs send-test --project <id> --file test-event.json
 node <skill-dir>/scripts/bellwire.mjs event --event <event-id>

@@ -11,6 +11,7 @@ import type {
   DeviceBinding,
   DeviceKey,
   DirectConnectionEnvelope,
+  DirectConnectionRecoveryRequest,
   EventListOptions,
   EventListPage,
   EventSchema,
@@ -90,6 +91,20 @@ export interface BellwireRepository {
     deviceKeyId: string,
   ): Promise<PrivateConnectionReadiness | undefined>;
   listPrivateConnectionReadiness(projectId: string): Promise<PrivateConnectionReadiness[]>;
+  getDirectConnectionRecoveryRequest(
+    projectId: string,
+    deviceKeyId: string,
+  ): Promise<DirectConnectionRecoveryRequest | undefined>;
+  saveDirectConnectionRecoveryRequestIfAbsent(
+    request: DirectConnectionRecoveryRequest,
+  ): Promise<{ request: DirectConnectionRecoveryRequest; created: boolean }>;
+  listDirectConnectionRecoveryRequests(
+    userId: string,
+  ): Promise<DirectConnectionRecoveryRequest[]>;
+  deleteDirectConnectionRecoveryRequest(
+    projectId: string,
+    deviceKeyId: string,
+  ): Promise<void>;
 
   saveDeliveryModeChangeRequest(
     request: DeliveryModeChangeRequest,

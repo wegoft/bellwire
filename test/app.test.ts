@@ -123,11 +123,13 @@ describe("Bellwire MVP API", () => {
     await repository.updateProject({ ...privateProject, deliveryMode: "hosted" });
   }
 
-  async function registerDevice(): Promise<void> {
+  async function registerDevice(
+    installationId = "11111111-1111-4111-8111-111111111111",
+  ): Promise<void> {
     await repository.saveDevice({
       id: crypto.randomUUID(),
       userId: userPrincipal.userId,
-      installationId: "11111111-1111-4111-8111-111111111111",
+      installationId,
       name: "Test iPhone",
       platform: "ios",
       apnsToken: "a".repeat(64),
@@ -146,9 +148,9 @@ describe("Bellwire MVP API", () => {
       status: "ok",
       service: "bellwire-api",
       compatibility: {
-        appVersion: "1.0.0",
+        appVersion: "1.0.1",
         apiVersion: "v1",
-        schemaMigration: "202607250001",
+        schemaMigration: "202608030001",
       },
     });
   });
@@ -467,6 +469,8 @@ describe("Bellwire MVP API", () => {
         apnsToken: "b".repeat(64),
         apnsEnvironment: "sandbox",
         appVersion: "0.1.1",
+        buildNumber: "11",
+        notificationAuthorization: "provisional",
         installationId,
       }),
     });
@@ -475,10 +479,16 @@ describe("Bellwire MVP API", () => {
       id: string;
       apnsToken: string;
       apnsEnvironment: string;
+      appVersion: string;
+      buildNumber: string;
+      notificationAuthorization: string;
     }>();
     expect(rotatedDevice.id).toBe(firstDevice.id);
     expect(rotatedDevice.apnsToken).toBe("b".repeat(64));
     expect(rotatedDevice.apnsEnvironment).toBe("sandbox");
+    expect(rotatedDevice.appVersion).toBe("0.1.1");
+    expect(rotatedDevice.buildNumber).toBe("11");
+    expect(rotatedDevice.notificationAuthorization).toBe("provisional");
     expect(await repository.listDevices(userPrincipal.userId)).toHaveLength(1);
 
     const invalidEnvironment = await app.request("/v1/devices", {
@@ -786,12 +796,17 @@ describe("Bellwire MVP API", () => {
       method: "POST",
       headers: { authorization: "Bearer agent" },
     })).status).toBe(403);
+    expect((await agentApp.request("/v1/device-keys", {
+      method: "POST",
+      headers: { authorization: "Bearer agent", "content-type": "application/json" },
+      body: JSON.stringify({}),
+    })).status).toBe(403);
   });
 
   it("bootstraps an opaque direct connection without exposing its plaintext manifest", async () => {
     const projectId = await createProject();
     const deviceKeyId = "11111111-1111-4111-8111-111111111111";
-    const installationId = "11111111-1111-4111-8111-111111111111";
+    const installationId = "22222222-2222-4222-8222-222222222222";
     const publicKey = btoa(String.fromCharCode(4, ...new Array(64).fill(7)));
     const bindingResponse = await app.request("/v1/device-bindings", {
       method: "POST",
@@ -878,7 +893,220 @@ describe("Bellwire MVP API", () => {
       { headers: { authorization: "Bearer test" } },
     )).json()).toEqual({ envelopes: [] });
 
-    await registerDevice();
+    const recoveryDeviceKeyId = "55555555-5555-4555-8555-555555555555";
+    const recoveryPublicKey = btoa(String.fromCharCode(4, ...new Array(64).fill(8)));
+    const currentKeyRegistration = await app.request("/v1/device-keys", {
+      method: "POST",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({
+        id: recoveryDeviceKeyId,
+        installationId,
+        agreementPublicKey: recoveryPublicKey,
+        signingPublicKey: recoveryPublicKey,
+        algorithm: "p256",
+      }),
+    });
+    expect(currentKeyRegistration.status).toBe(201);
+    expect(await currentKeyRegistration.json()).toEqual({
+      id: recoveryDeviceKeyId,
+      installationId,
+      agreementPublicKey: recoveryPublicKey,
+      signingPublicKey: recoveryPublicKey,
+      algorithm: "p256",
+    });
+    expect(await repository.getDeviceKey(deviceKeyId, userPrincipal.userId)).toBeDefined();
+
+    const recoveryBody = {
+      deviceKeyId: recoveryDeviceKeyId,
+      installationId,
+      appVersion: "1.0.0",
+      buildNumber: "11",
+      notificationAuthorization: "denied",
+    };
+    const firstRecovery = await app.request(
+      `/v1/projects/${projectId}/direct-connection-recovery`,
+      {
+        method: "POST",
+        headers: { authorization: "Bearer test", "content-type": "application/json" },
+        body: JSON.stringify(recoveryBody),
+      },
+    );
+    expect(firstRecovery.status).toBe(202);
+    const recovery = await firstRecovery.json<{
+      projectId: string;
+      deviceKeyId: string;
+      requestedAt: string;
+      status: string;
+    }>();
+    expect(recovery).toMatchObject({
+      projectId,
+      deviceKeyId: recoveryDeviceKeyId,
+      status: "pending",
+    });
+    expect(recovery).not.toHaveProperty("userId");
+    expect(JSON.stringify(recovery)).not.toContain("videosays.com");
+
+    const repeatedRecovery = await app.request(
+      `/v1/projects/${projectId}/direct-connection-recovery`,
+      {
+        method: "POST",
+        headers: { authorization: "Bearer test", "content-type": "application/json" },
+        body: JSON.stringify(recoveryBody),
+      },
+    );
+    expect(repeatedRecovery.status).toBe(202);
+    expect(await repeatedRecovery.json()).toEqual(recovery);
+
+    const recoveries = await agentApp.request("/v1/direct-connection-recoveries", {
+      headers: { authorization: `Bearer ${connected.token}` },
+    });
+    expect(recoveries.status).toBe(200);
+    const recoveriesBody = await recoveries.json();
+    expect(recoveriesBody).toEqual({
+      requests: [{
+        projectId,
+        deviceKey: {
+          id: recoveryDeviceKeyId,
+          installationId,
+          agreementPublicKey: recoveryPublicKey,
+          signingPublicKey: recoveryPublicKey,
+          algorithm: "p256",
+        },
+        requestedAt: recovery.requestedAt,
+      }],
+    });
+    expect(JSON.stringify(recoveriesBody).includes(deviceKeyId)).toBe(false);
+
+    const recoveredEnvelope = await agentApp.request("/v1/direct-connections", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${connected.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        projectId,
+        manifestVersion: 2,
+        deviceKeyId: recoveryDeviceKeyId,
+        algorithm: "p256-hkdf-sha256-aes-gcm",
+        ephemeralPublicKey,
+        sealedBox,
+      }),
+    });
+    expect(recoveredEnvelope.status).toBe(201);
+    expect(await (await agentApp.request("/v1/direct-connection-recoveries", {
+      headers: { authorization: `Bearer ${connected.token}` },
+    })).json()).toEqual({ requests: [] });
+
+    const wrongInstallation = await app.request(
+      `/v1/projects/${projectId}/direct-connection-recovery`,
+      {
+        method: "POST",
+        headers: { authorization: "Bearer test", "content-type": "application/json" },
+        body: JSON.stringify({
+          ...recoveryBody,
+          installationId: "33333333-3333-4333-8333-333333333333",
+        }),
+      },
+    );
+    expect(wrongInstallation.status).toBe(400);
+
+    const unrelatedInstallationId = "33333333-3333-4333-8333-333333333333";
+    const unrelatedDeviceKeyId = "66666666-6666-4666-8666-666666666666";
+    expect((await app.request("/v1/device-keys", {
+      method: "POST",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({
+        id: unrelatedDeviceKeyId,
+        installationId: unrelatedInstallationId,
+        agreementPublicKey: recoveryPublicKey,
+        signingPublicKey: recoveryPublicKey,
+        algorithm: "p256",
+      }),
+    })).status).toBe(201);
+    const unrelatedInstallationRecovery = await app.request(
+      `/v1/projects/${projectId}/direct-connection-recovery`,
+      {
+        method: "POST",
+        headers: { authorization: "Bearer test", "content-type": "application/json" },
+        body: JSON.stringify({
+          ...recoveryBody,
+          deviceKeyId: unrelatedDeviceKeyId,
+          installationId: unrelatedInstallationId,
+        }),
+      },
+    );
+    expect(unrelatedInstallationRecovery.status).toBe(409);
+    expect(await unrelatedInstallationRecovery.json()).toMatchObject({
+      error: { code: "PRIVATE_READINESS_REQUIRED" },
+    });
+
+    const otherUserApp = createApp({
+      service: new BellwireService(repository, dispatcher),
+      authenticator: new StaticAuthenticator({
+        ...userPrincipal,
+        userId: "user-two",
+      }),
+    });
+    expect((await otherUserApp.request(
+      `/v1/projects/${projectId}/direct-connection-recovery`,
+      {
+        method: "POST",
+        headers: { authorization: "Bearer other", "content-type": "application/json" },
+        body: JSON.stringify(recoveryBody),
+      },
+    )).status).toBe(404);
+
+    for (let recoveryAttempt = 0; recoveryAttempt < 2; recoveryAttempt += 1) {
+      expect((await app.request(
+        `/v1/projects/${projectId}/direct-connection-recovery`,
+        {
+          method: "POST",
+          headers: { authorization: "Bearer test", "content-type": "application/json" },
+          body: JSON.stringify(recoveryBody),
+        },
+      )).status).toBe(202);
+      expect((await agentApp.request("/v1/direct-connections", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${connected.token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId,
+          manifestVersion: 2,
+          deviceKeyId: recoveryDeviceKeyId,
+          algorithm: "p256-hkdf-sha256-aes-gcm",
+          ephemeralPublicKey,
+          sealedBox,
+        }),
+      })).status).toBe(201);
+    }
+    const rotatedDeviceKeyId = "77777777-7777-4777-8777-777777777777";
+    expect((await app.request("/v1/device-keys", {
+      method: "POST",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({
+        id: rotatedDeviceKeyId,
+        installationId,
+        agreementPublicKey: recoveryPublicKey,
+        signingPublicKey: recoveryPublicKey,
+        algorithm: "p256",
+      }),
+    })).status).toBe(201);
+    const rateLimitedRecovery = await app.request(
+      `/v1/projects/${projectId}/direct-connection-recovery`,
+      {
+        method: "POST",
+        headers: { authorization: "Bearer test", "content-type": "application/json" },
+        body: JSON.stringify({ ...recoveryBody, deviceKeyId: rotatedDeviceKeyId }),
+      },
+    );
+    expect(rateLimitedRecovery.status).toBe(429);
+    expect(await rateLimitedRecovery.json()).toMatchObject({
+      error: { code: "RATE_LIMITED" },
+    });
+
+    await registerDevice(installationId);
     await makeHosted(projectId);
     const privateModeRequest = await agentApp.request(
       `/v1/projects/${projectId}/delivery-mode-requests`,

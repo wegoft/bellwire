@@ -3,6 +3,7 @@ import {
   AGENT_SCOPES,
   EVENT_FIELD_TYPES,
   LIVE_SURFACE_TYPES,
+  NOTIFICATION_AUTHORIZATION_DIAGNOSTICS,
   type BellwireEvent,
   type AccountEntitlement,
   type AgentConnection,
@@ -11,6 +12,7 @@ import {
   type DeviceKey,
   type DeliveryModeChangeRequest,
   type DirectConnectionEnvelope,
+  type DirectConnectionRecoveryRequest,
   type EventFieldDefinition,
   type EventFieldType,
   type EventSchema,
@@ -387,6 +389,10 @@ export class BellwireService {
       apnsToken: apnsToken.toLowerCase(),
       apnsEnvironment,
       appVersion: readNonEmptyString(body.appVersion),
+      buildNumber: readOptionalBoundedString(body.buildNumber, "Build number", 40),
+      notificationAuthorization: readNotificationAuthorizationDiagnostic(
+        body.notificationAuthorization,
+      ),
       lastActiveAt: now,
       pushEnabled: body.pushEnabled !== false,
       createdAt: now,
@@ -422,6 +428,30 @@ export class BellwireService {
       createdAt: now.toISOString(),
     });
     return { code, expiresAt };
+  }
+
+  async registerDeviceKey(principal: Principal, input: unknown) {
+    this.requireSignedInUser(principal);
+    const deviceKey = parseDeviceKey(
+      asStrictRecord(input, [
+        "id",
+        "installationId",
+        "agreementPublicKey",
+        "signingPublicKey",
+        "algorithm",
+      ]),
+      principal.userId,
+    );
+    if (!deviceKey) throw invalidRequest("Device key is required");
+    const existing = await this.repository.getDeviceKey(deviceKey.id, principal.userId);
+    if (existing && !sameDeviceKeyDescriptor(existing, deviceKey)) {
+      throw invalidRequest("Device key ID is already registered with a different descriptor");
+    }
+    const saved = await this.repository.saveDeviceKey({
+      ...deviceKey,
+      createdAt: existing?.createdAt ?? deviceKey.createdAt,
+    });
+    return publicDeviceKey(saved);
   }
 
   async confirmDeviceBinding(input: unknown, clientIp = "unknown") {
@@ -512,6 +542,7 @@ export class BellwireService {
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1_000).toISOString(),
     });
+    await this.repository.deleteDirectConnectionRecoveryRequest(projectId, deviceKeyId);
     return withoutUserId(saved);
   }
 
@@ -547,6 +578,122 @@ export class BellwireService {
     );
     if (!projectId) throw invalidRequest("Direct connection envelope is invalid or expired");
     return { projectId, readyAt };
+  }
+
+  async requestDirectConnectionRecovery(
+    principal: Principal,
+    projectId: string,
+    input: unknown,
+  ): Promise<{
+    projectId: string;
+    deviceKeyId: string;
+    requestedAt: string;
+    status: "pending";
+  }> {
+    this.requireSignedInUser(principal);
+    const project = await this.requireOwnedProject(principal, projectId);
+    this.requirePrivateProject(project);
+    const body = asStrictRecord(input, [
+      "deviceKeyId",
+      "installationId",
+      "appVersion",
+      "buildNumber",
+      "notificationAuthorization",
+    ]);
+    const deviceKeyId = readUUID(body.deviceKeyId, "Device key ID");
+    const installationId = readUUID(body.installationId, "Installation ID");
+    const deviceKey = await this.repository.getDeviceKey(deviceKeyId, principal.userId);
+    if (!deviceKey || deviceKey.installationId !== installationId) {
+      throw invalidRequest("Device key is not available for this installation");
+    }
+    const readinessRecords = await this.repository.listPrivateConnectionReadiness(project.id);
+    const readyDeviceKeys = await Promise.all(
+      readinessRecords
+        .filter((readiness) => readiness.userId === principal.userId)
+        .map((readiness) =>
+          this.repository.getDeviceKey(readiness.deviceKeyId, principal.userId)
+        ),
+    );
+    const hadReadyKeyOnInstallation = readyDeviceKeys.some(
+      (readyDeviceKey) => readyDeviceKey?.installationId === installationId,
+    );
+    if (!hadReadyKeyOnInstallation) {
+      throw new ServiceError(
+        409,
+        "PRIVATE_READINESS_REQUIRED",
+        "Only an installation with a previously acknowledged Direct manifest can be recovered",
+      );
+    }
+    const appVersion = readOptionalBoundedString(body.appVersion, "App version", 40);
+    const buildNumber = readOptionalBoundedString(body.buildNumber, "Build number", 40);
+    const notificationAuthorization = readNotificationAuthorizationDiagnostic(
+      body.notificationAuthorization,
+    );
+    const existing = await this.repository.getDirectConnectionRecoveryRequest(
+      project.id,
+      deviceKeyId,
+    );
+    if (existing) return directConnectionRecoveryResponse(existing);
+
+    const allowed = await this.repository.consumeRateLimit(
+      `direct-recovery:${principal.userId}:${project.id}:${installationId}`,
+      3,
+      60 * 60,
+    );
+    if (!allowed) {
+      throw new ServiceError(
+        429,
+        "RATE_LIMITED",
+        "Direct connection recovery rate limit exceeded",
+      );
+    }
+    const result = await this.repository.saveDirectConnectionRecoveryRequestIfAbsent({
+      userId: principal.userId,
+      projectId: project.id,
+      deviceKeyId,
+      installationId,
+      appVersion,
+      buildNumber,
+      notificationAuthorization,
+      requestedAt: new Date().toISOString(),
+    });
+    return directConnectionRecoveryResponse(result.request);
+  }
+
+  async listDirectConnectionRecoveryRequests(principal: Principal) {
+    if (principal.kind !== "agent") {
+      throw new ServiceError(
+        403,
+        "FORBIDDEN",
+        "Only a connected Agent can list Direct recovery requests",
+      );
+    }
+    const stored = await this.repository.listDirectConnectionRecoveryRequests(principal.userId);
+    const requests: Array<{
+      projectId: string;
+      deviceKey: ReturnType<typeof publicDeviceKey>;
+      requestedAt: string;
+    }> = [];
+    for (const recovery of stored) {
+      const [project, deviceKey] = await Promise.all([
+        this.repository.getProject(recovery.projectId),
+        this.repository.getDeviceKey(recovery.deviceKeyId, principal.userId),
+      ]);
+      if (!project || project.userId !== principal.userId || project.deliveryMode !== "private" ||
+          !deviceKey || deviceKey.installationId !== recovery.installationId) {
+        await this.repository.deleteDirectConnectionRecoveryRequest(
+          recovery.projectId,
+          recovery.deviceKeyId,
+        );
+        continue;
+      }
+      requests.push({
+        projectId: recovery.projectId,
+        deviceKey: publicDeviceKey(deviceKey),
+        requestedAt: recovery.requestedAt,
+      });
+    }
+    return { requests };
   }
 
   async createDeliveryModeChangeRequest(
@@ -1584,6 +1731,35 @@ function publicDeviceKey(value: DeviceKey) {
     signingPublicKey: value.signingPublicKey,
     algorithm: value.algorithm,
   };
+}
+
+function sameDeviceKeyDescriptor(left: DeviceKey, right: DeviceKey): boolean {
+  return left.id === right.id &&
+    left.userId === right.userId &&
+    left.installationId === right.installationId &&
+    left.agreementPublicKey === right.agreementPublicKey &&
+    left.signingPublicKey === right.signingPublicKey &&
+    left.algorithm === right.algorithm;
+}
+
+function directConnectionRecoveryResponse(value: DirectConnectionRecoveryRequest) {
+  return {
+    projectId: value.projectId,
+    deviceKeyId: value.deviceKeyId,
+    requestedAt: value.requestedAt,
+    status: "pending" as const,
+  };
+}
+
+function readNotificationAuthorizationDiagnostic(value: unknown) {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (
+    typeof value !== "string" ||
+    !(NOTIFICATION_AUTHORIZATION_DIAGNOSTICS as readonly string[]).includes(value)
+  ) {
+    throw invalidRequest("Notification authorization diagnostic is invalid");
+  }
+  return value as (typeof NOTIFICATION_AUTHORIZATION_DIAGNOSTICS)[number];
 }
 
 function readP256PublicKey(value: unknown, name: string): string {

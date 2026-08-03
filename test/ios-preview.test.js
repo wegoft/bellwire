@@ -73,6 +73,50 @@ describe("iOS Inbox preview", () => {
     expect(push.match(/handleRemoteNotification/gu)).toHaveLength(2);
   });
 
+  it("recovers a missing Private manifest before refreshing encrypted envelopes", () => {
+    const model = readFileSync("ios/Bellwire/Bellwire/AppModel.swift", "utf8");
+    const project = readFileSync(
+      "ios/Bellwire/Bellwire.xcodeproj/project.pbxproj",
+      "utf8",
+    );
+    const recovery = model.slice(
+      model.indexOf("let missingManifestProjects"),
+      model.indexOf("await synchronizeNativeDisplays()"),
+    );
+    const dashboardLoad = model.slice(
+      model.indexOf("private func performDashboardLoad()"),
+      model.indexOf("func loadEvent(id:"),
+    );
+
+    expect(dashboardLoad).toContain("await registerCurrentDeviceKey(userID: userID)");
+    expect(dashboardLoad.indexOf("await registerCurrentDeviceKey(userID: userID)")).toBeLessThan(
+      dashboardLoad.indexOf("async let projectRequest"),
+    );
+    expect(recovery).toContain("project.deliveryMode == .private");
+    expect(recovery).toContain("project.deliveryMode == .hosted");
+    expect(recovery).toContain("await requestDirectConnectionRecovery(");
+    expect(recovery.indexOf("await requestDirectConnectionRecovery(")).toBeLessThan(
+      recovery.indexOf("await refreshDirectConnections(userID: userID)"),
+    );
+    expect(model).toContain("let installationId: String");
+    expect(model).toContain("let appVersion: String");
+    expect(model).toContain("let buildNumber: String");
+    expect(model).toContain("let notificationAuthorization: String");
+    expect(model).toContain('"v1/device-keys"');
+    expect(model).toContain("identity.descriptor(installationID: installationID)");
+    expect(model).toContain('"v1/projects/\\(project.id)/direct-connection-recovery"');
+
+    const buildNumbers = [...project.matchAll(/CURRENT_PROJECT_VERSION = ([^;]+);/gu)]
+      .map((match) => match[1]);
+    expect(buildNumbers.length).toBeGreaterThan(0);
+    expect(new Set(buildNumbers)).toEqual(new Set(["11"]));
+
+    const marketingVersions = [...project.matchAll(/MARKETING_VERSION = ([^;]+);/gu)]
+      .map((match) => match[1]);
+    expect(marketingVersions.length).toBeGreaterThan(0);
+    expect(new Set(marketingVersions)).toEqual(new Set(["1.0.1"]));
+  });
+
   it("does not require Apple's optional authorization code to sign in", () => {
     const model = readFileSync("ios/Bellwire/Bellwire/AppModel.swift", "utf8");
     const signIn = model.slice(

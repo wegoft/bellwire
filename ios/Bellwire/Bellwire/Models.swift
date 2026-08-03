@@ -385,6 +385,8 @@ struct DeviceRecord: Decodable, Identifiable {
     let platform: String
     let apnsEnvironment: String
     let appVersion: String?
+    let buildNumber: String?
+    let notificationAuthorization: String?
     let lastActiveAt: String
     let pushEnabled: Bool
 }

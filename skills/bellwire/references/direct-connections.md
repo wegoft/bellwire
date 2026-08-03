@@ -31,6 +31,14 @@ decrypted manifest whose project ID differs, persists it in device-only
 Keychain, and acknowledges the envelope. Ack atomically records readiness and
 deletes the ciphertext.
 
+If iOS later loses the locally cached manifest, it creates one idempotent
+control-plane recovery request scoped to the signed-in user, project,
+installation, and previously acknowledged device key. The request contains no
+manifest plaintext, endpoint, credential, Event, Inbox, or Surface data. Run
+`list-direct-recoveries`, rebuild the manifest from the source service's own
+configuration, and publish a fresh device-encrypted envelope. Publishing that
+replacement clears the pending request.
+
 ## Manifest v2
 
 ```json

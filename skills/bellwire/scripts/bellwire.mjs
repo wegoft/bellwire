@@ -38,6 +38,8 @@ async function run(selectedCommand, args) {
     }
     case "list-projects":
       return apiRequest("/v1/projects");
+    case "list-direct-recoveries":
+      return apiRequest("/v1/direct-connection-recoveries");
     case "create-project":
       if (args["logo-url"]) validateLogoUrl(args["logo-url"]);
       return apiRequest("/v1/projects", {
@@ -590,6 +592,7 @@ Usage:
 Commands:
   bind --code <6 digits> [--name <agent>]
   list-projects
+  list-direct-recoveries
   create-project --name <name> [--logo-url <https-url>] [--icon <sf-symbol>] [--category <name>]
   request-mode-change --project <id> --to private|hosted
   update-project --project <id> [--logo-url <https-url> | --clear-logo] [--name <name>] [--status active|paused]
