@@ -14,6 +14,7 @@ import {
   ApnsClientPool,
   ApnsError,
   type ApnsConfiguration,
+  type ApnsProviderTokenSource,
 } from "../src/services/apns-client";
 import {
   DeliveryProcessor,
@@ -95,6 +96,17 @@ const device: Device = {
   pushEnabled: true,
   createdAt: timestamp,
 };
+
+function staticProviderTokenSource(): ApnsProviderTokenSource {
+  return {
+    getProviderToken: async () => ({
+      value: "provider-token",
+      expiresAt: Date.now() + 50 * 60 * 1_000,
+      generation: "provider-token-generation",
+    }),
+    invalidateProviderToken: async () => {},
+  };
+}
 
 async function seededRepository(includeDevice = true) {
   const repository = new InMemoryBellwireRepository();
@@ -539,22 +551,20 @@ describe("APNs client", () => {
       return new Response(null, { status: 200 });
     };
     const createClient = vi.fn(
-      (config: ApnsConfiguration) => new ApnsClient(config, fetchImpl),
+      (config: ApnsConfiguration, providerTokens: ApnsProviderTokenSource) =>
+        new ApnsClient(config, providerTokens, fetchImpl),
     );
     const pool = new ApnsClientPool(createClient);
-    const privateKey = await privateKeyPEM();
+    const providerTokens = staticProviderTokenSource();
     const baseConfig = {
-      keyId: "KEY123",
-      teamId: "TEAM123",
       bundleId: "app.bellwire",
       urlScheme: "bellwire",
-      privateKey,
     };
     const clients = ["sandbox", "production"].flatMap((environment) =>
       Array.from({ length: 8 }, () => pool.get({
         ...baseConfig,
         environment: environment as "sandbox" | "production",
-      }))
+      }, providerTokens))
     );
 
     await Promise.all(clients.map((client, index) => client.send(`device-${index}`, {
@@ -576,6 +586,40 @@ describe("APNs client", () => {
     expect(new Set(authorizations.get("production")).size).toBe(1);
   });
 
+  it.each(["ExpiredProviderToken", "InvalidProviderToken"])(
+    "invalidates and retries a rejected provider JWT for %s",
+    async (reason) => {
+      const invalidateProviderToken = vi.fn(async () => {});
+      const providerTokens: ApnsProviderTokenSource = {
+        getProviderToken: async () => ({
+          value: "rejected-provider-token",
+          expiresAt: Date.now() + 50 * 60 * 1_000,
+          generation: "rejected-generation",
+        }),
+        invalidateProviderToken,
+      };
+      const client = new ApnsClient({
+        bundleId: "app.bellwire",
+        urlScheme: "bellwire",
+        environment: "production",
+      }, providerTokens, async () => new Response(JSON.stringify({ reason }), {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      }));
+
+      await expect(client.send("abc123", {
+        signalId: "wake-rejected",
+        threadId: "private-project",
+        priority: "normal",
+        wakeId: "wake-rejected",
+        projectId: "private-project",
+        deliveryMode: "private",
+        reference: "opaque-reference-rejected",
+      })).rejects.toMatchObject({ reason, retryable: true });
+      expect(invalidateProviderToken).toHaveBeenCalledWith("rejected-generation");
+    },
+  );
+
   it("signs a sandbox alert request with the expected push metadata", async () => {
     let captured: Request | undefined;
     const fetchImpl: typeof fetch = async (input, init) => {
@@ -583,13 +627,10 @@ describe("APNs client", () => {
       return new Response(null, { status: 200, headers: { "apns-id": "provider-123" } });
     };
     const client = new ApnsClient({
-      keyId: "KEY123",
-      teamId: "TEAM123",
       bundleId: "app.bellwire",
       urlScheme: "bellwire-self-host",
-      privateKey: await privateKeyPEM(),
       environment: "sandbox",
-    }, fetchImpl);
+    }, staticProviderTokenSource(), fetchImpl);
 
     const result = await client.send("abc123", {
       title: "Payment received",
@@ -629,13 +670,10 @@ describe("APNs client", () => {
       return new Response(null, { status: 200 });
     };
     const client = new ApnsClient({
-      keyId: "KEY123",
-      teamId: "TEAM123",
       bundleId: "app.bellwire",
       urlScheme: "bellwire",
-      privateKey: await privateKeyPEM(),
       environment: "production",
-    }, fetchImpl);
+    }, staticProviderTokenSource(), fetchImpl);
 
     await client.send("abc123", {
       signalId: "wake-123",
@@ -673,13 +711,10 @@ describe("APNs client", () => {
       return new Response(null, { status: 200 });
     };
     const client = new ApnsClient({
-      keyId: "KEY123",
-      teamId: "TEAM123",
       bundleId: "app.bellwire",
       urlScheme: "bellwire",
-      privateKey: await privateKeyPEM(),
       environment: "sandbox",
-    }, fetchImpl);
+    }, staticProviderTokenSource(), fetchImpl);
 
     await client.send("abc123", {
       title: "Approval needed",
@@ -706,16 +741,3 @@ describe("APNs client", () => {
     });
   });
 });
-
-async function privateKeyPEM(): Promise<string> {
-  const keyPair = await crypto.subtle.generateKey(
-    { name: "ECDSA", namedCurve: "P-256" },
-    true,
-    ["sign", "verify"],
-  );
-  const bytes = new Uint8Array(await crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  const base64 = btoa(binary).match(/.{1,64}/gu)?.join("\n") ?? "";
-  return `-----BEGIN PRIVATE KEY-----\n${base64}\n-----END PRIVATE KEY-----`;
-}

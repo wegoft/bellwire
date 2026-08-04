@@ -11,6 +11,7 @@ import {
   OfficialAppleBillingVerifier,
 } from "./services/apple-billing-service";
 import { ApnsClientPool } from "./services/apns-client";
+import { DurableObjectApnsProviderTokenSource } from "./services/apns-provider-token-authority";
 import { DeliveryProcessor } from "./services/delivery-processor";
 import { ModeRequestNotificationProcessor } from "./services/mode-request-notification-processor";
 import { PrivateWakeProcessor } from "./services/private-wake-processor";
@@ -44,10 +45,14 @@ export interface Env {
   POSTHOG_PROJECT_KEY?: string;
   POSTHOG_HOST?: string;
   DELIVERY_QUEUE?: Queue<DeliveryQueueMessage>;
+  APNS_PROVIDER_TOKEN_AUTHORITY?: DurableObjectNamespace;
 }
 
 const developmentRepository = new InMemoryBellwireRepository();
 const apnsClients = new ApnsClientPool();
+let apnsProviderTokens: DurableObjectApnsProviderTokenSource | undefined;
+
+export { ApnsProviderTokenAuthority } from "./services/apns-provider-token-authority";
 
 export default {
   async fetch(request: Request, env: Env, executionContext: ExecutionContext): Promise<Response> {
@@ -78,14 +83,12 @@ export default {
 
   async queue(batch: MessageBatch<DeliveryQueueMessage>, env: Env): Promise<void> {
     const repository = repositoryForEnv(env);
+    const providerTokens = providerTokenSourceForEnv(env);
     const apnsForEnvironment = (environment: "sandbox" | "production") => apnsClients.get({
-      keyId: requiredEnv(env.APNS_KEY_ID, "APNS_KEY_ID"),
-      teamId: requiredEnv(env.APNS_TEAM_ID, "APNS_TEAM_ID"),
       bundleId: requiredEnv(env.APNS_BUNDLE_ID, "APNS_BUNDLE_ID"),
       urlScheme: env.APP_URL_SCHEME ?? "bellwire",
-      privateKey: requiredEnv(env.APNS_PRIVATE_KEY, "APNS_PRIVATE_KEY"),
       environment,
-    });
+    }, providerTokens);
     const processor = new DeliveryProcessor(repository, apnsForEnvironment);
     const privateWakeProcessor = new PrivateWakeProcessor(repository, apnsForEnvironment);
     const modeRequestProcessor = new ModeRequestNotificationProcessor(repository, apnsForEnvironment);
@@ -131,6 +134,17 @@ function requiredEnv(value: string | undefined, name: string): string {
   return value;
 }
 
+function providerTokenSourceForEnv(env: Env): DurableObjectApnsProviderTokenSource {
+  if (apnsProviderTokens) return apnsProviderTokens;
+  if (!env.APNS_PROVIDER_TOKEN_AUTHORITY) {
+    throw new Error("APNS_PROVIDER_TOKEN_AUTHORITY is required for delivery processing");
+  }
+  apnsProviderTokens = new DurableObjectApnsProviderTokenSource(
+    env.APNS_PROVIDER_TOKEN_AUTHORITY,
+  );
+  return apnsProviderTokens;
+}
+
 function createAppleAuthService(
   env: Env,
   repository: BellwireRepository,
@@ -140,7 +154,6 @@ function createAppleAuthService(
     env.APPLE_SIGN_IN_TEAM_ID,
     env.APPLE_SIGN_IN_CLIENT_ID,
     env.APPLE_SIGN_IN_PRIVATE_KEY,
-    env.APPLE_TOKEN_ENCRYPTION_KEY,
   ];
   if (values.every((value) => !value)) return undefined;
   const keyId = requiredEnv(env.APPLE_SIGN_IN_KEY_ID, "APPLE_SIGN_IN_KEY_ID");

@@ -26,5 +26,13 @@ max_batch_timeout = 5
 max_retries = 3
 dead_letter_queue = "bellwire-deliveries-dlq"
 
+[[durable_objects.bindings]]
+name = "APNS_PROVIDER_TOKEN_AUTHORITY"
+class_name = "ApnsProviderTokenAuthority"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ApnsProviderTokenAuthority"]
+
 [triggers]
 crons = ["17 * * * *"]
