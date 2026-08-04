@@ -38,6 +38,11 @@ export interface CreateDeliveryResult {
   created: boolean;
 }
 
+export interface CreateProjectResult {
+  project: Project;
+  created: boolean;
+}
+
 export interface BellwireRepository {
   deleteAccount(userId: string): Promise<void>;
   saveAppleRefreshToken(userId: string, encryptedRefreshToken: string): Promise<void>;
@@ -45,6 +50,7 @@ export interface BellwireRepository {
   deleteAppleRefreshToken(userId: string): Promise<void>;
 
   createProject(project: Project): Promise<Project>;
+  createProjectIfAbsent(project: Project): Promise<CreateProjectResult>;
   getProject(projectId: string): Promise<Project | undefined>;
   listProjects(userId: string): Promise<Project[]>;
   updateProject(project: Project): Promise<Project>;
@@ -121,6 +127,10 @@ export interface BellwireRepository {
   ): Promise<DeliveryModeChangeRequest | undefined>;
 
   saveEventSchema(schema: EventSchema): Promise<EventSchema>;
+  ensureEventSchemaAndNotificationSurface(
+    schema: EventSchema,
+    surface: NotificationSurface,
+  ): Promise<{ schema: EventSchema; surface: NotificationSurface }>;
   getEventSchema(
     projectId: string,
     eventType: string,
@@ -175,6 +185,15 @@ export interface BellwireRepository {
   clearPrivateWakeReference(wakeId: string): Promise<void>;
   listEvents(projectId: string, options: EventListOptions): Promise<EventListPage>;
   getEvent(eventId: string): Promise<BellwireEvent | undefined>;
+  getEventByIdempotencyHash(
+    projectId: string,
+    idempotencyKeyHash: string,
+  ): Promise<BellwireEvent | undefined>;
+  replaceEventIdempotencyHash(
+    eventId: string,
+    expectedHash: string,
+    replacementHash: string,
+  ): Promise<BellwireEvent | undefined>;
   markEventRead(eventId: string, readAt: string): Promise<void>;
   markAllEventsRead(projectIds: string[], readAt: string): Promise<number>;
 

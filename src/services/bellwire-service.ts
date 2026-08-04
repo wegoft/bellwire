@@ -9,6 +9,7 @@ import {
   type AgentConnection,
   type AgentScope,
   type Delivery,
+  type Device,
   type DeviceKey,
   type DeliveryModeChangeRequest,
   type DirectConnectionEnvelope,
@@ -124,6 +125,37 @@ export interface SurfaceInput {
   enabled?: unknown;
 }
 
+const DEMO_PROJECT_NAME = "Bellwire Demo";
+const DEMO_PROJECT_SLUG = "bellwire-system-demo-v1";
+const DEMO_EVENT_TYPE = "deployment.completed";
+const DEMO_SURFACE_KEY = "demo-status";
+const DEMO_EVENT_IDEMPOTENCY_KEY = "bellwire-demo-deployment-v1";
+
+const demoFields: Record<string, EventFieldDefinition> = {
+  deployment: { type: "string", required: true },
+  environment: { type: "enum", required: true, values: ["Production"] },
+  duration: { type: "number", required: true },
+};
+
+const demoNotification = {
+  title: "Deployment completed",
+  body: "{{ deployment }} reached {{ environment }} in {{ duration }}s",
+};
+
+const demoEventData = {
+  deployment: "Bellwire 1.0",
+  environment: "Production",
+  duration: 24,
+};
+
+const demoSurfaceContent = {
+  metrics: [
+    { label: "Status", value: "Healthy", color: "green" },
+    { label: "Events", value: 1, color: "orange" },
+    { label: "Agents", value: 1, color: "blue" },
+  ],
+};
+
 export class BellwireService {
   constructor(
     readonly repository: BellwireRepository,
@@ -172,48 +204,154 @@ export class BellwireService {
     if (principal.kind !== "user") {
       throw new ServiceError(403, "FORBIDDEN", "Only a signed-in user can create the demo project");
     }
-    const existing = (await this.repository.listProjects(principal.userId))
-      .find((project) => project.category === "demo" && project.name === "Bellwire Demo");
-    if (existing) return { projectId: existing.id, created: false };
+    const projects = await this.repository.listProjects(principal.userId);
+    const demoIdempotencyHash = await hashSecret(DEMO_EVENT_IDEMPOTENCY_KEY);
+    const reservedSlugProject = projects.find((candidate) => candidate.slug === DEMO_PROJECT_SLUG);
+    let project = reservedSlugProject && await this.isVerifiedReservedDemo(reservedSlugProject)
+      ? reservedSlugProject
+      : undefined;
+    let created = false;
 
-    const privateProject = await this.createProject(principal, {
-      name: "Bellwire Demo",
-      category: "demo",
-      icon: "bell.and.waves.left.and.right",
+    if (reservedSlugProject && !project) {
+      await this.repository.updateProject({
+        ...reservedSlugProject,
+        slug: relocatedUserProjectSlug(reservedSlugProject),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    if (!project) {
+      const legacy = await this.findVerifiedLegacyDemo(projects, demoIdempotencyHash);
+      if (legacy) {
+        let eventVerified = legacy.event === undefined;
+        if (legacy.event) {
+          let adoptedEvent: BellwireEvent | undefined = legacy.event;
+          if (adoptedEvent.idempotencyKeyHash !== demoIdempotencyHash) {
+            adoptedEvent = await this.repository.replaceEventIdempotencyHash(
+              adoptedEvent.id,
+              adoptedEvent.idempotencyKeyHash,
+              demoIdempotencyHash,
+            ) ?? await this.repository.getEventByIdempotencyHash(
+              legacy.project.id,
+              demoIdempotencyHash,
+            );
+          }
+          eventVerified = adoptedEvent?.id === legacy.event.id;
+        }
+        if (eventVerified) {
+          try {
+            project = await this.repository.updateProject({
+              ...legacy.project,
+              slug: DEMO_PROJECT_SLUG,
+              updatedAt: new Date().toISOString(),
+            });
+          } catch (error) {
+            const concurrentProject = (await this.repository.listProjects(principal.userId))
+              .find((candidate) => candidate.slug === DEMO_PROJECT_SLUG);
+            if (!concurrentProject || !await this.isVerifiedReservedDemo(concurrentProject)) {
+              throw error;
+            }
+            project = concurrentProject;
+          }
+        }
+      }
+    }
+    if (!project) {
+      const entitlement = await this.repository.getAccountEntitlement(
+        principal.userId,
+        new Date().toISOString(),
+      );
+      if (
+        this.enforcementMode === "enforce"
+        && projects.filter((candidate) => candidate.status === "active").length >=
+          entitlement.limits.activeProjects
+      ) {
+        throw planLimitReached("active projects", entitlement);
+      }
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const candidate: Project = {
+        id,
+        userId: principal.userId,
+        name: DEMO_PROJECT_NAME,
+        slug: DEMO_PROJECT_SLUG,
+        icon: "bell.and.waves.left.and.right",
+        displayOrder: nextDisplayOrder(projects),
+        category: "demo",
+        status: "active",
+        deliveryMode: "hosted",
+        endpoint: `/v1/events/${id}`,
+        createdAt: now,
+        updatedAt: now,
+      };
+      let result = await this.repository.createProjectIfAbsent(candidate);
+      if (!result.created && !await this.isVerifiedReservedDemo(result.project)) {
+        await this.repository.updateProject({
+          ...result.project,
+          slug: relocatedUserProjectSlug(result.project),
+          updatedAt: new Date().toISOString(),
+        });
+        result = await this.repository.createProjectIfAbsent(candidate);
+      }
+      if (!result.created && !await this.isVerifiedReservedDemo(result.project)) {
+        throw new Error("Reserved demo identity is occupied by an unverified project");
+      }
+      project = result.project;
+      created = result.created;
+    }
+    if (project.deliveryMode !== "hosted") {
+      project = await this.repository.updateProject({
+        ...project,
+        deliveryMode: "hosted",
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    const configurationCreatedAt = new Date().toISOString();
+    await this.repository.ensureEventSchemaAndNotificationSurface({
+      id: crypto.randomUUID(),
+      projectId: project.id,
+      eventType: DEMO_EVENT_TYPE,
+      fields: demoFields,
+      version: 1,
+      status: "active",
+      createdAt: configurationCreatedAt,
+    }, {
+      id: crypto.randomUUID(),
+      projectId: project.id,
+      eventType: DEMO_EVENT_TYPE,
+      type: "notification",
+      titleTemplate: demoNotification.title,
+      bodyTemplate: demoNotification.body,
+      sound: "default",
+      group: "deployment",
+      priority: "normal",
+      enabled: true,
+      version: 1,
+      createdAt: configurationCreatedAt,
     });
-    const project = await this.repository.updateProject({
-      ...privateProject,
-      deliveryMode: "hosted",
-      updatedAt: new Date().toISOString(),
-    });
-    await this.createEventSchema(principal, project.id, {
-      eventType: "deployment.completed",
-      fields: {
-        deployment: { type: "string", required: true },
-        environment: { type: "enum", required: true, values: ["Production"] },
-        duration: { type: "number", required: true },
-      },
-      notification: {
-        title: "Deployment completed",
-        body: "{{ deployment }} reached {{ environment }} in {{ duration }}s",
-      },
-    });
-    await this.upsertLiveSurface(principal, project.id, "demo-status", {
-      type: "stats",
-      title: "Bellwire is connected",
-      subtitle: "Live sample data",
-      metrics: [
-        { label: "Status", value: "Healthy", color: "green" },
-        { label: "Events", value: 1, color: "orange" },
-        { label: "Agents", value: 1, color: "blue" },
-      ],
-    });
-    await this.sendTestEvent(principal, project.id, {
-      type: "deployment.completed",
-      data: { deployment: "Bellwire 1.0", environment: "Production", duration: 24 },
+
+    if (!await this.repository.getLiveSurface(project.id, DEMO_SURFACE_KEY)) {
+      await this.upsertLiveSurface(principal, project.id, DEMO_SURFACE_KEY, {
+        type: "stats",
+        title: "Bellwire is connected",
+        subtitle: "Live sample data",
+        metrics: demoSurfaceContent.metrics,
+      });
+    }
+
+    const accepted = await this.acceptEvent(project, DEMO_EVENT_IDEMPOTENCY_KEY, {
+      type: DEMO_EVENT_TYPE,
+      data: demoEventData,
       occurredAt: new Date().toISOString(),
-    });
-    return { projectId: project.id, created: true };
+    }, false);
+    const event = await this.repository.getEvent(accepted.eventId);
+    if (!event) throw new Error("Demo Event was not persisted");
+
+    const devices = (await this.repository.listDevices(project.userId))
+      .filter((device) => device.pushEnabled);
+    await this.ensureDemoEventDelivery(project, event, devices);
+    return { projectId: project.id, created };
   }
 
   async createProject(principal: Principal, input: unknown): Promise<Project> {
@@ -238,7 +376,7 @@ export class BellwireService {
       id,
       userId: principal.userId,
       name,
-      slug: `${slugify(name)}-${id.slice(0, 6)}`,
+      slug: userProjectSlug(name, id),
       icon: readNonEmptyString(body.icon) ?? "bolt.horizontal",
       logoUrl: readProjectLogoUrl(body.logoUrl),
       displayOrder: nextDisplayOrder(existingProjects),
@@ -380,7 +518,7 @@ export class BellwireService {
       }
     }
     const now = new Date().toISOString();
-    return this.repository.saveDevice({
+    const saved = await this.repository.saveDevice({
       id: crypto.randomUUID(),
       userId: principal.userId,
       installationId: installationId.toLowerCase(),
@@ -397,6 +535,8 @@ export class BellwireService {
       pushEnabled: body.pushEnabled !== false,
       createdAt: now,
     });
+    if (saved.pushEnabled) await this.ensureDemoDeliveryForDevice(saved);
+    return saved;
   }
 
   async listDevices(principal: Principal) {
@@ -731,7 +871,7 @@ export class BellwireService {
       }
       return request;
     } catch (error) {
-      if (error instanceof Error && /pending/iu.test(error.message)) {
+      if (/pending/iu.test(repositoryErrorText(error))) {
         throw new ServiceError(
           409,
           "PENDING_MODE_REQUEST_EXISTS",
@@ -777,7 +917,7 @@ export class BellwireService {
       if (!request) throw invalidRequest("Delivery mode request is not pending");
       return request;
     } catch (error) {
-      if (error instanceof Error && /PRIVATE_READINESS_REQUIRED/u.test(error.message)) {
+      if (/PRIVATE_READINESS_REQUIRED/u.test(repositoryErrorText(error))) {
         throw new ServiceError(
           409,
           "PRIVATE_READINESS_REQUIRED",
@@ -1328,6 +1468,7 @@ export class BellwireService {
     project: Project,
     idempotencyKey: string,
     input: IngestEventInput,
+    dispatch = true,
   ): Promise<IngestEventResult> {
     const eventType = readNonEmptyString(input.type);
     if (!eventType) throw invalidRequest("Event type is required");
@@ -1378,7 +1519,7 @@ export class BellwireService {
     if (!saved.event) throw new Error("Hosted event was not persisted");
     const previousQueueFailure = !saved.created && (await this.repository.listDeliveries(saved.event.id))
       .some((delivery) => delivery.errorCode === "retryable:QueueUnavailable");
-    const deliveryQueued = project.status === "active" && (saved.created || previousQueueFailure)
+    const deliveryQueued = dispatch && project.status === "active" && (saved.created || previousQueueFailure)
       ? await this.dispatchEvent(project, saved.event)
       : undefined;
     if (saved.created) {
@@ -1422,6 +1563,133 @@ export class BellwireService {
         await this.repository.recordQueueUnavailable(result.delivery, now, message);
       }));
       return false;
+    }
+  }
+
+  private async findVerifiedLegacyDemo(
+    projects: Project[],
+    demoIdempotencyHash: string,
+  ): Promise<{ project: Project; event?: BellwireEvent } | undefined> {
+    const candidates = projects.filter((project) =>
+      project.name === DEMO_PROJECT_NAME
+      && project.category === "demo"
+      && project.icon === "bell.and.waves.left.and.right"
+      && project.deliveryMode === "hosted"
+      && project.endpoint === `/v1/events/${project.id}`
+      && /^bellwire-demo-[0-9a-f]{6}$/u.test(project.slug)
+    );
+    for (const project of candidates) {
+      const [schema, notification, liveSurface, matchingEvents, fixedEvent] = await Promise.all([
+        this.repository.getEventSchema(project.id, DEMO_EVENT_TYPE),
+        this.repository.getNotificationSurface(project.id, DEMO_EVENT_TYPE),
+        this.repository.getLiveSurface(project.id, DEMO_SURFACE_KEY),
+        this.listCanonicalDemoEvents(project.id),
+        this.repository.getEventByIdempotencyHash(project.id, demoIdempotencyHash),
+      ]);
+      if (
+        !isCanonicalDemoConfiguration(schema, notification, liveSurface)
+        || matchingEvents.length > 1
+        || (fixedEvent !== undefined && fixedEvent.id !== matchingEvents[0]?.id)
+      ) {
+        continue;
+      }
+      return { project, ...(matchingEvents[0] ? { event: matchingEvents[0] } : {}) };
+    }
+    return undefined;
+  }
+
+  private async listCanonicalDemoEvents(projectId: string): Promise<BellwireEvent[]> {
+    const matches: BellwireEvent[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.repository.listEvents(projectId, {
+        eventType: DEMO_EVENT_TYPE,
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      });
+      matches.push(...page.events.filter(isCanonicalDemoEvent));
+      if (matches.length > 1) break;
+      cursor = page.nextCursor;
+    } while (cursor);
+    return matches;
+  }
+
+  private async isVerifiedReservedDemo(project: Project): Promise<boolean> {
+    if (project.endpoint !== `/v1/events/${project.id}`) return false;
+    if (
+      project.deliveryMode === "hosted"
+      && project.category === "demo"
+      && project.icon === "bell.and.waves.left.and.right"
+    ) {
+      return true;
+    }
+    const [schema, notification, liveSurface] = await Promise.all([
+      this.repository.getEventSchema(project.id, DEMO_EVENT_TYPE),
+      this.repository.getNotificationSurface(project.id, DEMO_EVENT_TYPE),
+      this.repository.getLiveSurface(project.id, DEMO_SURFACE_KEY),
+    ]);
+    return isCanonicalDemoConfiguration(schema, notification, liveSurface);
+  }
+
+  private async ensureDemoDeliveryForDevice(device: Device): Promise<void> {
+    if (!this.deliveryDispatcher || !device.pushEnabled) return;
+    const demoIdempotencyHash = await hashSecret(DEMO_EVENT_IDEMPOTENCY_KEY);
+    const demoProjects = (await this.repository.listProjects(device.userId))
+      .filter((project) =>
+        project.slug === DEMO_PROJECT_SLUG
+        && project.deliveryMode === "hosted"
+        && project.status === "active"
+      );
+    for (const project of demoProjects) {
+      const event = await this.repository.getEventByIdempotencyHash(
+        project.id,
+        demoIdempotencyHash,
+      );
+      if (event) await this.ensureDemoEventDelivery(project, event, [device]);
+    }
+  }
+
+  private async ensureDemoEventDelivery(
+    project: Project,
+    event: BellwireEvent,
+    devices: Device[],
+  ): Promise<void> {
+    if (!this.deliveryDispatcher || project.status !== "active" || devices.length === 0) return;
+    const candidates: Delivery[] = [];
+    for (const device of devices) {
+      const now = new Date().toISOString();
+      const result = await this.repository.createDeliveryIfAbsent({
+        id: crypto.randomUUID(),
+        eventId: event.id,
+        deviceId: device.id,
+        channel: "apns",
+        status: "queued",
+        attemptCount: 0,
+        queuedAt: now,
+        updatedAt: now,
+      });
+      if (
+        result.created
+        || (result.delivery.status === "queued" && result.delivery.attemptCount === 0)
+        || (
+          result.delivery.status === "failed"
+          && result.delivery.errorCode === "retryable:QueueUnavailable"
+        )
+      ) {
+        candidates.push(result.delivery);
+      }
+    }
+    if (candidates.length === 0) return;
+
+    try {
+      await this.deliveryDispatcher.enqueue(event);
+    } catch (error) {
+      const message = error instanceof Error ? error.message.slice(0, 240) : "Queue unavailable";
+      console.error("Demo delivery queue enqueue failed", message);
+      const failedAt = new Date().toISOString();
+      await Promise.allSettled(candidates.map((delivery) =>
+        this.repository.recordQueueUnavailable(delivery, failedAt, message)
+      ));
     }
   }
 
@@ -1580,6 +1848,25 @@ function eventSensitiveFields(event: BellwireEvent): string[] {
 
 function invalidRequest(message: string): ServiceError {
   return new ServiceError(400, "INVALID_REQUEST", message);
+}
+
+function repositoryErrorText(error: unknown): string {
+  const parts: string[] = [];
+  if (error instanceof Error) parts.push(error.message);
+  if (typeof error !== "object" || error === null || !("body" in error)) {
+    return parts.join(" ");
+  }
+
+  const body = error.body;
+  if (typeof body === "string") {
+    parts.push(body);
+  } else if (typeof body === "object" && body !== null) {
+    const record = body as Record<string, unknown>;
+    for (const key of ["code", "message", "details", "hint"] as const) {
+      if (typeof record[key] === "string") parts.push(record[key]);
+    }
+  }
+  return parts.join(" ");
 }
 
 function readDeliveryModeRequestStatus(
@@ -2108,6 +2395,47 @@ function validateTemplate(
   }
 }
 
+function isCanonicalDemoEvent(event: BellwireEvent): boolean {
+  return event.eventType === DEMO_EVENT_TYPE && sameJson(event.data, demoEventData);
+}
+
+function isCanonicalDemoConfiguration(
+  schema: EventSchema | undefined,
+  notification: NotificationSurface | undefined,
+  liveSurface: LiveSurface | undefined,
+): boolean {
+  return schema !== undefined
+    && sameJson(schema.fields, demoFields)
+    && notification !== undefined
+    && notification.titleTemplate === demoNotification.title
+    && notification.bodyTemplate === demoNotification.body
+    && notification.subtitleTemplate === undefined
+    && notification.sound === "default"
+    && notification.group === "deployment"
+    && notification.priority === "normal"
+    && notification.enabled
+    && liveSurface !== undefined
+    && liveSurface.type === "stats"
+    && liveSurface.title === "Bellwire is connected"
+    && liveSurface.subtitle === "Live sample data"
+    && sameJson(liveSurface.content, demoSurfaceContent)
+    && liveSurface.action === undefined;
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(sortJson(left)) === JSON.stringify(sortJson(right));
+}
+
+function sortJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJson);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => [key, sortJson(nested)]),
+  );
+}
+
 function slugify(value: string): string {
   const slug = value
     .normalize("NFKD")
@@ -2116,6 +2444,15 @@ function slugify(value: string): string {
     .replace(/^-|-$/gu, "")
     .slice(0, 40);
   return slug || "project";
+}
+
+function userProjectSlug(name: string, id: string): string {
+  const candidate = `${slugify(name)}-${id.slice(0, 6)}`;
+  return candidate === DEMO_PROJECT_SLUG ? `${slugify(name)}-user-${id}` : candidate;
+}
+
+function relocatedUserProjectSlug(project: Project): string {
+  return `${slugify(project.name)}-user-${project.id}`;
 }
 
 function humanizeEventType(value: string): string {

@@ -75,14 +75,54 @@ describe("plan enforcement and atomic Signal semantics", () => {
       acceptedSignals: 1,
       surfaceLimitExceeded: false,
     });
+    for (const [key, order] of [["orders", 2], ["refunds", 3]] as const) {
+      expect(await repository.acceptHostedSurface(
+        surface(project, key, order),
+        "enforce",
+      )).toMatchObject({
+        created: true,
+        surfaceLimitExceeded: false,
+      });
+    }
     expect(await repository.acceptHostedSurface(
-      surface(project, "orders", 2),
+      surface(project, "customers", 4),
       "enforce",
     )).toMatchObject({
       created: false,
-      acceptedSignals: 1,
+      acceptedSignals: 3,
       surfaceLimitExceeded: true,
     });
+  });
+
+  it("does not impose a per-project Surface cap on Pro", async () => {
+    const repository = new InMemoryBellwireRepository();
+    const now = "2026-07-25T10:00:00.000Z";
+    await repository.saveAppleTransaction({
+      transactionId: "pro-surfaces-transaction",
+      originalTransactionId: "pro-surfaces-original",
+      userId: user.userId,
+      productId: "app.bellwire.pro.monthly",
+      environment: "Sandbox",
+      purchaseDate: now,
+      expiresAt: "2026-08-25T10:00:00.000Z",
+      status: "active",
+      signedDate: now,
+      updatedAt: now,
+    });
+    const project = await repository.createProject({
+      ...privateProject(),
+      deliveryMode: "hosted",
+    });
+
+    expect(await repository.getAccountEntitlement(user.userId, now)).toMatchObject({
+      limits: { activeProjects: 20, surfacesPerProject: null },
+    });
+    for (let index = 1; index <= 25; index += 1) {
+      await expect(repository.acceptHostedSurface(
+        surface(project, `surface-${index}`, index),
+        "enforce",
+      )).resolves.toMatchObject({ created: true, surfaceLimitExceeded: false });
+    }
   });
 
   it("applies the Pro 50,000 Signal limit and accepts only its 10% courtesy buffer", async () => {
@@ -128,13 +168,16 @@ describe("plan enforcement and atomic Signal semantics", () => {
   it("enforces Free project and device capacity in the service but not in self-host mode", async () => {
     const repository = new InMemoryBellwireRepository();
     const cloud = new BellwireService(repository, undefined, undefined, "enforce");
-    for (const name of ["One", "Two", "Three"]) {
-      await cloud.createProject(user, { name });
-    }
-    await expect(cloud.createProject(user, { name: "Four" })).rejects.toMatchObject({
+    await cloud.createProject(user, { name: "One" });
+    await expect(cloud.createProject(user, { name: "Two" })).rejects.toMatchObject({
       code: "PLAN_LIMIT_REACHED",
       status: 409,
     } satisfies Partial<ServiceError>);
+
+    expect(await repository.getAccountEntitlement(
+      user.userId,
+      "2026-07-25T10:00:00.000Z",
+    )).toMatchObject({ limits: { activeProjects: 1, surfacesPerProject: 3 } });
 
     await cloud.registerDevice(user, device("aaaaaaaa"));
     await expect(cloud.registerDevice(user, device("bbbbbbbb"))).rejects.toMatchObject({

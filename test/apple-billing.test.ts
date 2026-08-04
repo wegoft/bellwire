@@ -59,7 +59,7 @@ describe("Apple billing verification", () => {
       plan: "pro",
       status: "active",
       productId: "app.bellwire.pro.yearly",
-      limits: { monthlySignals: 50_000, activeProjects: 20 },
+      limits: { monthlySignals: 50_000, activeProjects: 20, surfacesPerProject: null },
     });
   });
 

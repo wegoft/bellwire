@@ -343,7 +343,8 @@ export interface PlanLimits {
   courtesySignals: number;
   ingestPerMinute: number;
   hostedRetentionDays: number;
-  surfacesPerProject: number;
+  /** `null` means the plan does not impose a per-project Surface limit. */
+  surfacesPerProject: number | null;
 }
 
 export interface SignalUsage {

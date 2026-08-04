@@ -8,6 +8,7 @@ import { PrincipalAuthenticator, StaticAuthenticator } from "../src/security/aut
 import { hashSecret } from "../src/security/tokens";
 import { BellwireService } from "../src/services/bellwire-service";
 import type { DeliveryDispatcher } from "../src/services/delivery-dispatcher";
+import { DeliveryProcessor } from "../src/services/delivery-processor";
 
 const userPrincipal: Principal = {
   kind: "user",
@@ -150,7 +151,7 @@ describe("Bellwire MVP API", () => {
       compatibility: {
         appVersion: "1.0.1",
         apiVersion: "v1",
-        schemaMigration: "202608030001",
+        schemaMigration: "202608040001",
       },
     });
   });
@@ -359,7 +360,7 @@ describe("Bellwire MVP API", () => {
     expect(await repository.listDevices(userPrincipal.userId)).toEqual([]);
   });
 
-  it("creates an idempotent demo experience for App Review", async () => {
+  it("creates one idempotent Hosted demo experience for App Review", async () => {
     const first = await app.request("/v1/demo", {
       method: "POST",
       headers: { authorization: "Bearer test" },
@@ -370,6 +371,8 @@ describe("Bellwire MVP API", () => {
     expect(await repository.getProject(demo.projectId)).toMatchObject({
       name: "Bellwire Demo",
       category: "demo",
+      deliveryMode: "hosted",
+      slug: "bellwire-system-demo-v1",
     });
     expect(await repository.listLiveSurfaces(demo.projectId)).toHaveLength(1);
     expect((await repository.listEvents(demo.projectId, { limit: 10 })).events).toHaveLength(1);
@@ -381,6 +384,324 @@ describe("Bellwire MVP API", () => {
     expect(second.status).toBe(200);
     expect(await second.json()).toEqual({ projectId: demo.projectId, created: false });
     expect(await repository.listProjects(userPrincipal.userId)).toHaveLength(1);
+    expect(await repository.getEventSchema(demo.projectId, "deployment.completed"))
+      .toMatchObject({ version: 1 });
+    expect(await repository.getNotificationSurface(demo.projectId, "deployment.completed"))
+      .toMatchObject({ version: 1 });
+    expect(await repository.getLiveSurface(demo.projectId, "demo-status"))
+      .toMatchObject({ version: 1 });
+    expect(await repository.listLiveSurfaces(demo.projectId)).toHaveLength(1);
+    expect((await repository.listEvents(demo.projectId, { limit: 10 })).events).toHaveLength(1);
+    expect(dispatcher.eventIds).toEqual([]);
+  });
+
+  it("does not hijack an unverified project that only copies the old demo name and category", async () => {
+    const decoyResponse = await app.request("/v1/projects", {
+      method: "POST",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Bellwire Demo",
+        category: "demo",
+        slug: "bellwire-system-demo-v1",
+      }),
+    });
+    const decoy = await decoyResponse.json<{ id: string; slug: string }>();
+    expect(decoy.slug).not.toBe("bellwire-system-demo-v1");
+
+    const demoResponse = await app.request("/v1/demo", {
+      method: "POST",
+      headers: { authorization: "Bearer test" },
+    });
+    expect(demoResponse.status).toBe(201);
+    const demo = await demoResponse.json<{ projectId: string; created: boolean }>();
+    expect(demo).toMatchObject({ created: true });
+    expect(demo.projectId).not.toBe(decoy.id);
+    expect(await repository.getProject(decoy.id)).toMatchObject({ deliveryMode: "private" });
+    expect(await repository.listProjects(userPrincipal.userId)).toHaveLength(2);
+  });
+
+  it("keeps demo identity after its mutable name and category are changed", async () => {
+    const first = await app.request("/v1/demo", {
+      method: "POST",
+      headers: { authorization: "Bearer test" },
+    });
+    const demo = await first.json<{ projectId: string }>();
+    const renamed = await app.request(`/v1/projects/${demo.projectId}`, {
+      method: "PATCH",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "My walkthrough",
+        category: "custom",
+        slug: "attempted-marker-replacement",
+      }),
+    });
+    expect(renamed.status).toBe(200);
+
+    const repeated = await app.request("/v1/demo", {
+      method: "POST",
+      headers: { authorization: "Bearer test" },
+    });
+    expect(repeated.status).toBe(200);
+    expect(await repeated.json()).toEqual({ projectId: demo.projectId, created: false });
+    expect(await repository.listProjects(userPrincipal.userId)).toHaveLength(1);
+    expect(await repository.getProject(demo.projectId)).toMatchObject({
+      name: "My walkthrough",
+      category: "custom",
+      slug: "bellwire-system-demo-v1",
+    });
+  });
+
+  it("adopts only a fully verified legacy demo and its canonical Event hash", async () => {
+    const first = await app.request("/v1/demo", {
+      method: "POST",
+      headers: { authorization: "Bearer test" },
+    });
+    const demo = await first.json<{ projectId: string }>();
+    const project = await repository.getProject(demo.projectId);
+    if (!project) throw new Error("Demo project missing");
+    const fixedHash = await hashSecret("bellwire-demo-deployment-v1");
+    const event = await repository.getEventByIdempotencyHash(demo.projectId, fixedHash);
+    if (!event) throw new Error("Demo Event missing");
+    const legacyHash = await hashSecret("legacy-random-demo-key");
+    await repository.updateProject({
+      ...project,
+      slug: `bellwire-demo-${project.id.slice(0, 6)}`,
+    });
+    await repository.replaceEventIdempotencyHash(event.id, fixedHash, legacyHash);
+
+    const migrated = await app.request("/v1/demo", {
+      method: "POST",
+      headers: { authorization: "Bearer test" },
+    });
+    expect(migrated.status).toBe(200);
+    expect(await migrated.json()).toEqual({ projectId: demo.projectId, created: false });
+    expect(await repository.getProject(demo.projectId)).toMatchObject({
+      slug: "bellwire-system-demo-v1",
+    });
+    expect(await repository.getEventByIdempotencyHash(demo.projectId, fixedHash))
+      .toMatchObject({ id: event.id });
+    expect((await repository.listEvents(demo.projectId, { limit: 10 })).events).toHaveLength(1);
+  });
+
+  it("adopts a fully verified legacy demo after retention removed its sample Event", async () => {
+    const legacyResponse = await app.request("/v1/projects", {
+      method: "POST",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Bellwire Demo",
+        category: "demo",
+        icon: "bell.and.waves.left.and.right",
+      }),
+    });
+    const legacy = await legacyResponse.json<{ id: string }>();
+    const project = await repository.getProject(legacy.id);
+    if (!project) throw new Error("Legacy project missing");
+    await repository.updateProject({
+      ...project,
+      slug: `bellwire-demo-${project.id.slice(0, 6)}`,
+      deliveryMode: "hosted",
+    });
+    const schema = await app.request(`/v1/projects/${legacy.id}/event-schemas`, {
+      method: "POST",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({
+        eventType: "deployment.completed",
+        fields: {
+          deployment: { type: "string", required: true },
+          environment: { type: "enum", required: true, values: ["Production"] },
+          duration: { type: "number", required: true },
+        },
+        notification: {
+          title: "Deployment completed",
+          body: "{{ deployment }} reached {{ environment }} in {{ duration }}s",
+        },
+      }),
+    });
+    expect(schema.status).toBe(201);
+    const surface = await app.request(`/v1/projects/${legacy.id}/surfaces/demo-status`, {
+      method: "PUT",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({
+        type: "stats",
+        title: "Bellwire is connected",
+        subtitle: "Live sample data",
+        metrics: [
+          { label: "Status", value: "Healthy", color: "green" },
+          { label: "Events", value: 1, color: "orange" },
+          { label: "Agents", value: 1, color: "blue" },
+        ],
+      }),
+    });
+    expect(surface.status).toBe(200);
+    expect((await repository.listEvents(legacy.id, { limit: 10 })).events).toEqual([]);
+
+    const adopted = await app.request("/v1/demo", {
+      method: "POST",
+      headers: { authorization: "Bearer test" },
+    });
+    expect(adopted.status).toBe(200);
+    expect(await adopted.json()).toEqual({ projectId: legacy.id, created: false });
+    expect(await repository.getProject(legacy.id)).toMatchObject({
+      slug: "bellwire-system-demo-v1",
+      deliveryMode: "hosted",
+    });
+    const fixedHash = await hashSecret("bellwire-demo-deployment-v1");
+    expect(await repository.getEventByIdempotencyHash(legacy.id, fixedHash))
+      .toMatchObject({ eventType: "deployment.completed" });
+    expect((await repository.listEvents(legacy.id, { limit: 10 })).events).toHaveLength(1);
+    expect(await repository.listProjects(userPrincipal.userId)).toHaveLength(1);
+  });
+
+  it("moves a colliding normal project out of the reserved demo slug without hijacking it", async () => {
+    const normalResponse = await app.request("/v1/projects", {
+      method: "POST",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({ name: "Normal project" }),
+    });
+    const normal = await normalResponse.json<{ id: string }>();
+    const storedNormal = await repository.getProject(normal.id);
+    if (!storedNormal) throw new Error("Normal project missing");
+    await repository.updateProject({ ...storedNormal, slug: "bellwire-system-demo-v1" });
+
+    const demoResponse = await app.request("/v1/demo", {
+      method: "POST",
+      headers: { authorization: "Bearer test" },
+    });
+    expect(demoResponse.status).toBe(201);
+    const demo = await demoResponse.json<{ projectId: string }>();
+    expect(demo.projectId).not.toBe(normal.id);
+    expect(await repository.getProject(normal.id)).toMatchObject({
+      deliveryMode: "private",
+      slug: `normal-project-user-${normal.id}`,
+    });
+    expect(await repository.getProject(demo.projectId)).toMatchObject({
+      deliveryMode: "hosted",
+      slug: "bellwire-system-demo-v1",
+    });
+  });
+
+  it("atomically creates one complete demo under concurrent requests", async () => {
+    const responses = await Promise.all(Array.from({ length: 8 }, () => app.request("/v1/demo", {
+      method: "POST",
+      headers: { authorization: "Bearer test" },
+    })));
+    expect(responses.filter((response) => response.status === 201)).toHaveLength(1);
+    expect(responses.filter((response) => response.status === 200)).toHaveLength(7);
+    const bodies = await Promise.all(responses.map((response) =>
+      response.json<{ projectId: string; created: boolean }>()
+    ));
+    expect(new Set(bodies.map((body) => body.projectId)).size).toBe(1);
+    const projectId = bodies[0]!.projectId;
+    expect(await repository.listProjects(userPrincipal.userId)).toHaveLength(1);
+    expect(await repository.getEventSchema(projectId, "deployment.completed"))
+      .toMatchObject({ version: 1 });
+    expect(await repository.getNotificationSurface(projectId, "deployment.completed"))
+      .toMatchObject({ version: 1 });
+    expect(await repository.listLiveSurfaces(projectId)).toHaveLength(1);
+    expect((await repository.listEvents(projectId, { limit: 10 })).events).toHaveLength(1);
+  });
+
+  it("delivers the fixed-key demo Event once when an enabled device registers afterward", async () => {
+    const demoResponse = await app.request("/v1/demo", {
+      method: "POST",
+      headers: { authorization: "Bearer test" },
+    });
+    const demo = await demoResponse.json<{ projectId: string }>();
+    const event = (await repository.listEvents(demo.projectId, { limit: 10 })).events[0];
+    expect(event).toBeDefined();
+    expect(dispatcher.eventIds).toEqual([]);
+
+    const newer = await app.request(`/v1/projects/${demo.projectId}/events/test`, {
+      method: "POST",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({
+        type: "deployment.completed",
+        data: { deployment: "Bellwire 2.0", environment: "Production", duration: 12 },
+        occurredAt: new Date(Date.now() + 1_000).toISOString(),
+      }),
+    });
+    expect(newer.status).toBe(201);
+    const newerEvent = await newer.json<{ eventId: string }>();
+    expect(newerEvent.eventId).not.toBe(event!.id);
+
+    const register = () => app.request("/v1/devices", {
+      method: "POST",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Review iPhone",
+        apnsToken: "d".repeat(64),
+        apnsEnvironment: "sandbox",
+        installationId: "44444444-4444-4444-8444-444444444444",
+      }),
+    });
+
+    expect((await register()).status).toBe(201);
+    expect(dispatcher.eventIds).toEqual([event!.id]);
+    expect(await repository.listDeliveries(event!.id)).toEqual([
+      expect.objectContaining({ status: "queued", attemptCount: 0 }),
+    ]);
+
+    expect((await register()).status).toBe(201);
+    expect(dispatcher.eventIds).toEqual([event!.id, event!.id]);
+    expect(await repository.listDeliveries(event!.id)).toHaveLength(1);
+
+    const sentTokens: string[] = [];
+    const processor = new DeliveryProcessor(repository, {
+      send: async (token) => {
+        sentTokens.push(token);
+        return { providerMessageId: "demo-apns" };
+      },
+    });
+    await processor.process(event!.id);
+    await processor.process(event!.id);
+    expect(sentTokens).toEqual(["d".repeat(64)]);
+    expect(await repository.listDeliveries(event!.id)).toEqual([
+      expect.objectContaining({ status: "accepted_by_apns", attemptCount: 1 }),
+    ]);
+
+    const repeatedDemo = await app.request("/v1/demo", {
+      method: "POST",
+      headers: { authorization: "Bearer test" },
+    });
+    expect(repeatedDemo.status).toBe(200);
+    expect(dispatcher.eventIds).toEqual([event!.id, event!.id]);
+    expect(await repository.listDeliveries(event!.id)).toHaveLength(1);
+    expect((await repository.listEvents(demo.projectId, { limit: 10 })).events).toHaveLength(2);
+    expect(await repository.listLiveSurfaces(demo.projectId)).toHaveLength(1);
+  });
+
+  it("replays a demo delivery stranded before its queue enqueue", async () => {
+    const demoResponse = await app.request("/v1/demo", {
+      method: "POST",
+      headers: { authorization: "Bearer test" },
+    });
+    const demo = await demoResponse.json<{ projectId: string }>();
+    const fixedHash = await hashSecret("bellwire-demo-deployment-v1");
+    const event = await repository.getEventByIdempotencyHash(demo.projectId, fixedHash);
+    if (!event) throw new Error("Demo Event missing");
+    await registerDevice();
+    const device = (await repository.listDevices(userPrincipal.userId))[0];
+    if (!device) throw new Error("Device missing");
+    const queuedAt = new Date().toISOString();
+    await repository.createDeliveryIfAbsent({
+      id: crypto.randomUUID(),
+      eventId: event.id,
+      deviceId: device.id,
+      channel: "apns",
+      status: "queued",
+      attemptCount: 0,
+      queuedAt,
+      updatedAt: queuedAt,
+    });
+    expect(dispatcher.eventIds).toEqual([]);
+
+    const replay = await app.request("/v1/demo", {
+      method: "POST",
+      headers: { authorization: "Bearer test" },
+    });
+    expect(replay.status).toBe(200);
+    expect(dispatcher.eventIds).toEqual([event.id]);
+    expect(await repository.listDeliveries(event.id)).toHaveLength(1);
   });
 
   it("deletes an owned project and all of its project-scoped data", async () => {

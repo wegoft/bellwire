@@ -40,4 +40,15 @@ describe("published compatibility metadata", () => {
       "create unique index if not exists device_keys_user_id_installation_unique",
     );
   });
+
+  it("publishes the Free and Pro capacity policy in the database migration", () => {
+    const migration = readFileSync(
+      join(repositoryRoot, "supabase/migrations/202608040001_plan_capacity_update.sql"),
+      "utf8",
+    );
+
+    expect(migration).toContain("case when resolved_plan = 'pro' then 20 else 1 end");
+    expect(migration).toContain("case when resolved_plan = 'pro' then null::integer else 3 end");
+    expect(migration).toContain("and resolved_surface_limit is not null");
+  });
 });

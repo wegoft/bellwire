@@ -30,6 +30,7 @@ import type {
 import type {
   BellwireRepository,
   CreateDeliveryResult,
+  CreateProjectResult,
 } from "./bellwire-repository";
 import { decodeEventCursor, encodeEventCursor } from "./event-cursor";
 
@@ -101,8 +102,22 @@ export class InMemoryBellwireRepository implements BellwireRepository {
   }
 
   async createProject(project: Project): Promise<Project> {
+    if ([...this.projects.values()].some(
+      (candidate) => candidate.userId === project.userId && candidate.slug === project.slug,
+    )) {
+      throw new Error("Project slug already exists for this account");
+    }
     this.projects.set(project.id, copy(project));
     return copy(project);
+  }
+
+  async createProjectIfAbsent(project: Project): Promise<CreateProjectResult> {
+    const existing = [...this.projects.values()].find(
+      (candidate) => candidate.userId === project.userId && candidate.slug === project.slug,
+    );
+    if (existing) return { project: copy(existing), created: false };
+    this.projects.set(project.id, copy(project));
+    return { project: copy(project), created: true };
   }
 
   async getProject(projectId: string): Promise<Project | undefined> {
@@ -117,6 +132,14 @@ export class InMemoryBellwireRepository implements BellwireRepository {
   }
 
   async updateProject(project: Project): Promise<Project> {
+    if ([...this.projects.values()].some(
+      (candidate) =>
+        candidate.id !== project.id
+        && candidate.userId === project.userId
+        && candidate.slug === project.slug,
+    )) {
+      throw new Error("Project slug already exists for this account");
+    }
     this.projects.set(project.id, copy(project));
     return copy(project);
   }
@@ -511,6 +534,30 @@ export class InMemoryBellwireRepository implements BellwireRepository {
     return copy(saved);
   }
 
+  async ensureEventSchemaAndNotificationSurface(
+    schema: EventSchema,
+    surface: NotificationSurface,
+  ): Promise<{ schema: EventSchema; surface: NotificationSurface }> {
+    const schemaKey = this.projectTypeKey(schema.projectId, schema.eventType);
+    const schemaVersions = this.eventSchemas.get(schemaKey) ?? [];
+    let savedSchema = schemaVersions.at(-1);
+    if (!savedSchema) {
+      savedSchema = { ...schema, version: 1 };
+      schemaVersions.push(copy(savedSchema));
+      this.eventSchemas.set(schemaKey, schemaVersions);
+    }
+
+    const surfaceKey = this.projectTypeKey(surface.projectId, surface.eventType);
+    const surfaceVersions = this.surfaces.get(surfaceKey) ?? [];
+    let savedSurface = surfaceVersions.at(-1);
+    if (!savedSurface) {
+      savedSurface = { ...surface, version: 1 };
+      surfaceVersions.push(copy(savedSurface));
+      this.surfaces.set(surfaceKey, surfaceVersions);
+    }
+    return { schema: copy(savedSchema), surface: copy(savedSurface) };
+  }
+
   async getEventSchema(projectId: string, eventType: string): Promise<EventSchema | undefined> {
     const schema = this.eventSchemas.get(this.projectTypeKey(projectId, eventType))?.at(-1);
     return schema ? copy(schema) : undefined;
@@ -582,8 +629,13 @@ export class InMemoryBellwireRepository implements BellwireRepository {
     }
     const surfacesForProject = [...this.liveSurfaces.values()]
       .filter((candidate) => candidate.projectId === surface.projectId).length;
-    const surfaceLimit = meter.plan === "pro" ? 10 : 1;
-    if (!existing && enforcementMode === "enforce" && surfacesForProject >= surfaceLimit) {
+    const surfaceLimit = meter.plan === "pro" ? undefined : 3;
+    if (
+      !existing
+      && enforcementMode === "enforce"
+      && surfaceLimit !== undefined
+      && surfacesForProject >= surfaceLimit
+    ) {
       return {
         ...meter,
         created: false,
@@ -818,6 +870,33 @@ export class InMemoryBellwireRepository implements BellwireRepository {
 
   async getEvent(eventId: string): Promise<BellwireEvent | undefined> {
     return this.cloneFrom(this.events, eventId);
+  }
+
+  async getEventByIdempotencyHash(
+    projectId: string,
+    idempotencyKeyHash: string,
+  ): Promise<BellwireEvent | undefined> {
+    const eventId = this.eventsByIdempotencyKey.get(
+      this.projectTypeKey(projectId, idempotencyKeyHash),
+    );
+    return eventId ? this.cloneFrom(this.events, eventId) : undefined;
+  }
+
+  async replaceEventIdempotencyHash(
+    eventId: string,
+    expectedHash: string,
+    replacementHash: string,
+  ): Promise<BellwireEvent | undefined> {
+    const event = this.events.get(eventId);
+    if (!event || event.idempotencyKeyHash !== expectedHash) return undefined;
+    const replacementKey = this.projectTypeKey(event.projectId, replacementHash);
+    const conflictingEventId = this.eventsByIdempotencyKey.get(replacementKey);
+    if (conflictingEventId && conflictingEventId !== eventId) return undefined;
+    this.eventsByIdempotencyKey.delete(this.projectTypeKey(event.projectId, expectedHash));
+    const updated = { ...event, idempotencyKeyHash: replacementHash };
+    this.events.set(eventId, copy(updated));
+    this.eventsByIdempotencyKey.set(replacementKey, eventId);
+    return copy(updated);
   }
 
   async markEventRead(eventId: string, readAt: string): Promise<void> {
@@ -1057,13 +1136,13 @@ export class InMemoryBellwireRepository implements BellwireRepository {
       ...(transaction?.productId ? { productId: transaction.productId } : {}),
       ...(transaction?.expiresAt ? { expiresAt: transaction.expiresAt } : {}),
       limits: {
-        activeProjects: meter.plan === "pro" ? 20 : 3,
+        activeProjects: meter.plan === "pro" ? 20 : 1,
         activeDevices: meter.plan === "pro" ? 3 : 1,
         monthlySignals: meter.signalLimit,
         courtesySignals: meter.courtesyLimit,
         ingestPerMinute: meter.plan === "pro" ? 300 : 60,
         hostedRetentionDays: meter.plan === "pro" ? 90 : 7,
-        surfacesPerProject: meter.plan === "pro" ? 10 : 1,
+        surfacesPerProject: meter.plan === "pro" ? null : 3,
       },
       usage: {
         periodStart: this.periodStart(now),
