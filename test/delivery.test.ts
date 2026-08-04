@@ -9,7 +9,12 @@ import type {
   Project,
 } from "../src/domain/models";
 import { InMemoryBellwireRepository } from "../src/repositories/in-memory-bellwire-repository";
-import { ApnsClient, ApnsError } from "../src/services/apns-client";
+import {
+  ApnsClient,
+  ApnsClientPool,
+  ApnsError,
+  type ApnsConfiguration,
+} from "../src/services/apns-client";
 import {
   DeliveryProcessor,
   type ApnsSender,
@@ -521,6 +526,56 @@ describe("Private wake delivery", () => {
 });
 
 describe("APNs client", () => {
+  it("reuses one client and provider JWT per environment for concurrent Private wakes", async () => {
+    const authorizations = new Map<string, string[]>();
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const request = new Request(input, init);
+      const environment = request.url.includes("api.sandbox.push.apple.com")
+        ? "sandbox"
+        : "production";
+      const values = authorizations.get(environment) ?? [];
+      values.push(request.headers.get("authorization") ?? "");
+      authorizations.set(environment, values);
+      return new Response(null, { status: 200 });
+    };
+    const createClient = vi.fn(
+      (config: ApnsConfiguration) => new ApnsClient(config, fetchImpl),
+    );
+    const pool = new ApnsClientPool(createClient);
+    const privateKey = await privateKeyPEM();
+    const baseConfig = {
+      keyId: "KEY123",
+      teamId: "TEAM123",
+      bundleId: "app.bellwire",
+      urlScheme: "bellwire",
+      privateKey,
+    };
+    const clients = ["sandbox", "production"].flatMap((environment) =>
+      Array.from({ length: 8 }, () => pool.get({
+        ...baseConfig,
+        environment: environment as "sandbox" | "production",
+      }))
+    );
+
+    await Promise.all(clients.map((client, index) => client.send(`device-${index}`, {
+      signalId: `wake-${index}`,
+      threadId: "private-project",
+      priority: "normal",
+      wakeId: `wake-${index}`,
+      projectId: "private-project",
+      deliveryMode: "private",
+      reference: `opaque-reference-${index}`,
+    })));
+
+    expect(createClient).toHaveBeenCalledTimes(2);
+    expect(new Set(clients.slice(0, 8)).size).toBe(1);
+    expect(new Set(clients.slice(8)).size).toBe(1);
+    expect(authorizations.get("sandbox")).toHaveLength(8);
+    expect(new Set(authorizations.get("sandbox")).size).toBe(1);
+    expect(authorizations.get("production")).toHaveLength(8);
+    expect(new Set(authorizations.get("production")).size).toBe(1);
+  });
+
   it("signs a sandbox alert request with the expected push metadata", async () => {
     let captured: Request | undefined;
     const fetchImpl: typeof fetch = async (input, init) => {

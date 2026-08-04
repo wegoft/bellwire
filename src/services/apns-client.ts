@@ -48,6 +48,7 @@ export class ApnsError extends Error {
 export class ApnsClient {
   private signingKey?: CryptoKey;
   private providerToken?: { value: string; expiresAt: number };
+  private providerTokenPromise?: Promise<{ value: string; expiresAt: number }>;
 
   constructor(
     private readonly config: ApnsConfiguration,
@@ -58,10 +59,11 @@ export class ApnsClient {
     const host = this.config.environment === "production"
       ? "https://api.push.apple.com"
       : "https://api.sandbox.push.apple.com";
+    const providerToken = await this.getProviderToken();
     const response = await this.fetchImpl(`${host}/3/device/${encodeURIComponent(deviceToken)}`, {
       method: "POST",
       headers: {
-        authorization: `bearer ${await this.getProviderToken()}`,
+        authorization: `bearer ${providerToken}`,
         "apns-topic": this.config.bundleId,
         "apns-push-type": "alert",
         "apns-priority": notification.priority === "high" ? "10" : "5",
@@ -124,7 +126,7 @@ export class ApnsClient {
         .catch(() => ({}));
       const reason = error.reason ?? "UnknownApnsError";
       if (reason === "ExpiredProviderToken" || reason === "InvalidProviderToken") {
-        this.providerToken = undefined;
+        if (this.providerToken?.value === providerToken) this.providerToken = undefined;
       }
       throw new ApnsError(response.status, reason, isRetryable(response.status, reason));
     }
@@ -134,15 +136,59 @@ export class ApnsClient {
   private async getProviderToken(): Promise<string> {
     const now = Date.now();
     if (this.providerToken && this.providerToken.expiresAt > now) return this.providerToken.value;
+    if (this.providerTokenPromise) return (await this.providerTokenPromise).value;
+
+    const pending = this.createProviderToken(now);
+    this.providerTokenPromise = pending;
+    try {
+      const providerToken = await pending;
+      this.providerToken = providerToken;
+      return providerToken.value;
+    } finally {
+      if (this.providerTokenPromise === pending) this.providerTokenPromise = undefined;
+    }
+  }
+
+  private async createProviderToken(now: number): Promise<{ value: string; expiresAt: number }> {
     this.signingKey ??= await importPKCS8(normalizePrivateKey(this.config.privateKey), "ES256");
     const value = await new SignJWT({})
       .setProtectedHeader({ alg: "ES256", kid: this.config.keyId })
       .setIssuer(this.config.teamId)
       .setIssuedAt()
       .sign(this.signingKey);
-    this.providerToken = { value, expiresAt: now + 50 * 60 * 1_000 };
-    return value;
+    return { value, expiresAt: now + 50 * 60 * 1_000 };
   }
+}
+
+export class ApnsClientPool {
+  private readonly clients = new Map<
+    ApnsConfiguration["environment"],
+    { config: ApnsConfiguration; client: ApnsClient }
+  >();
+
+  constructor(
+    private readonly createClient: (config: ApnsConfiguration) => ApnsClient =
+      (config) => new ApnsClient(config),
+  ) {}
+
+  get(config: ApnsConfiguration): ApnsClient {
+    const cached = this.clients.get(config.environment);
+    if (cached && sameConfiguration(cached.config, config)) return cached.client;
+
+    const savedConfig = { ...config };
+    const client = this.createClient(savedConfig);
+    this.clients.set(config.environment, { config: savedConfig, client });
+    return client;
+  }
+}
+
+function sameConfiguration(left: ApnsConfiguration, right: ApnsConfiguration): boolean {
+  return left.keyId === right.keyId &&
+    left.teamId === right.teamId &&
+    left.bundleId === right.bundleId &&
+    left.urlScheme === right.urlScheme &&
+    left.privateKey === right.privateKey &&
+    left.environment === right.environment;
 }
 
 function normalizePrivateKey(value: string): string {

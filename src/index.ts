@@ -10,7 +10,7 @@ import {
   AppleBillingService,
   OfficialAppleBillingVerifier,
 } from "./services/apple-billing-service";
-import { ApnsClient } from "./services/apns-client";
+import { ApnsClientPool } from "./services/apns-client";
 import { DeliveryProcessor } from "./services/delivery-processor";
 import { ModeRequestNotificationProcessor } from "./services/mode-request-notification-processor";
 import { PrivateWakeProcessor } from "./services/private-wake-processor";
@@ -47,6 +47,7 @@ export interface Env {
 }
 
 const developmentRepository = new InMemoryBellwireRepository();
+const apnsClients = new ApnsClientPool();
 
 export default {
   async fetch(request: Request, env: Env, executionContext: ExecutionContext): Promise<Response> {
@@ -77,36 +78,17 @@ export default {
 
   async queue(batch: MessageBatch<DeliveryQueueMessage>, env: Env): Promise<void> {
     const repository = repositoryForEnv(env);
-    const processor = new DeliveryProcessor(repository, (environment) => new ApnsClient({
+    const apnsForEnvironment = (environment: "sandbox" | "production") => apnsClients.get({
       keyId: requiredEnv(env.APNS_KEY_ID, "APNS_KEY_ID"),
       teamId: requiredEnv(env.APNS_TEAM_ID, "APNS_TEAM_ID"),
       bundleId: requiredEnv(env.APNS_BUNDLE_ID, "APNS_BUNDLE_ID"),
       urlScheme: env.APP_URL_SCHEME ?? "bellwire",
       privateKey: requiredEnv(env.APNS_PRIVATE_KEY, "APNS_PRIVATE_KEY"),
       environment,
-    }));
-    const privateWakeProcessor = new PrivateWakeProcessor(
-      repository,
-      (environment) => new ApnsClient({
-        keyId: requiredEnv(env.APNS_KEY_ID, "APNS_KEY_ID"),
-        teamId: requiredEnv(env.APNS_TEAM_ID, "APNS_TEAM_ID"),
-        bundleId: requiredEnv(env.APNS_BUNDLE_ID, "APNS_BUNDLE_ID"),
-        urlScheme: env.APP_URL_SCHEME ?? "bellwire",
-        privateKey: requiredEnv(env.APNS_PRIVATE_KEY, "APNS_PRIVATE_KEY"),
-        environment,
-      }),
-    );
-    const modeRequestProcessor = new ModeRequestNotificationProcessor(
-      repository,
-      (environment) => new ApnsClient({
-        keyId: requiredEnv(env.APNS_KEY_ID, "APNS_KEY_ID"),
-        teamId: requiredEnv(env.APNS_TEAM_ID, "APNS_TEAM_ID"),
-        bundleId: requiredEnv(env.APNS_BUNDLE_ID, "APNS_BUNDLE_ID"),
-        urlScheme: env.APP_URL_SCHEME ?? "bellwire",
-        privateKey: requiredEnv(env.APNS_PRIVATE_KEY, "APNS_PRIVATE_KEY"),
-        environment,
-      }),
-    );
+    });
+    const processor = new DeliveryProcessor(repository, apnsForEnvironment);
+    const privateWakeProcessor = new PrivateWakeProcessor(repository, apnsForEnvironment);
+    const modeRequestProcessor = new ModeRequestNotificationProcessor(repository, apnsForEnvironment);
     await Promise.all(
       batch.messages.map(async (message) => {
         try {
