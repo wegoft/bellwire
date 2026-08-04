@@ -1289,9 +1289,32 @@ export class BellwireService {
     }
     if (!metered.wake) throw new Error("Private wake was not persisted");
     await this.repository.markPrivateWakeTokenUsed(storedToken.id, now.toISOString());
-    const deliveryQueued = metered.created
-      ? await this.dispatchPrivateWake(project, metered.wake)
-      : undefined;
+    let deliveryQueued: boolean | undefined;
+    if (metered.created) {
+      deliveryQueued = await this.dispatchPrivateWake(project, metered.wake);
+    } else {
+      const deliveries = await this.repository.listPrivateWakeDeliveries(metered.wake.id);
+      if (deliveries.some((delivery) =>
+        delivery.status === "queued" || delivery.status === "accepted_by_apns"
+      )) {
+        deliveryQueued = true;
+      } else if (
+        deliveries.length > 0
+        && deliveries.every((delivery) =>
+          delivery.status === "failed"
+          && delivery.errorCode === "retryable:QueueUnavailable"
+        )
+      ) {
+        const referenceExpiresAt = Date.parse(metered.wake.referenceExpiresAt);
+        deliveryQueued = metered.wake.reference
+          && Number.isFinite(referenceExpiresAt)
+          && referenceExpiresAt > now.getTime()
+          ? (await this.dispatchPrivateWake(project, metered.wake)) ?? false
+          : false;
+      } else if (deliveries.length > 0) {
+        deliveryQueued = false;
+      }
+    }
     if (metered.created) {
       await this.captureQuotaEvent(project.userId, project.deliveryMode, metered);
     }

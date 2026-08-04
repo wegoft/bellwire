@@ -259,6 +259,198 @@ describe("Bellwire MVP API", () => {
     expect(await oversized.json()).toMatchObject({ error: { code: "PAYLOAD_TOO_LARGE" } });
   });
 
+  it("retries one durable Private wake after QueueUnavailable without billing it twice", async () => {
+    const projectId = await createProject();
+    await registerDevice();
+    const tokenResponse = await app.request(`/v1/projects/${projectId}/wake-tokens`, {
+      method: "POST",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({ name: "production" }),
+    });
+    const { token } = await tokenResponse.json<{ token: string }>();
+    const failingApp = createApp({
+      service: new BellwireService(repository, new FailingDispatcher()),
+      authenticator: new StaticAuthenticator(userPrincipal),
+    });
+    type WakeResponse = {
+      wakeId: string;
+      deduplicated: boolean;
+      deliveryQueued: boolean;
+      usage: {
+        plan: "free" | "pro";
+        used: number;
+        limit: number;
+        courtesyLimit: number;
+        resetAt: string;
+      };
+    };
+    const send = (targetApp: ReturnType<typeof createApp>) =>
+      targetApp.request(`/v1/projects/${projectId}/private-wakes`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "idempotency-key": "retry-private-wake",
+        },
+        body: JSON.stringify({
+          reference: "N8Y1uFfPnM6J6q3O2gEmDA",
+          priority: "high",
+        }),
+      });
+
+    const first = await send(failingApp);
+    expect(first.status).toBe(201);
+    const firstBody = await first.json<WakeResponse>();
+    expect(firstBody).toMatchObject({ deduplicated: false, deliveryQueued: false });
+    const [failedDelivery] = await repository.listPrivateWakeDeliveries(firstBody.wakeId);
+    expect(failedDelivery).toMatchObject({
+      status: "failed",
+      errorCode: "retryable:QueueUnavailable",
+    });
+
+    const retry = await send(app);
+    expect(retry.status).toBe(200);
+    const retryBody = await retry.json<WakeResponse>();
+    expect(retryBody).toMatchObject({
+      wakeId: firstBody.wakeId,
+      deduplicated: true,
+      deliveryQueued: true,
+    });
+    expect(retryBody.usage).toEqual(firstBody.usage);
+    expect(dispatcher.wakeIds).toEqual([firstBody.wakeId]);
+    expect((await repository.getAccountEntitlement(
+      userPrincipal.userId,
+      new Date().toISOString(),
+    )).usage.acceptedSignals).toBe(1);
+
+    if (!failedDelivery) throw new Error("Private wake delivery missing");
+    await repository.updatePrivateWakeDelivery({
+      ...failedDelivery,
+      status: "queued",
+      errorCode: undefined,
+      errorMessage: undefined,
+      updatedAt: new Date().toISOString(),
+    });
+    const queuedDuplicate = await send(app);
+    expect(queuedDuplicate.status).toBe(200);
+    const queuedBody = await queuedDuplicate.json<WakeResponse>();
+    expect(queuedBody).toMatchObject({
+      wakeId: firstBody.wakeId,
+      deduplicated: true,
+      deliveryQueued: true,
+    });
+    expect(queuedBody.usage).toEqual(firstBody.usage);
+    expect(dispatcher.wakeIds).toEqual([firstBody.wakeId]);
+
+    await repository.updatePrivateWakeDelivery({
+      ...failedDelivery,
+      status: "accepted_by_apns",
+      errorCode: undefined,
+      errorMessage: undefined,
+      updatedAt: new Date().toISOString(),
+    });
+    const acceptedDuplicate = await send(app);
+    expect(acceptedDuplicate.status).toBe(200);
+    const acceptedBody = await acceptedDuplicate.json<WakeResponse>();
+    expect(acceptedBody).toMatchObject({
+      wakeId: firstBody.wakeId,
+      deduplicated: true,
+      deliveryQueued: true,
+    });
+    expect(acceptedBody.usage).toEqual(firstBody.usage);
+    expect(dispatcher.wakeIds).toEqual([firstBody.wakeId]);
+  });
+
+  it("does not retry an expired or permanently failed duplicate Private wake", async () => {
+    const projectId = await createProject();
+    await registerDevice();
+    const tokenResponse = await app.request(`/v1/projects/${projectId}/wake-tokens`, {
+      method: "POST",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({ name: "production" }),
+    });
+    const { token } = await tokenResponse.json<{ token: string }>();
+    const [device] = await repository.listDevices(userPrincipal.userId);
+    if (!device) throw new Error("Private wake device missing");
+    const now = new Date();
+
+    const seedDuplicate = async (
+      idempotencyKey: string,
+      errorCode: string,
+      referenceExpiresAt: string,
+    ) => {
+      const wakeId = crypto.randomUUID();
+      const accepted = await repository.acceptPrivateWake({
+        id: wakeId,
+        projectId,
+        idempotencyKeyHash: await hashSecret(idempotencyKey),
+        reference: "N8Y1uFfPnM6J6q3O2gEmDA",
+        priority: "normal",
+        receivedAt: now.toISOString(),
+        referenceExpiresAt,
+      }, "disabled");
+      expect(accepted.created).toBe(true);
+      await repository.createPrivateWakeDeliveryIfAbsent({
+        id: crypto.randomUUID(),
+        wakeId,
+        deviceId: device.id,
+        channel: "apns",
+        status: "failed",
+        attemptCount: 0,
+        errorCode,
+        errorMessage: "Previous delivery failed",
+        queuedAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      });
+      return await repository.getPrivateWake(wakeId);
+    };
+    const send = (idempotencyKey: string) =>
+      app.request(`/v1/projects/${projectId}/private-wakes`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+        },
+        body: JSON.stringify({
+          reference: "N8Y1uFfPnM6J6q3O2gEmDA",
+          priority: "normal",
+        }),
+      });
+
+    const expiredWake = await seedDuplicate(
+      "expired-private-wake",
+      "retryable:QueueUnavailable",
+      new Date(now.getTime() - 1_000).toISOString(),
+    );
+    const expired = await send("expired-private-wake");
+    expect(expired.status).toBe(200);
+    expect(await expired.json()).toMatchObject({
+      wakeId: expiredWake?.id,
+      deduplicated: true,
+      deliveryQueued: false,
+    });
+    expect(await repository.getPrivateWake(expiredWake?.id ?? "missing")).toEqual(expiredWake);
+
+    const permanentWake = await seedDuplicate(
+      "permanent-private-wake",
+      "permanent:BadDeviceToken",
+      new Date(now.getTime() + 60_000).toISOString(),
+    );
+    const permanent = await send("permanent-private-wake");
+    expect(permanent.status).toBe(200);
+    expect(await permanent.json()).toMatchObject({
+      wakeId: permanentWake?.id,
+      deduplicated: true,
+      deliveryQueued: false,
+    });
+    expect(dispatcher.wakeIds).toHaveLength(0);
+    expect((await repository.getAccountEntitlement(
+      userPrincipal.userId,
+      new Date().toISOString(),
+    )).usage.acceptedSignals).toBe(2);
+  });
+
   it("applies the Hosted Event payload limit to authenticated test sends", async () => {
     const projectId = await createProject();
     await makeHosted(projectId);
