@@ -135,6 +135,33 @@ struct ProjectOverview: Decodable, Identifiable {
     let privateReadiness: PrivateReadinessSummary
 }
 
+extension ProjectOverview {
+    func resolvingDetailLiveSurfaces(
+        from directSurfaces: [LiveSurfaceRecord]
+    ) -> ProjectOverview {
+        guard deliveryMode == .private else { return self }
+        return ProjectOverview(
+            id: id,
+            name: name,
+            slug: slug,
+            icon: icon,
+            logoUrl: logoUrl,
+            displayOrder: displayOrder,
+            category: category,
+            status: status,
+            deliveryMode: deliveryMode,
+            endpoint: endpoint,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            eventSchemas: eventSchemas,
+            notificationSurfaces: notificationSurfaces,
+            liveSurfaces: directSurfaces.filter { $0.projectId == id },
+            deliveryHealth: deliveryHealth,
+            privateReadiness: privateReadiness
+        )
+    }
+}
+
 struct PrivateReadinessSummary: Decodable {
     let readyDevices: Int
     let activeDevices: Int

@@ -406,7 +406,8 @@ final class AppModel: ObservableObject {
     }
 
     func loadProject(id: String) async throws -> (ProjectOverview, [InboxEvent]) {
-        let overview: ProjectOverview = try await api.request("v1/projects/\(id)")
+        let cloudOverview: ProjectOverview = try await api.request("v1/projects/\(id)")
+        let overview = cloudOverview.resolvingDetailLiveSurfaces(from: liveSurfaces)
         let summary = ProjectSummary(
             id: overview.id,
             name: overview.name,
