@@ -17,6 +17,7 @@
     "self-host:bootstrap": "node scripts/self-host-bootstrap.mjs",
     "self-host:doctor": "node scripts/self-host-doctor.mjs",
     "self-host:apns-preflight": "node scripts/apns-preflight.mjs",
+    "ios:release": "node scripts/app-store-release.mjs",
     "migration:prepare": "node scripts/prepare-cloudflare-migration.mjs",
     "build": "wrangler deploy --dry-run --outdir dist && wrangler deploy --dry-run --outdir dist-auth -c wrangler.auth.toml",
     "d1:migrate:local": "wrangler d1 migrations apply DB --local && wrangler d1 migrations apply AUTH_DB --local -c wrangler.auth.toml",
