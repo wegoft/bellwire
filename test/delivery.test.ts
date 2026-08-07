@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { URL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
 import type {
@@ -542,7 +543,7 @@ describe("APNs client", () => {
     const authorizations = new Map<string, string[]>();
     const fetchImpl: typeof fetch = async (input, init) => {
       const request = new Request(input, init);
-      const environment = request.url.includes("api.sandbox.push.apple.com")
+      const environment = new URL(request.url).hostname === "api.sandbox.push.apple.com"
         ? "sandbox"
         : "production";
       const values = authorizations.get(environment) ?? [];
