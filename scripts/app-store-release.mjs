@@ -214,18 +214,7 @@ function inspectIPA(ipaPath) {
   if (unzip.status !== 0 || !unzip.stdout?.length) {
     throw new Error("IPA does not contain Payload/Bellwire.app/Info.plist");
   }
-  const converted = spawnSync("plutil", ["-convert", "json", "-o", "-", "--", "-"], {
-    input: unzip.stdout,
-    encoding: "utf8",
-    maxBuffer: 4 * 1024 * 1024,
-  });
-  if (converted.status !== 0) throw new Error("IPA Info.plist could not be decoded");
-  let info;
-  try {
-    info = JSON.parse(converted.stdout);
-  } catch {
-    throw new Error("IPA Info.plist did not contain valid property-list data");
-  }
+  const info = decodeInfoPlist(unzip.stdout);
   return {
     bundleId: info.CFBundleIdentifier,
     version: info.CFBundleShortVersionString,
@@ -234,6 +223,45 @@ function inspectIPA(ipaPath) {
     authURL: normalizeOrigin(info.BellwireAuthBaseURL),
     sha256: digest,
   };
+}
+
+function decodeInfoPlist(contents) {
+  const text = contents.toString("utf8");
+  if (text.trimStart().startsWith("<?xml") || text.trimStart().startsWith("<plist")) {
+    return Object.fromEntries([
+      "CFBundleIdentifier",
+      "CFBundleShortVersionString",
+      "CFBundleVersion",
+      "BellwireAPIBaseURL",
+      "BellwireAuthBaseURL",
+    ].map((key) => [key, xmlPlistString(text, key)]));
+  }
+  const converted = spawnSync("plutil", ["-convert", "json", "-o", "-", "--", "-"], {
+    input: contents,
+    encoding: "utf8",
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  if (converted.status !== 0) throw new Error("IPA Info.plist could not be decoded");
+  try {
+    return JSON.parse(converted.stdout);
+  } catch {
+    throw new Error("IPA Info.plist did not contain valid property-list data");
+  }
+}
+
+function xmlPlistString(contents, key) {
+  const escapedKey = key.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const match = contents.match(new RegExp(
+    `<key>\\s*${escapedKey}\\s*</key>\\s*<string>([\\s\\S]*?)</string>`,
+    "u",
+  ));
+  if (!match) throw new Error(`IPA Info.plist is missing ${key}`);
+  return match[1]
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", "\"")
+    .replaceAll("&apos;", "'")
+    .replaceAll("&amp;", "&");
 }
 
 function normalizeOrigin(value) {
