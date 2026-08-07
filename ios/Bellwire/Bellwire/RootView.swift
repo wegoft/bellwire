@@ -31,6 +31,14 @@ struct RootView: View {
         } else if !notificationOnboardingSeen {
             NotificationOnboardingView(isComplete: $notificationOnboardingSeen)
                 .transition(.opacity.combined(with: .move(edge: .trailing)))
+        } else if model.hasCompletedInitialDashboardLoad && !model.hasLoadedDashboardSuccessfully {
+            InitialDashboardFailureView(
+                message: model.errorMessage ?? "Check your connection and try again.",
+                isRetrying: model.isLoading
+            ) {
+                Task { await model.loadDashboard(showLoading: true) }
+            }
+            .transition(.opacity)
         } else {
             MainTabView()
                 .transition(.opacity)
@@ -61,7 +69,7 @@ struct MainTabView: View {
            arguments.indices.contains(index + 1) {
             let tab: MainTab
             switch arguments[index + 1] {
-            case "projects": tab = .projects
+            case "projects", "projects-empty": tab = .projects
             case "events": tab = .events
             case "settings": tab = .settings
             default: tab = .home
@@ -105,6 +113,56 @@ struct MainTabView: View {
             selection = .settings
             model.pendingModeRequestNavigation = false
         }
+        .sheet(item: $model.binding) { binding in
+            BindingCodeSheet(binding: binding)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+    }
+}
+
+private struct InitialDashboardFailureView: View {
+    let message: String
+    let isRetrying: Bool
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: BellwireSpacing.roomy) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 30, weight: .medium))
+                .foregroundStyle(BellwireTheme.danger)
+                .frame(width: 64, height: 64)
+                .background(
+                    BellwireTheme.danger.opacity(0.09),
+                    in: RoundedRectangle(cornerRadius: BellwireRadius.largeCard, style: .continuous)
+                )
+                .accessibilityHidden(true)
+
+            VStack(spacing: BellwireSpacing.compact) {
+                Text("Bellwire couldn’t load")
+                    .font(.title2)
+                    .bold()
+                    .foregroundStyle(BellwireTheme.ink)
+                    .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
+                Text(LocalizedStringKey(message))
+                    .font(.body)
+                    .foregroundStyle(BellwireTheme.secondaryInk)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            PrimaryButton(
+                title: isRetrying ? "Trying again…" : "Try again",
+                systemImage: "arrow.clockwise",
+                isLoading: isRetrying,
+                isDisabled: isRetrying,
+                action: retry
+            )
+            .frame(maxWidth: 360)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(BellwireSpacing.page)
     }
 }
 

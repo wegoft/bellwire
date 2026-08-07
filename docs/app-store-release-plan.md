@@ -85,7 +85,7 @@ After signing in:
 
 1. Notification permission is optional; choose either Allow or Don’t Allow.
 2. On Home, tap “Create demo project.”
-3. Bellwire creates a private sample project with one live Surface and one deployment event.
+3. Bellwire creates an explicitly Hosted sample project with one live Surface and one deployment event. The sample Surface, Event, and delivery state are stored by Bellwire Cloud; this demo does not claim Private delivery.
 4. Open the event and project to review the core experience.
 5. Account deletion is available at Settings → Account → Delete account.
 
@@ -95,8 +95,8 @@ The production backend is available at `https://api.bellwire.app/health`. No ext
 
 1. 新 Apple 测试账户首次登录成功。
 2. 选择“不允许通知”仍能进入 Home、创建 Demo、浏览项目与事件。
-3. 选择“允许通知”后，生产 APNs 能收到 Demo 或测试事件。
-4. Demo 二次点击不会重复创建项目。
+3. 选择“允许通知”后，即使 Demo 创建早于首次设备注册，生产 APNs 仍能收到一次示例事件。
+4. Demo 二次点击不会重复创建项目、Event、Surface 或通知投递。
 5. 删除单个项目后相关事件、Surface 与 token 清除。
 6. 删除账户后回到登录页，旧 session 无法继续访问 API。
 7. 删除账户后，Sign in with Apple 的 refresh/access token 同步撤销。

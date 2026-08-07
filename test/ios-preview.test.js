@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -70,6 +70,48 @@ describe("iOS Inbox preview", () => {
     30_000,
   );
 
+  it(
+    "keeps Cloud project metadata authoritative across Direct cards",
+    () => {
+      const temporaryDirectory = mkdtempSync(
+        join(tmpdir(), "bellwire-ios-consistency-"),
+      );
+      const executable = join(temporaryDirectory, "ProjectDataConsistencyCheck");
+      try {
+        execFileSync(
+          "xcrun",
+          [
+            "swiftc",
+            "ios/Bellwire/Bellwire/Models.swift",
+            "ios/Bellwire/Bellwire/ProjectDataConsistency.swift",
+            "test/ProjectDataConsistencyCheck.swift",
+            "-o",
+            executable,
+          ],
+          { stdio: "pipe" },
+        );
+        expect(() => execFileSync(executable, { stdio: "pipe" })).not.toThrow();
+      } finally {
+        rmSync(temporaryDirectory, { recursive: true, force: true });
+      }
+
+      const model = readFileSync("ios/Bellwire/Bellwire/AppModel.swift", "utf8");
+      const details = readFileSync("ios/Bellwire/Bellwire/DetailViews.swift", "utf8");
+      const directSurfaceFetch = model.slice(
+        model.indexOf("private func fetchDirectSurfaces"),
+        model.indexOf("private func fetchDirectInbox"),
+      );
+      expect(model).toContain("ProjectDataConsistency.mergeProjects(");
+      expect(model).toContain("ProjectDataConsistency.normalizeSurfaces(");
+      expect(model).toContain("ProjectDataConsistency.normalizeEvents(");
+      expect(model).not.toContain("DirectSurfaceResult");
+      expect(directSurfaceFetch).not.toContain("ProjectSummary(");
+      expect(directSurfaceFetch).not.toContain('status: "active"');
+      expect(details).toContain("model.liveSurfaces.filter { $0.projectId == projectID }");
+    },
+    30_000,
+  );
+
   it("refreshes current data from lifecycle and notification signals", () => {
     const app = readFileSync("ios/Bellwire/Bellwire/BellwireApp.swift", "utf8");
     const model = readFileSync("ios/Bellwire/Bellwire/AppModel.swift", "utf8");
@@ -97,9 +139,14 @@ describe("iOS Inbox preview", () => {
       model.indexOf("func loadEvent(id:"),
     );
 
-    expect(dashboardLoad).toContain("try? await registerCurrentDeviceKey(userID: userID)");
-    expect(dashboardLoad.indexOf("try? await registerCurrentDeviceKey(userID: userID)")).toBeLessThan(
+    expect(dashboardLoad).toContain(
+      "async let deviceKeyRegistration: Void? = try? registerCurrentDeviceKey(userID: userID)",
+    );
+    expect(dashboardLoad.indexOf("async let deviceKeyRegistration")).toBeLessThan(
       dashboardLoad.indexOf("async let projectRequest"),
+    );
+    expect(recovery.indexOf("_ = await deviceKeyRegistration")).toBeLessThan(
+      recovery.indexOf("await requestDirectConnectionRecovery("),
     );
     expect(recovery).toContain("project.deliveryMode == .private");
     expect(recovery).toContain("project.deliveryMode == .hosted");
@@ -264,7 +311,7 @@ describe("iOS Inbox preview", () => {
     ).toHaveLength(2);
   });
 
-  it("gives active Pro a dedicated premium settings row without changing the free row", () => {
+  it("keeps active Pro premium but as a restrained standard settings row", () => {
     const settings = readFileSync("ios/Bellwire/Bellwire/SettingsView.swift", "utf8");
     const theme = readFileSync("ios/Bellwire/Bellwire/Theme.swift", "utf8");
     const zhHans = readFileSync(
@@ -286,22 +333,295 @@ describe("iOS Inbox preview", () => {
     expect(accountOverview).toContain('title: "Upgrade to Bellwire Pro"');
     expect(accountOverview).not.toContain('icon: hasPro ? "checkmark.seal.fill" : "sparkles"');
 
-    expect(theme).toContain("static let proActiveSurface = adaptiveColor(");
-    expect(theme).toContain("static let proActiveBorder = adaptiveColor(");
+    expect(theme).not.toContain("static let proActiveSurface = adaptiveColor(");
+    expect(theme).not.toContain("static let proActiveBorder = adaptiveColor(");
     expect(theme).toContain("static let proActiveInk = adaptiveColor(");
     expect(proActiveRow).not.toContain(".foregroundStyle(BellwireTheme.accent)");
     expect(
       proActiveRow.match(/\.foregroundStyle\(BellwireTheme\.proActiveInk\)/gu),
-    ).toHaveLength(3);
+    ).toHaveLength(1);
     expect(proActiveRow).toContain('Image(systemName: "checkmark.seal.fill")');
-    expect(proActiveRow).toContain('Text("PRO ACTIVE")');
-    expect(proActiveRow).toContain(".fill(BellwireTheme.proActiveSurface)");
-    expect(proActiveRow).toContain(".stroke(BellwireTheme.proActiveBorder");
+    expect(proActiveRow).not.toContain("activeBadge");
+    expect(proActiveRow).not.toContain('Text("PRO ACTIVE")');
+    expect(proActiveRow).not.toContain("RoundedRectangle");
+    expect(proActiveRow).not.toContain("Capsule");
+    expect(proActiveRow).not.toContain(".background");
+    expect(proActiveRow).not.toContain(".overlay");
+    expect(proActiveRow).not.toContain(".stroke(");
+    expect(proActiveRow).not.toContain(".frame(width: 40, height: 40)");
+    expect(proActiveRow).toContain('Text("Manage Bellwire Pro")');
+    expect(proActiveRow).toContain('Text("Your Pro access is active")');
     expect(proActiveRow).toContain('Image(systemName: "chevron.right")');
-    expect(proActiveRow).toContain(".frame(maxWidth: .infinity, minHeight: 52");
-    expect(proActiveRow).toContain(".font(.caption2.weight(.bold))");
+    expect(proActiveRow).toContain(".foregroundStyle(BellwireTheme.mutedInk)");
+    expect(proActiveRow).toContain(".padding(.vertical, 13)");
+    expect(proActiveRow).toContain(".frame(maxWidth: .infinity, minHeight: 44");
     expect(proActiveRow).toContain('.accessibilityLabel(Text("Manage Bellwire Pro"))');
     expect(proActiveRow).toContain('.accessibilityValue(Text("Your Pro access is active"))');
-    expect(zhHans).toContain('"PRO ACTIVE" = "PRO 已生效";');
+    expect(zhHans).not.toContain('"PRO ACTIVE" = "PRO 已生效";');
+  });
+
+  it("uses one light copy action and a weaker compact code action", () => {
+    const settings = readFileSync("ios/Bellwire/Bellwire/SettingsView.swift", "utf8");
+    const zhHans = readFileSync(
+      "ios/Bellwire/Bellwire/zh-Hans.lproj/Localizable.strings",
+      "utf8",
+    );
+    const bindingSheet = settings.slice(
+      settings.indexOf("struct BindingCodeSheet"),
+      settings.indexOf("private enum CopiedBindingAction"),
+    );
+    const copyActions = bindingSheet.slice(
+      bindingSheet.indexOf("private var copyActions"),
+      bindingSheet.indexOf("private var codeCard"),
+    );
+
+    expect(bindingSheet).toContain("copyActions");
+    expect(copyActions.match(/Button \{/gu)).toHaveLength(2);
+    expect(copyActions).not.toContain("PrimaryButton(");
+    expect(copyActions).not.toContain("SecondaryButton(");
+    expect(copyActions).not.toContain("minHeight: 52");
+    expect(copyActions).toContain(".frame(maxWidth: .infinity, minHeight: 48)");
+    expect(copyActions).toContain(".frame(minHeight: 44)");
+    expect(copyActions).toContain("BellwireTheme.surface");
+    expect(copyActions).toContain(".stroke(BellwireTheme.strongSeparator, lineWidth: 1)");
+    expect(copyActions).toContain(".foregroundStyle(BellwireTheme.ink)");
+    expect(copyActions).toContain(".foregroundStyle(BellwireTheme.secondaryInk)");
+    expect(copyActions.match(/\? "checkmark" : BellwireIcons\.copy/gu)).toHaveLength(2);
+    expect(copyActions).toContain("UIPasteboard.general.string = instruction");
+    expect(copyActions).toContain("UIPasteboard.general.string = binding.code");
+    expect(copyActions.match(/BellwireHaptics\.success\(\)/gu)).toHaveLength(2);
+    expect(zhHans).toContain('"Copy instruction" = "复制接入指令";');
+    expect(zhHans).toContain('"Instruction copied" = "指令已复制";');
+    expect(zhHans).toContain('"Copy code only" = "仅复制绑定码";');
+    expect(zhHans).toContain('"Code copied" = "绑定码已复制";');
+  });
+
+  it("shows the app shell while the initial dashboard loads", () => {
+    const root = readFileSync("ios/Bellwire/Bellwire/RootView.swift", "utf8");
+    const model = readFileSync("ios/Bellwire/Bellwire/AppModel.swift", "utf8");
+    const inbox = readFileSync("ios/Bellwire/Bellwire/InboxViews.swift", "utf8");
+    const settings = readFileSync("ios/Bellwire/Bellwire/SettingsView.swift", "utf8");
+    const authenticatedContent = root.slice(
+      root.indexOf("private var authenticatedContent"),
+      root.indexOf("#if DEBUG", root.indexOf("private var authenticatedContent")),
+    );
+
+    expect(model).toContain(
+      "@Published private(set) var hasCompletedInitialDashboardLoad = false",
+    );
+    expect(model).toContain(
+      "@Published private(set) var hasLoadedDashboardSuccessfully = false",
+    );
+    expect(model).toContain(
+      "if isInitialLoad { hasCompletedInitialDashboardLoad = true }",
+    );
+    expect(model).toContain("hasLoadedDashboardSuccessfully = true");
+    expect(model).toContain(
+      "isAuthenticated && !hasCompletedInitialDashboardLoad",
+    );
+    expect(authenticatedContent).not.toContain("InitialDashboardLoadingView");
+    expect(authenticatedContent).toContain(
+      "else if model.hasCompletedInitialDashboardLoad && !model.hasLoadedDashboardSuccessfully",
+    );
+    expect(authenticatedContent.indexOf("InitialDashboardFailureView")).toBeLessThan(
+      authenticatedContent.indexOf("MainTabView()"),
+    );
+    expect(inbox).toContain("if model.isPreparingInitialDashboard");
+    expect(inbox).toContain("LoadingEventRows(count: 4)");
+    expect(root).toContain("Task { await model.loadDashboard(showLoading: true) }");
+    expect(root.match(/\.sheet\(item: \$model\.binding\)/gu)).toHaveLength(1);
+    expect(inbox).not.toContain(".sheet(item: $model.binding)");
+    expect(settings).not.toContain(".sheet(item: $model.binding)");
+  });
+
+  it("makes zero-project activation real-first and labels Hosted sample storage", () => {
+    const inbox = readFileSync("ios/Bellwire/Bellwire/InboxViews.swift", "utf8");
+    const english = readFileSync(
+      "ios/Bellwire/Bellwire/en.lproj/Localizable.strings",
+      "utf8",
+    );
+    const chinese = readFileSync(
+      "ios/Bellwire/Bellwire/zh-Hans.lproj/Localizable.strings",
+      "utf8",
+    );
+    const activation = inbox.slice(
+      inbox.indexOf("private struct FirstSessionActivationView"),
+      inbox.indexOf("private struct FirstSignalPromptView"),
+    );
+    const home = inbox.slice(
+      inbox.indexOf("struct InboxView"),
+      inbox.indexOf("private struct GreetingEntranceModifier"),
+    );
+    const projectsEmpty = inbox.slice(
+      inbox.indexOf("private struct ProjectConnectionEmptyView"),
+      inbox.indexOf("private enum ProjectFilter"),
+    );
+
+    expect(home).toContain("if model.projects.isEmpty {");
+    expect(home).toContain("firstSessionActivation");
+    expect(home).toContain("homeHeader\n                        digestStrip");
+    expect(activation).toContain('"Connect your Agent"');
+    expect(home).toContain("await model.createBinding()");
+    expect(activation).toContain('"Try a Hosted demo"');
+    expect(activation).toContain(
+      '"Sample content is stored in Bellwire Cloud. Delete the demo at any time."',
+    );
+    expect(activation).toContain("ProgressView().tint(BellwireTheme.ink)");
+    expect(inbox).not.toContain("private sample project");
+    expect(projectsEmpty).toContain('"Generate binding code"');
+    expect(projectsEmpty).toContain("action: connect");
+    expect(inbox).toContain('"Ready for the first Signal"');
+    expect(inbox).toContain("NavigationLink(value: AppRoute.project(project.id))");
+    expect(inbox).toContain(
+      '"A project is connected. Open it for connection details, then ask your Agent to send the first Signal."',
+    );
+    expect(english).toContain(
+      '"Sample content is stored in Bellwire Cloud. Delete the demo at any time."',
+    );
+    expect(chinese).toContain(
+      '"Sample content is stored in Bellwire Cloud. Delete the demo at any time." = "示例内容会存储在 Bellwire Cloud 中，你可以随时删除。";',
+    );
+  });
+
+  it("localizes the Welcome hero and linked legal footer as complete phrases", () => {
+    const onboarding = readFileSync("ios/Bellwire/Bellwire/OnboardingViews.swift", "utf8");
+    const english = readFileSync(
+      "ios/Bellwire/Bellwire/en.lproj/Localizable.strings",
+      "utf8",
+    );
+    const chinese = readFileSync(
+      "ios/Bellwire/Bellwire/zh-Hans.lproj/Localizable.strings",
+      "utf8",
+    );
+    const welcome = onboarding.slice(
+      onboarding.indexOf("struct WelcomeView"),
+      onboarding.indexOf("private struct WelcomePreviewRow"),
+    );
+    const legal =
+      "By continuing, you agree to Bellwire’s [Terms of Service](https://bellwire.app/terms) and [Privacy Policy](https://bellwire.app/privacy). Sensitive fields stay redacted until you reveal them.";
+
+    expect(welcome).toContain('Text("Signals from every project,\\non your iPhone.")');
+    expect(welcome).toContain(`Text("${legal}")`);
+    expect(welcome).not.toContain('+ Text("every project,")');
+    expect(welcome).not.toContain(".foregroundColor(");
+    expect(english).toContain(
+      '"Signals from every project,\\non your iPhone." = "Signals from every project,\\non your iPhone.";',
+    );
+    expect(chinese).toContain(
+      '"Signals from every project,\\non your iPhone." = "每个项目的 Signal，\\n尽在你的 iPhone。";',
+    );
+    expect(english).toContain(`"${legal}" = "${legal}";`);
+    expect(chinese).toContain("[服务条款](https://bellwire.app/terms)");
+    expect(chinese).toContain("[隐私政策](https://bellwire.app/privacy)");
+  });
+
+  it("makes Notification permission state-aware in Settings", () => {
+    const settings = readFileSync("ios/Bellwire/Bellwire/SettingsView.swift", "utf8");
+    const onboarding = readFileSync("ios/Bellwire/Bellwire/OnboardingViews.swift", "utf8");
+    const model = readFileSync("ios/Bellwire/Bellwire/AppModel.swift", "utf8");
+    const handler = settings.slice(
+      settings.indexOf("private func handleNotificationPermissionAction"),
+      settings.indexOf("private func openPrivacyPolicy"),
+    );
+    const notificationRow = settings.slice(
+      settings.indexOf("private struct NotificationPermissionSettingsRow"),
+      settings.indexOf("private struct ProActiveSettingsRow"),
+    );
+
+    expect(handler).toContain("case .notDetermined:");
+    expect(handler).toContain("await model.requestNotificationPermission()");
+    expect(handler).toContain("case .denied:");
+    expect(handler).toContain("openSystemSettings()");
+    expect(model).toContain("func requestNotificationPermission() async -> Bool");
+    expect(onboarding).toContain(
+      "let requestCompleted = await model.requestNotificationPermission()",
+    );
+    expect(onboarding).toContain("if requestCompleted { isComplete = true }");
+    expect(notificationRow).toContain("Button(action: action)");
+    expect(notificationRow).toContain('hint: isRequesting ? "Requesting notification permission…" : hint');
+    expect(notificationRow).toContain("ProgressView()");
+    expect(notificationRow).toContain('"Requests notification permission from iOS"');
+    expect(notificationRow).toContain('"Opens notification settings in iOS"');
+  });
+
+  it("keeps the mascot restrained, state-aware, and accessible", () => {
+    const components = readFileSync("ios/Bellwire/Bellwire/Components.swift", "utf8");
+    const onboarding = readFileSync("ios/Bellwire/Bellwire/OnboardingViews.swift", "utf8");
+    const inbox = readFileSync("ios/Bellwire/Bellwire/InboxViews.swift", "utf8");
+    const root = readFileSync("ios/Bellwire/Bellwire/RootView.swift", "utf8");
+    const settings = readFileSync("ios/Bellwire/Bellwire/SettingsView.swift", "utf8");
+
+    expect(components).toContain("Image(state.assetName)");
+    expect(components).toContain('case .listening:\n            "MascotListening"');
+    expect(components).toContain('case .connecting, .testing:\n            "MascotConnecting"');
+    expect(components).toContain('case .accepted, .awaitingApproval:\n            "MascotAccepted"');
+    expect(components).toContain('case .verified, .recovered:\n            "MascotVerified"');
+    expect(components).toContain('case .issue:\n            "MascotIssue"');
+    expect(components).not.toContain("case delivered");
+    expect(components).toContain("@Environment(\\.accessibilityReduceMotion)");
+    expect(components).toContain("@Environment(\\.scenePhase)");
+    expect(components).toContain("paused: scenePhase != .active");
+    expect(components).toContain("enum MascotFacing");
+    expect(components).toContain("gestureProgress(for: displayedState, at: seconds)");
+    expect(components).toContain("minimumInterval: 1.0 / 24.0");
+    expect(components).toContain("BellwireAnimation.mascotArrival.delay(0.08)");
+    expect(components).toContain("Ellipse()");
+    expect(components).toContain(".allowsHitTesting(false)");
+    expect(components).toContain(".accessibilityHidden(true)");
+    expect(onboarding).toContain("size: 92,\n                            facing: .left");
+    expect(onboarding).toContain("size: 64,\n                        facing: .right");
+    expect(onboarding).toContain("state: mascotState,");
+    expect(onboarding).toContain("mascotState = .listening");
+    expect(onboarding).toContain("SignalBreathingGlow(intensity: 0.86)");
+    expect(inbox).toMatch(/state: \.verified,[\s\S]{0,80}size: 58,[\s\S]{0,80}facing: \.right/u);
+    expect(inbox).toContain("state: isGeneratingBinding ? .connecting : .allQuiet");
+    expect(inbox).toContain(
+      "state: isGeneratingBinding || isCreatingHostedDemo ? .connecting : .allQuiet",
+    );
+    expect(root).not.toContain("InitialDashboardLoadingView");
+    expect(settings).toContain("state: isExpired ? .issue : .connecting");
+    expect(settings).toContain("This binding code expired. Close this sheet and generate a new one.");
+    expect(settings).toContain(".disabled(isExpired)");
+    for (const asset of [
+      "MascotSignalBird",
+      "MascotListening",
+      "MascotConnecting",
+      "MascotAccepted",
+      "MascotVerified",
+      "MascotIssue",
+    ]) {
+      expect(existsSync(
+        `ios/Bellwire/Bellwire/Assets.xcassets/${asset}.imageset/${asset}@3x.png`,
+      )).toBe(true);
+    }
+  });
+
+  it("uses the current brand mark and keeps Home and the paywall gradient-free", () => {
+    const components = readFileSync("ios/Bellwire/Bellwire/Components.swift", "utf8");
+    const inbox = readFileSync("ios/Bellwire/Bellwire/InboxViews.swift", "utf8");
+    const paywall = readFileSync("ios/Bellwire/Bellwire/PaywallView.swift", "utf8");
+    const surfaces = readFileSync("ios/Bellwire/Bellwire/SurfaceViews.swift", "utf8");
+    const digestStrip = inbox.slice(
+      inbox.indexOf("private var digestStrip"),
+      inbox.indexOf("private var liveSection"),
+    );
+    const appIcon = readFileSync(
+      "ios/Bellwire/Bellwire/Assets.xcassets/AppIcon.appiconset/BellwireIcon.png",
+    );
+    const brandLogo = readFileSync(
+      "ios/Bellwire/Bellwire/Assets.xcassets/BellwireLogo.imageset/BellwireLogo.png",
+    );
+
+    expect(components).toContain('Image("BellwireLogo")');
+    expect(components).not.toContain(".fill(BellwireTheme.brandOrange)");
+    expect(brandLogo).toEqual(appIcon);
+    expect(digestStrip).not.toContain("SignalBreathingGlow");
+    expect(paywall).not.toContain("LinearGradient");
+    expect(paywall).not.toContain("RadialGradient");
+    expect(paywall).toContain("BellwireTheme.primaryButtonBackground");
+    expect(paywall).toContain(
+      "Unlimited Surfaces per project · Live Activities · export",
+    );
+    expect(surfaces).not.toContain("LinearGradient");
   });
 });

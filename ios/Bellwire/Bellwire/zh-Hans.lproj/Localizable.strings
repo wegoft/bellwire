@@ -56,9 +56,7 @@
 "Push on" = "推送已开启";
 "Push off" = "推送已关闭";
 
-"Signals from\n" = "来自每个项目的\n";
-"every project," = "重要信号，";
-"\non your iPhone." = "\n尽在你的 iPhone。";
+"Signals from every project,\non your iPhone." = "每个项目的 Signal，\n尽在你的 iPhone。";
 "Bellwire is wired up by your AI Agent. Codex, Claude Code, and other agents connect project events to your phone — no notification code or webhook setup required." = "Bellwire 由你的 AI Agent 完成配置。Codex、Claude Code 和其他 Agent 会把项目事件连接到你的手机，无需自己编写通知代码或配置 Webhook。";
 "Payment received" = "收到付款";
 "Revenue signal · just now" = "收入动态 · 刚刚";
@@ -70,7 +68,7 @@
 "Just now" = "刚刚";
 "Signing in…" = "正在登录…";
 "Signs in using your Apple ID" = "使用你的 Apple ID 登录";
-"By continuing you agree to Bellwire’s Terms and Privacy Policy. Event payloads are encrypted in transit, and sensitive fields stay redacted until you reveal them." = "继续即表示你同意 Bellwire 的服务条款和隐私政策。事件数据在传输过程中会加密，敏感字段在你主动查看前会保持隐藏。";
+"By continuing, you agree to Bellwire’s [Terms of Service](https://bellwire.app/terms) and [Privacy Policy](https://bellwire.app/privacy). Sensitive fields stay redacted until you reveal them." = "继续即表示你同意 Bellwire 的[服务条款](https://bellwire.app/terms)和[隐私政策](https://bellwire.app/privacy)。敏感字段在你主动查看前会保持隐藏。";
 
 "Step 2 of 3" = "第 2 步，共 3 步";
 "Let Bellwire ring\nwhen it matters." = "让 Bellwire 只在\n重要时刻提醒你。";
@@ -96,7 +94,6 @@
 "No live surfaces" = "暂无实时卡片";
 "Live progress, metrics, and alerts appear here when an Agent publishes them." = "Agent 发布进度、指标或告警后，会显示在这里。";
 "No events yet" = "暂无事件";
-"Generate a binding code in Settings, then ask your Agent to connect the first project." = "前往设置生成绑定码，然后让你的 Agent 接入第一个项目。";
 "Open unread events" = "打开未读事件";
 "Open events" = "打开事件";
 "No unread events" = "没有未读事件";
@@ -105,7 +102,6 @@
 "Marks every unread event as read" = "将所有未读事件标记为已读";
 "Event filter" = "事件筛选";
 "No matching events" = "没有符合条件的事件";
-"Events appear after a connected project sends its first signal." = "已连接的项目发送第一个信号后，事件会显示在这里。";
 "Choose another filter to view the rest of your event history." = "选择其他筛选条件查看剩余事件。";
 
 "Project filter" = "项目筛选";
@@ -113,7 +109,6 @@
 "Unread" = "未读";
 "No projects connected" = "尚未连接项目";
 "No matching projects" = "没有符合条件的项目";
-"Generate a binding code in Settings and ask your Agent to connect a project." = "前往设置生成绑定码，然后让你的 Agent 连接项目。";
 "Choose a different filter to see your connected projects." = "选择其他筛选条件查看已连接项目。";
 "Add a project" = "添加项目";
 "Ask your Agent" = "让你的 Agent 接入";
@@ -194,10 +189,31 @@
 "This permanently deletes your account and all Bellwire data. This action cannot be undone." = "这会永久删除你的账户和所有 Bellwire 数据，且无法撤销。";
 "Unable to delete account. Please try again." = "无法删除账户，请重试。";
 "This permanently deletes your projects, events, devices, Agent connections, and account. This action cannot be undone." = "这会永久删除你的项目、事件、设备、Agent 连接和账户，且无法撤销。";
-"Explore Bellwire" = "体验 Bellwire";
-"Create a private sample project with a live card and event. You can delete it at any time." = "创建一个仅属于你的示例项目，包含实时卡片和事件，可随时删除。";
-"Create demo project" = "创建示例项目";
-"Creating demo…" = "正在创建示例…";
+"Connect your first project." = "连接你的第一个项目。";
+"Your Agent can wire real project Signals to this iPhone with a one-time binding code." = "你的 Agent 可以通过一次性绑定码，把真实项目的 Signal 接入这台 iPhone。";
+"Connect your Agent" = "连接你的 Agent";
+"Or explore with sample data" = "或先体验示例数据";
+"Creates one sample project, Signal, and live Surface." = "创建一个示例项目、一条 Signal 和一张实时 Surface。";
+"Try a Hosted demo" = "试用 Hosted 示例";
+"Creating Hosted demo…" = "正在创建 Hosted 示例…";
+"Creates a Hosted sample in Bellwire Cloud" = "在 Bellwire Cloud 中创建 Hosted 示例";
+"Sample content is stored in Bellwire Cloud. Delete the demo at any time." = "示例内容会存储在 Bellwire Cloud 中，你可以随时删除。";
+"Connect your first project" = "连接你的第一个项目";
+"Generate a one-time binding code here, then give it to the Agent working in your project." = "在这里生成一次性绑定码，然后交给正在处理该项目的 Agent。";
+"Ready for the first Signal" = "等待第一条 Signal";
+"A project is connected. Open it for connection details, then ask your Agent to send the first Signal." = "项目已连接。打开项目查看连接详情，然后让你的 Agent 发送第一条 Signal。";
+"Open project" = "打开项目";
+"Opens connection details for this project" = "打开此项目的连接详情";
+"Connect a project first. Its Signals will appear here." = "请先连接项目，项目的 Signal 会显示在这里。";
+"A project is connected. Ask your Agent to send the first Signal; it will appear here." = "项目已连接。让你的 Agent 发送第一条 Signal，它会显示在这里。";
+"Loading Bellwire…" = "正在加载 Bellwire…";
+"Bellwire couldn’t load" = "Bellwire 加载失败";
+"Check your connection and try again." = "请检查网络连接后重试。";
+"Trying again…" = "正在重试…";
+"Requesting notification permission…" = "正在请求通知权限…";
+"Requesting notification permission" = "正在请求通知权限";
+"Requests notification permission from iOS" = "向 iOS 请求通知权限";
+"Opens notification settings in iOS" = "在 iOS 设置中打开通知设置";
 "Disconnect Agent?" = "断开 Agent 连接？";
 "Disconnect" = "断开连接";
 "“%@” will immediately lose access to Bellwire. Your projects and data will remain." = "“%@” 将立即失去 Bellwire 访问权限。你的项目和数据会保留。";
@@ -219,7 +235,7 @@
 "50,000 Signals every month" = "每月 50,000 条信号";
 "Keep 3 iPhones in sync" = "最多同步 3 台设备";
 "90 days of Hosted history" = "保留 90 天云端托管历史";
-"10 custom Surfaces per project" = "每个项目最多 10 张自定义卡片";
+"Unlimited custom Surfaces per project" = "每个项目自定义卡片数不限";
 "Widgets, Live Activities, export, and diagnostics" = "桌面小组件、实时活动、导出与诊断";
 "Yearly" = "年度";
 "Monthly" = "月度";
@@ -276,6 +292,7 @@
 "Approve" = "批准";
 "Reject" = "拒绝";
 "Surfaces" = "卡片";
+"Unlimited" = "不限";
 "Choose what stays active" = "选择要保留活跃的资源";
 "Pause projects and remove devices until you are within the Free limits. Bellwire will never delete them just because Pro ended." = "请暂停部分项目并移除设备，直到符合 Free 套餐限制。Pro 结束后，Bellwire 不会因此删除这些资源。";
 "Automatic organization %@" = "将于 %@ 自动整理";
@@ -317,7 +334,7 @@
 "Checking the system permission" = "正在检查系统权限";
 "Permission has not been requested" = "尚未请求通知权限";
 "Enable notifications in iOS Settings" = "请在 iOS 设置中开启通知";
-"Alerts can be delivered to this device" = "通知可以推送到此设备";
+"iOS notification permission is enabled" = "iOS 通知权限已开启";
 
 "Binding code" = "绑定码";
 "Hand this to\nyour Agent." = "把它交给\n你的 Agent。";
@@ -329,13 +346,14 @@
 "Instruction copied" = "指令已复制";
 "Copy code only" = "仅复制绑定码";
 "Code copied" = "绑定码已复制";
+"Expired" = "已过期";
+"This binding code expired. Close this sheet and generate a new one." = "此绑定码已过期。请关闭此页面并重新生成。";
 "Instruct your Agent" = "让 Agent 接入";
 "1. Generate a binding code.\n2. Open the project with your Agent.\n3. Say: “Connect Bellwire with code …”\n4. Let the Agent configure the supported event and live-surface calls." = "1. 生成一个绑定码。\n2. 使用 Agent 打开项目。\n3. 告诉它：‘使用绑定码……连接 Bellwire。’\n4. 让 Agent 配置需要的事件和实时卡片。";
 
 "Account & plan" = "账户与套餐";
 "Monthly Signals" = "每月 Signal";
 "Manage Bellwire Pro" = "管理 Bellwire Pro";
-"PRO ACTIVE" = "PRO 已生效";
 "Upgrade to Bellwire Pro" = "升级到 Bellwire Pro";
 "Connect" = "连接";
 "Connect a project" = "连接项目";
@@ -344,7 +362,7 @@
 "Something went wrong" = "出现问题";
 "20 projects · 50,000 monthly Signals" = "20 个项目 · 每月 50,000 个 Signal";
 "90-day history · 3 iPhones in sync" = "90 天历史 · 同步 3 台 iPhone";
-"10 Surfaces · Live Activities · export" = "10 张卡片 · 实时活动 · 导出";
+"Unlimited Surfaces per project · Live Activities · export" = "每个项目卡片数不限 · 实时活动 · 导出";
 
 "Connection issue" = "连接异常";
 "Dismiss error" = "关闭错误提示";

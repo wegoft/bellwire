@@ -12,8 +12,13 @@ build. It does not require a Cloudflare, Supabase, or Apple Developer account.
 4. Open the Event detail to inspect delivery state. Provider acceptance and
    visible device presentation are separate checks.
 
-The demo is idempotent for an account. Running it again reuses the existing
-demo project rather than creating duplicates.
+The demo is an explicitly **Hosted** sample. Bellwire Cloud stores its sample
+Event, Surface, and delivery state so the complete product loop works without
+an external Agent. It does not claim Private delivery. The demo is idempotent
+for an account: running it again reuses the existing project, Event, and
+Surface instead of creating duplicates. If the demo is created before the
+iPhone finishes APNs registration, Bellwire queues the existing sample Event
+once the enabled device registers.
 
 ## Connect an Agent
 

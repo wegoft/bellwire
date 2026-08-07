@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
     @State private var isGeneratingBinding = false
+    @State private var isRequestingNotificationPermission = false
     @State private var showsAgentInstructions = false
     @State private var showsSignOutConfirmation = false
     @State private var showsDeleteAccountPage = false
@@ -66,11 +67,6 @@ struct SettingsView: View {
             }
             .task {
                 await model.refreshPendingModeRequests()
-            }
-            .sheet(item: $model.binding) { binding in
-                BindingCodeSheet(binding: binding)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showsAgentInstructions) {
                 AgentInstructionSheet()
@@ -528,9 +524,15 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func planLimitMetric(_ limit: Int, _ title: LocalizedStringKey) -> some View {
+    private func planLimitMetric(_ limit: Int?, _ title: LocalizedStringKey) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("\(limit)/project")
+            Group {
+                if let limit {
+                    Text("\(limit)/project")
+                } else {
+                    Text("Unlimited")
+                }
+            }
                 .font(BellwireTypography.technicalStrong)
                 .foregroundStyle(BellwireTheme.ink)
             Text(title)
@@ -672,17 +674,13 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: BellwireSpacing.small) {
             SectionHeaderView(title: "Notifications")
             VStack(spacing: 0) {
-                SettingsRowView(
-                    icon: BellwireIcons.notification,
-                    title: "Notification permission",
-                    hint: notificationHint
-                ) {
-                    StatusBadgeView(
-                        text: model.notificationPermission.label,
-                        color: notificationColor,
-                        showsDot: model.notificationPermission == .authorized
-                    )
-                }
+                NotificationPermissionSettingsRow(
+                    permission: model.notificationPermission,
+                    hint: notificationHint,
+                    color: notificationColor,
+                    isRequesting: isRequestingNotificationPermission,
+                    action: handleNotificationPermissionAction
+                )
                 Divider().overlay(BellwireTheme.separator).padding(.leading, 44)
                 SettingsRowView(
                     icon: "hand.raised.fill",
@@ -953,7 +951,7 @@ struct SettingsView: View {
         case .unknown: return "Checking the system permission"
         case .notDetermined: return "Permission has not been requested"
         case .denied: return "Enable notifications in iOS Settings"
-        case .authorized: return "Alerts can be delivered to this device"
+        case .authorized: return "iOS notification permission is enabled"
         }
     }
 
@@ -1001,6 +999,22 @@ struct SettingsView: View {
         UIApplication.shared.open(url)
     }
 
+    private func handleNotificationPermissionAction() {
+        switch model.notificationPermission {
+        case .notDetermined:
+            guard !isRequestingNotificationPermission else { return }
+            isRequestingNotificationPermission = true
+            Task {
+                await model.requestNotificationPermission()
+                isRequestingNotificationPermission = false
+            }
+        case .denied:
+            openSystemSettings()
+        case .unknown, .authorized:
+            break
+        }
+    }
+
     private func openPrivacyPolicy() {
         guard let url = URL(string: "https://bellwire.app/privacy") else { return }
         openURL(url)
@@ -1017,67 +1031,100 @@ struct SettingsView: View {
     }
 }
 
+private struct NotificationPermissionSettingsRow: View {
+    let permission: NotificationPermissionState
+    let hint: String
+    let color: Color
+    let isRequesting: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Group {
+            switch permission {
+            case .notDetermined, .denied:
+                Button(action: action) {
+                    rowContent
+                }
+                .buttonStyle(PressableButtonStyle())
+                .disabled(isRequesting)
+                .accessibilityHint(Text(LocalizedStringKey(actionHint)))
+            case .unknown, .authorized:
+                rowContent
+            }
+        }
+    }
+
+    private var rowContent: some View {
+        SettingsRowView(
+            icon: BellwireIcons.notification,
+            title: "Notification permission",
+            hint: isRequesting ? "Requesting notification permission…" : hint
+        ) {
+            if isRequesting {
+                ProgressView()
+                    .tint(BellwireTheme.accent)
+                    .accessibilityLabel("Requesting notification permission")
+            } else {
+                HStack(spacing: BellwireSpacing.compact) {
+                    StatusBadgeView(
+                        text: permission.label,
+                        color: color,
+                        showsDot: permission == .authorized
+                    )
+                    if permission == .notDetermined || permission == .denied {
+                        Image(systemName: permission == .denied ? "arrow.up.right" : "chevron.right")
+                            .font(.caption)
+                            .bold()
+                            .foregroundStyle(BellwireTheme.mutedInk)
+                    }
+                }
+            }
+        }
+    }
+
+    private var actionHint: String {
+        switch permission {
+        case .notDetermined:
+            "Requests notification permission from iOS"
+        case .denied:
+            "Opens notification settings in iOS"
+        case .unknown, .authorized:
+            ""
+        }
+    }
+}
+
 private struct ProActiveSettingsRow: View {
     var body: some View {
         HStack(spacing: BellwireSpacing.small) {
-            ZStack {
-                RoundedRectangle(cornerRadius: BellwireRadius.small, style: .continuous)
-                    .fill(BellwireTheme.surface)
-                RoundedRectangle(cornerRadius: BellwireRadius.small, style: .continuous)
-                    .stroke(BellwireTheme.proActiveBorder, lineWidth: 1)
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.system(.body, design: .default, weight: .semibold))
-                    .foregroundStyle(BellwireTheme.proActiveInk)
-            }
-            .frame(width: 40, height: 40)
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(BellwireTheme.proActiveInk)
+                .frame(width: 32, height: 32)
 
-            VStack(alignment: .leading, spacing: 3) {
-                activeBadge
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Manage Bellwire Pro")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(BellwireTheme.ink)
                 Text("Your Pro access is active")
                     .font(.caption)
-                    .foregroundStyle(BellwireTheme.secondaryInk)
+                    .foregroundStyle(BellwireTheme.mutedInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Image(systemName: "chevron.right")
-                .font(.body.weight(.semibold))
-                .foregroundStyle(BellwireTheme.proActiveInk)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(BellwireTheme.mutedInk)
                 .frame(width: 24)
                 .frame(minHeight: 44)
         }
-        .padding(.horizontal, BellwireSpacing.small)
-        .padding(.vertical, BellwireSpacing.compact)
-        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: BellwireRadius.control, style: .continuous)
-                .fill(BellwireTheme.proActiveSurface)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: BellwireRadius.control, style: .continuous)
-                .stroke(BellwireTheme.proActiveBorder, lineWidth: 1)
-        }
-        .padding(.vertical, BellwireSpacing.compact)
+        .padding(.vertical, 13)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Manage Bellwire Pro"))
         .accessibilityValue(Text("Your Pro access is active"))
-    }
-
-    private var activeBadge: some View {
-        Text("PRO ACTIVE")
-            .font(.caption2.weight(.bold))
-            .tracking(0.7)
-            .foregroundStyle(BellwireTheme.proActiveInk)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(BellwireTheme.accent.opacity(0.12), in: Capsule())
-            .overlay {
-                Capsule().stroke(BellwireTheme.proActiveBorder, lineWidth: 1)
-            }
     }
 }
 
@@ -1378,12 +1425,17 @@ struct BindingCodeSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var copiedAction: CopiedBindingAction?
+    @State private var now = Date.now
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: BellwireSpacing.section) {
                 HStack {
-                    BellwireMark(size: 42)
+                    MascotView(
+                        state: isExpired ? .issue : .connecting,
+                        size: 54,
+                        facing: .right
+                    )
                     Spacer()
                     Button("Done") { dismiss() }
                         .font(.subheadline.weight(.semibold))
@@ -1405,31 +1457,89 @@ struct BindingCodeSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                if isExpired {
+                    Label(
+                        "This binding code expired. Close this sheet and generate a new one.",
+                        systemImage: "clock.badge.exclamationmark"
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(BellwireTheme.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(BellwireSpacing.standard)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        BellwireTheme.danger.opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: BellwireRadius.card, style: .continuous)
+                    )
+                }
+
                 codeCard
                 instructionCard
-
-                VStack(spacing: BellwireSpacing.small) {
-                    PrimaryButton(
-                        title: copiedAction == .instruction ? "Instruction copied" : "Copy instruction",
-                        systemImage: copiedAction == .instruction ? "checkmark" : BellwireIcons.copy
-                    ) {
-                        UIPasteboard.general.string = instruction
-                        copiedAction = .instruction
-                        BellwireHaptics.success()
-                    }
-                    SecondaryButton(
-                        title: copiedAction == .code ? "Code copied" : "Copy code only",
-                        systemImage: copiedAction == .code ? "checkmark" : BellwireIcons.copy
-                    ) {
-                        UIPasteboard.general.string = binding.code
-                        copiedAction = .code
-                        BellwireHaptics.success()
-                    }
-                }
+                copyActions
             }
             .padding(BellwireSpacing.page)
         }
         .bellwirePageBackground()
+        .task {
+            while !Task.isCancelled {
+                now = .now
+                if isExpired { break }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    private var copyActions: some View {
+        VStack(spacing: BellwireSpacing.micro) {
+            Button {
+                UIPasteboard.general.string = instruction
+                copiedAction = .instruction
+                BellwireHaptics.success()
+            } label: {
+                HStack(spacing: BellwireSpacing.compact) {
+                    Image(systemName: copiedAction == .instruction ? "checkmark" : BellwireIcons.copy)
+                    Text(LocalizedStringKey(
+                        copiedAction == .instruction ? "Instruction copied" : "Copy instruction"
+                    ))
+                }
+                .font(.body.weight(.semibold))
+                .foregroundStyle(BellwireTheme.ink)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(
+                    BellwireTheme.surface,
+                    in: RoundedRectangle(cornerRadius: BellwireRadius.control, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: BellwireRadius.control, style: .continuous)
+                        .stroke(BellwireTheme.strongSeparator, lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableButtonStyle())
+            .disabled(isExpired)
+
+            Button {
+                UIPasteboard.general.string = binding.code
+                copiedAction = .code
+                BellwireHaptics.success()
+            } label: {
+                HStack(spacing: BellwireSpacing.compact) {
+                    Image(systemName: copiedAction == .code ? "checkmark" : BellwireIcons.copy)
+                    Text(LocalizedStringKey(
+                        copiedAction == .code ? "Code copied" : "Copy code only"
+                    ))
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(BellwireTheme.secondaryInk)
+                .frame(minHeight: 44)
+                .padding(.horizontal, BellwireSpacing.small)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableButtonStyle())
+            .disabled(isExpired)
+        }
+        .frame(maxWidth: .infinity)
+        .opacity(isExpired ? 0.48 : 1)
     }
 
     private var codeCard: some View {
@@ -1439,14 +1549,20 @@ struct BindingCodeSheet: View {
                     .bellwireTechnicalLabel()
                 Spacer()
                 if let expiryDate {
-                    Text(BellwireDateFormatting.relative(
-                        expiryDate,
-                        locale: locale,
-                        clampsNearNow: false
-                    ))
+                    Group {
+                        if isExpired {
+                            Text("Expired")
+                        } else {
+                            Text(BellwireDateFormatting.relative(
+                            expiryDate,
+                            locale: locale,
+                            clampsNearNow: false
+                            ))
+                        }
+                    }
                         .font(BellwireTypography.technicalStrong)
                         .monospacedDigit()
-                        .foregroundStyle(BellwireTheme.accent)
+                        .foregroundStyle(isExpired ? BellwireTheme.danger : BellwireTheme.accent)
                 }
             }
             ViewThatFits(in: .horizontal) {
@@ -1513,6 +1629,11 @@ struct BindingCodeSheet: View {
 
     private var expiryDate: Date? {
         ISO8601DateFormatter.bellwireDate(from: binding.expiresAt)
+    }
+
+    private var isExpired: Bool {
+        guard let expiryDate else { return false }
+        return expiryDate <= now
     }
 }
 

@@ -84,13 +84,7 @@ private struct ProgressSurfaceCard: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(BellwireTheme.tertiarySurface)
                     Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [BellwireTheme.live, BellwireTheme.success],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
+                        .fill(BellwireTheme.live)
                         .frame(width: proxy.size.width * min(max(fraction, 0), 1))
                 }
             }

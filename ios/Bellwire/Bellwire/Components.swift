@@ -17,20 +17,381 @@ struct BellwireMark: View {
     var size: CGFloat = 54
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                .fill(BellwireTheme.brandOrange)
-            Image(systemName: BellwireIcons.notification)
-                .font(.system(size: size * 0.39, weight: .semibold))
-                .foregroundStyle(.white)
-                .offset(y: -0.5)
+        Image("BellwireLogo")
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.23, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: size * 0.23, style: .continuous)
+                    .stroke(BellwireTheme.separator.opacity(0.72), lineWidth: 1)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+enum MascotState: Hashable {
+    case idle
+    case listening
+    case allQuiet
+    case connecting
+    case testing
+    case accepted
+    case awaitingApproval
+    case verified
+    case issue
+    case recovered
+
+    fileprivate var assetName: String {
+        switch self {
+        case .idle, .allQuiet:
+            "MascotSignalBird"
+        case .listening:
+            "MascotListening"
+        case .connecting, .testing:
+            "MascotConnecting"
+        case .accepted, .awaitingApproval:
+            "MascotAccepted"
+        case .verified, .recovered:
+            "MascotVerified"
+        case .issue:
+            "MascotIssue"
+        }
+    }
+
+    fileprivate var motion: MascotMotionProfile {
+        switch self {
+        case .idle:
+            MascotMotionProfile(
+                restingTilt: 0,
+                sway: 0.18,
+                lift: 0.42,
+                breath: 0.006,
+                gestureDelay: 10.5,
+                gesturePeriod: 17.0,
+                gestureDuration: 0.9,
+                gestureTilt: 0.7,
+                gestureLift: 0.35,
+                gestureReach: 0,
+                repeatsGesture: false
+            )
+        case .listening:
+            MascotMotionProfile(
+                restingTilt: -0.45,
+                sway: 0.28,
+                lift: 0.52,
+                breath: 0.007,
+                gestureDelay: 3.8,
+                gesturePeriod: 9.6,
+                gestureDuration: 1.1,
+                gestureTilt: -1.65,
+                gestureLift: 0.8,
+                gestureReach: 0.45,
+                repeatsGesture: true
+            )
+        case .allQuiet:
+            MascotMotionProfile(
+                restingTilt: 0.25,
+                sway: 0.14,
+                lift: 0.34,
+                breath: 0.005,
+                gestureDelay: 9.0,
+                gesturePeriod: 17.8,
+                gestureDuration: 0.85,
+                gestureTilt: 0.55,
+                gestureLift: 0.3,
+                gestureReach: 0,
+                repeatsGesture: true
+            )
+        case .connecting, .testing:
+            MascotMotionProfile(
+                restingTilt: 0.65,
+                sway: 0.22,
+                lift: 0.55,
+                breath: 0.008,
+                gestureDelay: 1.8,
+                gesturePeriod: 4.8,
+                gestureDuration: 0.9,
+                gestureTilt: -1.25,
+                gestureLift: 0.7,
+                gestureReach: 1.35,
+                repeatsGesture: true
+            )
+        case .accepted, .awaitingApproval:
+            MascotMotionProfile(
+                restingTilt: 0,
+                sway: 0.12,
+                lift: 0.3,
+                breath: 0.004,
+                gestureDelay: 1.2,
+                gesturePeriod: 30,
+                gestureDuration: 0.7,
+                gestureTilt: -0.55,
+                gestureLift: 0.2,
+                gestureReach: 0,
+                repeatsGesture: false
+            )
+        case .verified, .recovered:
+            MascotMotionProfile(
+                restingTilt: -0.2,
+                sway: 0.1,
+                lift: 0.3,
+                breath: 0.004,
+                gestureDelay: 0.15,
+                gesturePeriod: 30,
+                gestureDuration: 0.9,
+                gestureTilt: 1.2,
+                gestureLift: 0.45,
+                gestureReach: 0,
+                repeatsGesture: false
+            )
+        case .issue:
+            MascotMotionProfile(
+                restingTilt: 0.35,
+                sway: 0.08,
+                lift: 0.22,
+                breath: 0.003,
+                gestureDelay: 0,
+                gesturePeriod: 30,
+                gestureDuration: 0,
+                gestureTilt: 0,
+                gestureLift: 0,
+                gestureReach: 0,
+                repeatsGesture: false
+            )
+        }
+    }
+}
+
+enum MascotFacing {
+    case left
+    case right
+
+    fileprivate var horizontalScale: CGFloat {
+        self == .right ? 1 : -1
+    }
+
+    fileprivate var direction: Double {
+        self == .right ? 1 : -1
+    }
+}
+
+private struct MascotMotionProfile {
+    let restingTilt: Double
+    let sway: Double
+    let lift: Double
+    let breath: Double
+    let gestureDelay: Double
+    let gesturePeriod: Double
+    let gestureDuration: Double
+    let gestureTilt: Double
+    let gestureLift: Double
+    let gestureReach: Double
+    let repeatsGesture: Bool
+}
+
+struct MascotView: View {
+    let state: MascotState
+    var size: CGFloat
+    var facing: MascotFacing = .right
+    var animates = true
+    var enters = true
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var hasEntered = false
+    @State private var motionStart = Date()
+    @State private var displayedState: MascotState
+
+    init(
+        state: MascotState,
+        size: CGFloat,
+        facing: MascotFacing = .right,
+        animates: Bool = true,
+        enters: Bool = true
+    ) {
+        self.state = state
+        self.size = size
+        self.facing = facing
+        self.animates = animates
+        self.enters = enters
+        _displayedState = State(initialValue: state)
+    }
+
+    var body: some View {
+        Group {
+            if reduceMotion || !animates {
+                mascot(state: displayedState, breath: 0, drift: 0, gesture: 0)
+            } else {
+                TimelineView(
+                    .animation(
+                        minimumInterval: 1.0 / 24.0,
+                        paused: scenePhase != .active
+                    )
+                ) { timeline in
+                    let seconds = max(0, timeline.date.timeIntervalSince(motionStart))
+                    let breath = sin(seconds * .pi * 2 / 6.2)
+                    let drift = sin(seconds * .pi * 2 / 11.7) * 0.68
+                        + sin(seconds * .pi * 2 / 17.3 + 0.9) * 0.32
+                    mascot(
+                        state: displayedState,
+                        breath: breath,
+                        drift: drift,
+                        gesture: gestureProgress(for: displayedState, at: seconds)
+                    )
+                }
+            }
         }
         .frame(width: size, height: size)
-        .overlay {
-            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                .stroke(Color.black.opacity(0.1), lineWidth: 1)
-        }
+        .opacity(enters && !reduceMotion ? (hasEntered ? 1 : 0) : 1)
+        .scaleEffect(enters && !reduceMotion ? (hasEntered ? 1 : 0.96) : 1, anchor: .bottom)
+        .offset(y: enters && !reduceMotion ? (hasEntered ? 0 : 6) : 0)
+        .allowsHitTesting(false)
         .accessibilityHidden(true)
+        .onAppear {
+            motionStart = Date()
+            guard enters, !reduceMotion else {
+                hasEntered = true
+                return
+            }
+            withAnimation(BellwireAnimation.mascotArrival.delay(0.08)) {
+                hasEntered = true
+            }
+        }
+        .onChange(of: reduceMotion) { _, isReduced in
+            if isReduced {
+                hasEntered = true
+            }
+        }
+        .onChange(of: state) { _, newState in
+            motionStart = Date()
+            if reduceMotion {
+                displayedState = newState
+            } else {
+                withAnimation(BellwireAnimation.standard) {
+                    displayedState = newState
+                }
+            }
+        }
+    }
+
+    private func mascot(
+        state: MascotState,
+        breath: Double,
+        drift: Double,
+        gesture: Double
+    ) -> some View {
+        let motion = state.motion
+        let direction = facing.direction
+        let verticalLift = -breath * motion.lift - gesture * motion.gestureLift
+        let horizontalReach = gesture * motion.gestureReach * direction
+
+        return ZStack {
+            Ellipse()
+                .fill(Color.black.opacity(0.16))
+                .frame(width: size * 0.34, height: max(2, size * 0.055))
+                .blur(radius: max(1, size * 0.025))
+                .scaleEffect(x: 1 - breath * 0.035, y: 1)
+                .opacity(0.62 - breath * 0.08 - gesture * 0.06)
+                .offset(
+                    x: size * 0.045 * facing.horizontalScale,
+                    y: size * 0.355
+                )
+
+            Image(state.assetName)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .scaleEffect(
+                    x: facing.horizontalScale * (1 + breath * 0.0015),
+                    y: 1 + breath * motion.breath - gesture * 0.0015,
+                    anchor: .bottom
+                )
+                .rotationEffect(
+                    .degrees(
+                        (motion.restingTilt + drift * motion.sway + gesture * motion.gestureTilt)
+                            * direction
+                    ),
+                    anchor: .bottom
+                )
+                .offset(
+                    x: CGFloat(horizontalReach),
+                    y: CGFloat(verticalLift)
+                )
+                .id(state)
+                .transition(.opacity.combined(with: .scale(scale: 0.985, anchor: .bottom)))
+        }
+        .animation(BellwireAnimation.standard, value: state)
+    }
+
+    private func gestureProgress(for state: MascotState, at seconds: Double) -> Double {
+        let motion = state.motion
+        guard motion.gestureDuration > 0 else { return 0 }
+        guard seconds >= motion.gestureDelay else { return 0 }
+        let elapsed = seconds - motion.gestureDelay
+        if !motion.repeatsGesture, elapsed >= motion.gestureDuration { return 0 }
+        let cycle = motion.repeatsGesture
+            ? elapsed.truncatingRemainder(dividingBy: motion.gesturePeriod)
+            : elapsed
+        guard cycle < motion.gestureDuration else { return 0 }
+        return sin((cycle / motion.gestureDuration) * .pi)
+    }
+}
+
+struct SignalBreathingGlow: View {
+    var intensity = 1.0
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        Group {
+            if reduceMotion {
+                glow(pulse: 0, drift: 0)
+            } else {
+                TimelineView(
+                    .animation(
+                        minimumInterval: 1.0 / 24.0,
+                        paused: scenePhase != .active
+                    )
+                ) { timeline in
+                    let seconds = timeline.date.timeIntervalSinceReferenceDate
+                    let pulse = sin(seconds * .pi * 2 / 7.8) * 0.72
+                        + sin(seconds * .pi * 2 / 12.6 + 1.4) * 0.28
+                    let drift = sin(seconds * .pi * 2 / 18.0 + 0.6)
+                    glow(pulse: pulse, drift: drift)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func glow(pulse: Double, drift: Double) -> some View {
+        ZStack {
+            BellwireTheme.amberGlow
+                .opacity((0.66 + pulse * 0.1) * intensity)
+                .scaleEffect(
+                    1 + CGFloat(pulse) * 0.018,
+                    anchor: .topTrailing
+                )
+                .offset(
+                    x: CGFloat(drift) * 3.5,
+                    y: -CGFloat(pulse) * 2
+                )
+
+            BellwireTheme.amberGlowLeading
+                .opacity((0.5 - pulse * 0.07) * intensity)
+                .scaleEffect(
+                    1 - CGFloat(pulse) * 0.012,
+                    anchor: .bottomLeading
+                )
+                .offset(
+                    x: -CGFloat(drift) * 2.5,
+                    y: CGFloat(pulse) * 1.5
+                )
+        }
     }
 }
 
@@ -326,14 +687,25 @@ struct EmptyState: View {
     let icon: String
     let title: String
     let message: String
+    var mascotState: MascotState? = nil
+    var mascotFacing: MascotFacing = .right
 
     var body: some View {
         VStack(spacing: BellwireSpacing.small) {
-            Image(systemName: icon)
-                .font(.system(size: 26, weight: .medium))
-                .foregroundStyle(BellwireTheme.accent)
-                .frame(width: 56, height: 56)
-                .background(BellwireTheme.accent.opacity(0.11), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+            if let mascotState {
+                MascotView(
+                    state: mascotState,
+                    size: 68,
+                    facing: mascotFacing
+                )
+            } else {
+                Image(systemName: icon)
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(BellwireTheme.accent)
+                    .frame(width: 56, height: 56)
+                    .background(BellwireTheme.accent.opacity(0.11), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .accessibilityHidden(true)
+            }
             Text(LocalizedStringKey(title))
                 .font(.headline)
                 .foregroundStyle(BellwireTheme.ink)
@@ -543,3 +915,32 @@ struct DeliveryTimelineView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Mascot states") {
+    ScrollView {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 118))], spacing: 24) {
+            ForEach(
+                [
+                    MascotState.allQuiet,
+                    .listening,
+                    .connecting,
+                    .accepted,
+                    .verified,
+                    .issue
+                ],
+                id: \.self
+            ) { state in
+                VStack(spacing: 8) {
+                    MascotView(state: state, size: 92, animates: false, enters: false)
+                    Text(String(describing: state))
+                        .font(.caption)
+                        .foregroundStyle(BellwireTheme.secondaryInk)
+                }
+            }
+        }
+        .padding()
+    }
+    .background(BellwireTheme.background)
+}
+#endif

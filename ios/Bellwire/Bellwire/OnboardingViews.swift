@@ -5,30 +5,26 @@ import SwiftUI
 struct WelcomeView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var mascotState: MascotState = .idle
 
     var body: some View {
         ZStack {
             BellwireTheme.background.ignoresSafeArea()
-            BellwireTheme.amberGlow
+            SignalBreathingGlow()
                 .ignoresSafeArea()
-                .accessibilityHidden(true)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: BellwireSpacing.compact) {
-                        Image(systemName: BellwireIcons.notification)
-                            .foregroundStyle(BellwireTheme.accent)
                         Text("Bellwire")
                             .bellwireTechnicalLabel()
                         Spacer()
                     }
 
                     VStack(alignment: .leading, spacing: BellwireSpacing.roomy) {
-                        (Text("Signals from ")
-                            + Text("every project,").foregroundColor(BellwireTheme.accent)
-                            + Text(" on your iPhone."))
+                        Text("Signals from every project,\non your iPhone.")
                             .font(BellwireTypography.hero)
-                            .fontWeight(.regular)
                             .tracking(-0.8)
                             .foregroundStyle(BellwireTheme.ink)
                             .fixedSize(horizontal: false, vertical: true)
@@ -67,7 +63,15 @@ struct WelcomeView: View {
                     }
                     .padding(.horizontal, BellwireSpacing.standard)
                     .bellwireListGroup()
-                    .padding(.top, 34)
+                    .overlay(alignment: .topTrailing) {
+                        MascotView(
+                            state: mascotState,
+                            size: 92,
+                            facing: .left
+                        )
+                            .offset(x: -12, y: -78)
+                    }
+                    .padding(.top, 58)
 
                     if let error = model.errorMessage {
                         ErrorBanner(message: error) { model.errorMessage = nil }
@@ -93,12 +97,8 @@ struct WelcomeView: View {
                                 .foregroundStyle(BellwireTheme.mutedInk)
                         }
 
-                        (Text("By continuing you agree to Bellwire’s ")
-                            + Text("[Terms](https://bellwire.app/terms)")
-                            + Text(" and ")
-                            + Text("[Privacy Policy](https://bellwire.app/privacy)")
-                            + Text(". Sensitive fields stay redacted until you reveal them."))
-                            .font(.caption2)
+                        Text("By continuing, you agree to Bellwire’s [Terms of Service](https://bellwire.app/terms) and [Privacy Policy](https://bellwire.app/privacy). Sensitive fields stay redacted until you reveal them.")
+                            .font(.footnote)
                             .foregroundStyle(BellwireTheme.mutedInk)
                             .multilineTextAlignment(.center)
                             .lineSpacing(2)
@@ -111,6 +111,14 @@ struct WelcomeView: View {
                 .padding(.top, BellwireSpacing.roomy)
             }
             .scrollIndicators(.hidden)
+        }
+        .task {
+            guard mascotState == .idle else { return }
+            if !reduceMotion {
+                try? await Task.sleep(for: .milliseconds(550))
+            }
+            guard !Task.isCancelled else { return }
+            mascotState = .listening
         }
     }
 }
@@ -160,17 +168,17 @@ struct NotificationOnboardingView: View {
     var body: some View {
         ZStack {
             BellwireTheme.background.ignoresSafeArea()
-            BellwireTheme.amberGlow.ignoresSafeArea().accessibilityHidden(true)
+            SignalBreathingGlow(intensity: 0.86).ignoresSafeArea()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    Image(systemName: "bell.badge.waveform.fill")
-                        .font(.system(size: 26, weight: .medium))
-                        .foregroundStyle(BellwireTheme.accent)
-                        .frame(width: 56, height: 56)
-                        .background(BellwireTheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-                        .padding(.top, 32)
-                        .accessibilityHidden(true)
+                    MascotView(
+                        state: .listening,
+                        size: 64,
+                        facing: .right,
+                        animates: !isRequesting
+                    )
+                    .padding(.top, 28)
 
                     Text("Let Bellwire ring\nwhen it matters.")
                         .font(BellwireTypography.pageTitle)
@@ -231,9 +239,9 @@ struct NotificationOnboardingView: View {
                 ) {
                     isRequesting = true
                     Task {
-                        await model.requestNotificationPermission()
+                        let requestCompleted = await model.requestNotificationPermission()
                         isRequesting = false
-                        isComplete = true
+                        if requestCompleted { isComplete = true }
                     }
                 }
                 Button("Not now") { isComplete = true }
