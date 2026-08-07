@@ -17,12 +17,12 @@ struct PaywallView: View {
     private let benefits: [(icon: String, title: String)] = [
         ("square.grid.2x2", "20 projects · 50,000 monthly Signals"),
         ("clock.arrow.circlepath", "90-day history · 3 iPhones in sync"),
-        ("rectangle.stack.badge.play", "10 Surfaces · Live Activities · export"),
+        ("rectangle.stack.badge.play", "Unlimited Surfaces per project · Live Activities · export"),
     ]
 
     var body: some View {
         ZStack {
-            paywallBackground
+            BellwireTheme.background.ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: 0) {
@@ -71,34 +71,6 @@ struct PaywallView: View {
         }
     }
 
-    private var paywallBackground: some View {
-        ZStack {
-            BellwireTheme.background.ignoresSafeArea()
-
-            LinearGradient(
-                colors: [
-                    BellwireTheme.accent.opacity(0.24),
-                    BellwireTheme.background.opacity(0.74),
-                    BellwireTheme.background,
-                ],
-                startPoint: .top,
-                endPoint: .center
-            )
-            .ignoresSafeArea()
-
-            RadialGradient(
-                colors: [
-                    BellwireTheme.brandOrange.opacity(0.18),
-                    .clear,
-                ],
-                center: UnitPoint(x: 0.86, y: 0.02),
-                startRadius: 8,
-                endRadius: 290
-            )
-            .ignoresSafeArea()
-        }
-    }
-
     private var topBar: some View {
         ZStack {
             Text(localized("Bellwire Pro"))
@@ -133,14 +105,7 @@ struct PaywallView: View {
 
     private var hero: some View {
         VStack(spacing: BellwireSpacing.small) {
-            ZStack {
-                Circle()
-                    .fill(BellwireTheme.accent.opacity(0.13))
-                    .frame(width: 76, height: 76)
-
-                BellwireMark(size: 52)
-                    .shadow(color: BellwireTheme.brandOrange.opacity(0.22), radius: 18, y: 8)
-            }
+            BellwireMark(size: 76)
 
             Text(localized("More room for every signal."))
                 .font(.system(.title2, design: .serif, weight: .semibold))
@@ -264,14 +229,9 @@ struct PaywallView: View {
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 58)
                 .background(
-                    LinearGradient(
-                        colors: [BellwireTheme.brandOrange, BellwireTheme.accent],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ),
+                    BellwireTheme.primaryButtonBackground,
                     in: Capsule()
                 )
-                .shadow(color: BellwireTheme.brandOrange.opacity(0.22), radius: 18, y: 8)
             }
             .buttonStyle(PressableButtonStyle())
             .disabled(purchaseManager.isPurchasing || purchaseManager.isRestoring)

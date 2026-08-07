@@ -6,14 +6,20 @@ build. It does not require a Cloudflare, Supabase, or Apple Developer account.
 ## See the complete product loop
 
 1. Open Bellwire, sign in with Apple, and allow notifications.
-2. On the empty home screen, choose **Create demo project**.
-3. Confirm that the Bellwire Demo project, live status card, and sample
-   deployment Event appear.
+2. On the empty home screen, choose **Try a Hosted demo**.
+3. Confirm that the Bellwire Demo project shows revenue, production-service
+   health, and monthly-goal live Surfaces plus payment, recovery, and deployment
+   Events.
 4. Open the Event detail to inspect delivery state. Provider acceptance and
    visible device presentation are separate checks.
 
-The demo is idempotent for an account. Running it again reuses the existing
-demo project rather than creating duplicates.
+The demo is an explicitly **Hosted** sample. Bellwire Cloud stores its sample
+Events, Surfaces, and delivery state so the complete product loop works without
+an external Agent. It does not claim Private delivery. The demo is idempotent
+for an account: running it again reuses the existing project, three Events, and
+three Surfaces instead of creating duplicates. If the demo is created before
+the iPhone finishes APNs registration, Bellwire queues the deployment Event
+once the enabled device registers, avoiding three sample notifications at once.
 
 ## Connect an Agent
 

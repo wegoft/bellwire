@@ -102,6 +102,7 @@ function rejectSecrets(label, source) {
     /sb_secret_[A-Za-z0-9_-]+/u,
     /SUPABASE_SERVICE_ROLE_KEY\s*=\s*\S+/u,
     /APNS_PRIVATE_KEY\s*=\s*\S+/u,
+    /APPLE_TOKEN_ENCRYPTION_KEY\s*=\s*\S+/u,
     /-----BEGIN (?:EC |RSA )?PRIVATE KEY-----/u,
     /bw_(?:agent|live|ingest)_[A-Za-z0-9_-]{12,}/u,
   ];
@@ -135,9 +136,14 @@ function validateRequiredValues(ios, worker) {
   for (const key of iosKeys) validateValue(`iOS ${key}`, ios[key]);
   for (const key of workerKeys) validateValue(`Worker ${key}`, worker.vars[key]);
   validateValue("Worker name", worker.root.name);
+  validateValue("Worker compatibility flags", worker.root.compatibility_flags);
   validateValue("delivery Queue", worker.producer.queue);
   validateValue("consumer Queue", worker.consumer.queue);
   validateValue("dead-letter Queue", worker.consumer.dead_letter_queue);
+  validateValue("APNs token authority binding", worker.durableObject.name);
+  validateValue("APNs token authority class", worker.durableObject.class_name);
+  validateValue("Durable Object migration tag", worker.migration.tag);
+  validateValue("Durable Object migration class", worker.migration.new_sqlite_classes);
   if (errors.length === 0) checks.push("all required configuration values are resolved");
 }
 
@@ -175,6 +181,24 @@ function validateConsistency(ios, worker) {
   compare("URL scheme", ios.BELLWIRE_URL_SCHEME, worker.vars.APP_URL_SCHEME);
   compare("Supabase URL", normalizeURL(ios.BELLWIRE_SUPABASE_URL), normalizeURL(worker.vars.SUPABASE_URL));
   compare("producer and consumer Queue", worker.producer.queue, worker.consumer.queue);
+  if (
+    worker.durableObject.name !== "APNS_PROVIDER_TOKEN_AUTHORITY" ||
+    worker.durableObject.class_name !== "ApnsProviderTokenAuthority"
+  ) {
+    errors.push("Worker APNs provider-token Durable Object binding is invalid");
+  } else {
+    checks.push("APNs provider-token Durable Object binding is configured");
+  }
+  if (!String(worker.migration.new_sqlite_classes).includes("ApnsProviderTokenAuthority")) {
+    errors.push("Worker Durable Object migration is missing ApnsProviderTokenAuthority");
+  } else {
+    checks.push("APNs provider-token Durable Object migration is configured");
+  }
+  if (!String(worker.root.compatibility_flags).includes("nodejs_compat")) {
+    errors.push("Worker compatibility flags are missing nodejs_compat");
+  } else {
+    checks.push("Worker Node.js compatibility is enabled");
+  }
   const expectedExtension = `${ios.BELLWIRE_APP_BUNDLE_ID}.NotificationService`;
   if (ios.BELLWIRE_EXTENSION_BUNDLE_ID !== expectedExtension) {
     warnings.push(`extension Bundle ID is ${ios.BELLWIRE_EXTENSION_BUNDLE_ID}; expected convention is ${expectedExtension}`);

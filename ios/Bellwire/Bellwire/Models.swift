@@ -548,7 +548,7 @@ struct PlanLimits: Codable {
     let courtesySignals: Int
     let ingestPerMinute: Int
     let hostedRetentionDays: Int
-    let surfacesPerProject: Int
+    let surfacesPerProject: Int?
 }
 
 struct SignalUsage: Codable {

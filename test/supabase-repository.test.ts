@@ -8,10 +8,47 @@ import type {
   EventSchema,
   LiveSurface,
   NotificationSurface,
+  Project,
 } from "../src/domain/models";
 import { SupabaseBellwireRepository } from "../src/repositories/supabase-bellwire-repository";
 
 describe("SupabaseBellwireRepository", () => {
+  it("maps a null Surface limit from Postgres to an unlimited Pro entitlement", async () => {
+    const repository = new SupabaseBellwireRepository(
+      "https://example.supabase.co",
+      "service-role-key",
+      async () => Response.json([{
+        plan: "pro",
+        status: "active",
+        product_id: "app.bellwire.pro.monthly",
+        expires_at: "2026-09-04T00:00:00.000Z",
+        downgrade_deadline: null,
+        active_projects: 1,
+        active_devices: 1,
+        month_start: "2026-08-01",
+        month_end: "2026-09-01T00:00:00.000Z",
+        accepted_signals: 12,
+        active_project_limit: 20,
+        active_device_limit: 3,
+        monthly_signal_limit: 50_000,
+        courtesy_signal_limit: 55_000,
+        ingest_per_minute: 300,
+        hosted_retention_days: 90,
+        surfaces_per_project: null,
+      }]),
+    );
+
+    const entitlement = await repository.getAccountEntitlement(
+      "user-1",
+      "2026-08-04T00:00:00.000Z",
+    );
+
+    expect(entitlement.limits).toMatchObject({
+      activeProjects: 20,
+      surfacesPerProject: null,
+    });
+  });
+
   it("upserts and reads an encrypted Apple refresh token through the private table", async () => {
     const requests: Request[] = [];
     const repository = new SupabaseBellwireRepository(
@@ -76,6 +113,58 @@ describe("SupabaseBellwireRepository", () => {
 
     expect(request?.method).toBe("DELETE");
     expect(request?.url).toBe("https://example.supabase.co/rest/v1/projects?id=eq.project-1");
+  });
+
+  it("atomically reuses a project through its account-scoped unique slug", async () => {
+    const requests: Request[] = [];
+    const storedRow = {
+      id: "stored-project-id",
+      user_id: "user-1",
+      name: "Bellwire Demo",
+      slug: "bellwire-system-demo-v1",
+      icon: "bell.and.waves.left.and.right",
+      logo_url: null,
+      display_order: 0,
+      category: "demo",
+      status: "active",
+      delivery_mode: "hosted",
+      endpoint: "/v1/events/stored-project-id",
+      created_at: "2026-08-04T00:00:00.000Z",
+      updated_at: "2026-08-04T00:00:00.000Z",
+    };
+    const repository = new SupabaseBellwireRepository(
+      "https://example.supabase.co",
+      "service-role-key",
+      async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(request);
+        return Response.json(request.method === "POST" ? [] : [storedRow]);
+      },
+    );
+    const candidate: Project = {
+      id: "new-project-id",
+      userId: "user-1",
+      name: "Bellwire Demo",
+      slug: "bellwire-system-demo-v1",
+      icon: "bell.and.waves.left.and.right",
+      displayOrder: 0,
+      category: "demo",
+      status: "active",
+      deliveryMode: "hosted",
+      endpoint: "/v1/events/new-project-id",
+      createdAt: "2026-08-04T00:00:01.000Z",
+      updatedAt: "2026-08-04T00:00:01.000Z",
+    };
+
+    const result = await repository.createProjectIfAbsent(candidate);
+
+    expect(result).toMatchObject({ created: false, project: { id: "stored-project-id" } });
+    expect(requests[0]?.method).toBe("POST");
+    expect(requests[0]?.url).toContain("/projects?on_conflict=user_id,slug");
+    expect(requests[0]?.headers.get("prefer"))
+      .toBe("resolution=ignore-duplicates,return=representation");
+    expect(requests[1]?.url).toContain("user_id=eq.user-1");
+    expect(requests[1]?.url).toContain("slug=eq.bellwire-system-demo-v1");
   });
 
   it("marks unread events across owned projects in one filtered update", async () => {
@@ -294,6 +383,124 @@ describe("SupabaseBellwireRepository", () => {
     for (const request of requests) expect(await request.json()).not.toHaveProperty("p_version");
     expect(savedSchema.version).toBe(4);
     expect(savedSurface.version).toBe(5);
+  });
+
+  it("ensures initial demo schema and notification Surface with version-one constraints", async () => {
+    const requests: Request[] = [];
+    const schemaRow = {
+      id: "schema-id",
+      project_id: "project-id",
+      event_type: "deployment.completed",
+      fields: { deployment: { type: "string", required: true } },
+      version: 1,
+      status: "active",
+      created_at: "2026-08-04T00:00:00.000Z",
+    };
+    const surfaceRow = {
+      id: "surface-id",
+      project_id: "project-id",
+      event_type: "deployment.completed",
+      type: "notification",
+      title_template: "Deployment completed",
+      body_template: "{{ deployment }} completed",
+      subtitle_template: null,
+      sound: "default",
+      group_name: "deployment",
+      priority: "normal",
+      enabled: true,
+      version: 1,
+      created_at: "2026-08-04T00:00:00.000Z",
+    };
+    const repository = new SupabaseBellwireRepository(
+      "https://example.supabase.co",
+      "service-role-key",
+      async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(request);
+        if (request.method === "GET") return Response.json([]);
+        return Response.json(request.url.includes("event_schemas") ? [schemaRow] : [surfaceRow]);
+      },
+    );
+    const schema: EventSchema = {
+      id: "schema-id",
+      projectId: "project-id",
+      eventType: "deployment.completed",
+      fields: { deployment: { type: "string", required: true } },
+      version: 1,
+      status: "active",
+      createdAt: schemaRow.created_at,
+    };
+    const surface: NotificationSurface = {
+      id: "surface-id",
+      projectId: "project-id",
+      eventType: "deployment.completed",
+      type: "notification",
+      titleTemplate: "Deployment completed",
+      bodyTemplate: "{{ deployment }} completed",
+      sound: "default",
+      group: "deployment",
+      priority: "normal",
+      enabled: true,
+      version: 1,
+      createdAt: surfaceRow.created_at,
+    };
+
+    const ensured = await repository.ensureEventSchemaAndNotificationSurface(schema, surface);
+
+    expect(ensured).toMatchObject({ schema: { version: 1 }, surface: { version: 1 } });
+    expect(requests.map((request) => request.url)).toEqual(expect.arrayContaining([
+      "https://example.supabase.co/rest/v1/event_schemas?on_conflict=project_id,event_type,version",
+      "https://example.supabase.co/rest/v1/notification_surfaces?on_conflict=project_id,event_type,version",
+    ]));
+    for (const request of requests.filter((candidate) => candidate.method === "POST")) {
+      expect(request.headers.get("prefer"))
+        .toBe("resolution=ignore-duplicates,return=representation");
+    }
+  });
+
+  it("gets and conditionally adopts an Event through its exact idempotency hash", async () => {
+    const requests: Request[] = [];
+    const oldHash = "a".repeat(64);
+    const fixedHash = "b".repeat(64);
+    const eventRow = {
+      id: "event-id",
+      project_id: "project-id",
+      event_type: "deployment.completed",
+      idempotency_key_hash: fixedHash,
+      data: { deployment: "Bellwire 1.0" },
+      sensitive_fields: [],
+      occurred_at: "2026-08-04T00:00:00.000Z",
+      received_at: "2026-08-04T00:00:00.000Z",
+      status: "accepted",
+      read_at: null,
+    };
+    const repository = new SupabaseBellwireRepository(
+      "https://example.supabase.co",
+      "service-role-key",
+      async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(request);
+        return Response.json([eventRow]);
+      },
+    );
+
+    const found = await repository.getEventByIdempotencyHash("project-id", fixedHash);
+    const adopted = await repository.replaceEventIdempotencyHash(
+      "event-id",
+      oldHash,
+      fixedHash,
+    );
+
+    expect(found).toMatchObject({ id: "event-id", idempotencyKeyHash: fixedHash });
+    expect(adopted).toMatchObject({ id: "event-id", idempotencyKeyHash: fixedHash });
+    const getUrl = new URL(requests[0]!.url);
+    expect(getUrl.searchParams.get("project_id")).toBe("eq.project-id");
+    expect(getUrl.searchParams.get("idempotency_key_hash")).toBe(`eq.${fixedHash}`);
+    const patchUrl = new URL(requests[1]!.url);
+    expect(requests[1]?.method).toBe("PATCH");
+    expect(patchUrl.searchParams.get("id")).toBe("eq.event-id");
+    expect(patchUrl.searchParams.get("idempotency_key_hash")).toBe(`eq.${oldHash}`);
+    expect(await requests[1]?.json()).toEqual({ idempotency_key_hash: fixedHash });
   });
 
   it("claims a binding and stores its Agent token through one transactional RPC", async () => {

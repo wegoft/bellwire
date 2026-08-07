@@ -1,13 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { importPKCS8, SignJWT } from "jose";
 
 export interface ApnsConfiguration {
-  keyId: string;
-  teamId: string;
   bundleId: string;
   urlScheme: string;
-  privateKey: string;
   environment: "sandbox" | "production";
+}
+
+export interface ApnsProviderToken {
+  value: string;
+  expiresAt: number;
+  generation: string;
+}
+
+export interface ApnsProviderTokenSource {
+  getProviderToken(): Promise<ApnsProviderToken>;
+  invalidateProviderToken(generation: string): Promise<void>;
 }
 
 export interface ApnsNotification {
@@ -46,11 +53,9 @@ export class ApnsError extends Error {
 }
 
 export class ApnsClient {
-  private signingKey?: CryptoKey;
-  private providerToken?: { value: string; expiresAt: number };
-
   constructor(
     private readonly config: ApnsConfiguration,
+    private readonly providerTokens: ApnsProviderTokenSource,
     private readonly fetchImpl: typeof fetch = (input, init) => fetch(input, init),
   ) {}
 
@@ -58,10 +63,11 @@ export class ApnsClient {
     const host = this.config.environment === "production"
       ? "https://api.push.apple.com"
       : "https://api.sandbox.push.apple.com";
+    const providerToken = await this.providerTokens.getProviderToken();
     const response = await this.fetchImpl(`${host}/3/device/${encodeURIComponent(deviceToken)}`, {
       method: "POST",
       headers: {
-        authorization: `bearer ${await this.getProviderToken()}`,
+        authorization: `bearer ${providerToken.value}`,
         "apns-topic": this.config.bundleId,
         "apns-push-type": "alert",
         "apns-priority": notification.priority === "high" ? "10" : "5",
@@ -124,31 +130,48 @@ export class ApnsClient {
         .catch(() => ({}));
       const reason = error.reason ?? "UnknownApnsError";
       if (reason === "ExpiredProviderToken" || reason === "InvalidProviderToken") {
-        this.providerToken = undefined;
+        await this.providerTokens.invalidateProviderToken(providerToken.generation)
+          .catch(() => undefined);
       }
       throw new ApnsError(response.status, reason, isRetryable(response.status, reason));
     }
     return { providerMessageId: response.headers.get("apns-id") ?? undefined };
   }
+}
 
-  private async getProviderToken(): Promise<string> {
-    const now = Date.now();
-    if (this.providerToken && this.providerToken.expiresAt > now) return this.providerToken.value;
-    this.signingKey ??= await importPKCS8(normalizePrivateKey(this.config.privateKey), "ES256");
-    const value = await new SignJWT({})
-      .setProtectedHeader({ alg: "ES256", kid: this.config.keyId })
-      .setIssuer(this.config.teamId)
-      .setIssuedAt()
-      .sign(this.signingKey);
-    this.providerToken = { value, expiresAt: now + 50 * 60 * 1_000 };
-    return value;
+export class ApnsClientPool {
+  private readonly clients = new Map<
+    ApnsConfiguration["environment"],
+    { config: ApnsConfiguration; client: ApnsClient }
+  >();
+
+  constructor(
+    private readonly createClient: (
+      config: ApnsConfiguration,
+      providerTokens: ApnsProviderTokenSource,
+    ) => ApnsClient = (config, providerTokens) => new ApnsClient(config, providerTokens),
+  ) {}
+
+  get(config: ApnsConfiguration, providerTokens: ApnsProviderTokenSource): ApnsClient {
+    const cached = this.clients.get(config.environment);
+    if (cached && sameConfiguration(cached.config, config)) return cached.client;
+
+    const savedConfig = { ...config };
+    const client = this.createClient(savedConfig, providerTokens);
+    this.clients.set(config.environment, { config: savedConfig, client });
+    return client;
   }
 }
 
-function normalizePrivateKey(value: string): string {
-  return value.replaceAll("\\n", "\n").trim();
+function sameConfiguration(left: ApnsConfiguration, right: ApnsConfiguration): boolean {
+  return left.bundleId === right.bundleId &&
+    left.urlScheme === right.urlScheme &&
+    left.environment === right.environment;
 }
 
 function isRetryable(status: number, reason: string): boolean {
-  return status === 429 || status >= 500 || reason === "ExpiredProviderToken";
+  return status === 429 ||
+    status >= 500 ||
+    reason === "ExpiredProviderToken" ||
+    reason === "InvalidProviderToken";
 }

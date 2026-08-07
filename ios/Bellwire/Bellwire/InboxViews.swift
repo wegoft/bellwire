@@ -21,15 +21,18 @@ struct ProjectsView: View {
                         ErrorBanner(message: error) { model.errorMessage = nil }
                     }
 
-                    if model.isLoading && model.projects.isEmpty {
+                    if model.isPreparingInitialDashboard {
                         LoadingEventRows(count: 5)
+                    } else if model.projects.isEmpty {
+                        ProjectConnectionEmptyView(
+                            isGeneratingBinding: isGeneratingBinding,
+                            connect: createBinding
+                        )
                     } else if filteredProjects.isEmpty {
                         EmptyState(
-                            icon: filter == .all ? "square.grid.2x2" : "line.3.horizontal.decrease.circle",
-                            title: filter == .all ? "No projects connected" : "No matching projects",
-                            message: filter == .all
-                                ? "Generate a binding code in Settings and ask your Agent to connect a project."
-                                : "Choose a different filter to see your connected projects."
+                            icon: "line.3.horizontal.decrease.circle",
+                            title: "No matching projects",
+                            message: "Choose a different filter to see your connected projects."
                         )
                         .bellwireSurface(elevated: false)
                     } else {
@@ -53,45 +56,41 @@ struct ProjectsView: View {
                         .bellwireListGroup()
                     }
 
-                    VStack(alignment: .leading, spacing: BellwireSpacing.compact) {
-                        SectionHeaderView(title: "Connect")
-                        Button {
-                            isGeneratingBinding = true
-                            Task {
-                                await model.createBinding()
-                                isGeneratingBinding = false
-                            }
-                        } label: {
-                            HStack(spacing: BellwireSpacing.small) {
-                                Image(systemName: BellwireIcons.binding)
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(BellwireTheme.accent)
-                                    .frame(width: 38, height: 38)
-                                    .background(BellwireTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(isGeneratingBinding ? "Generating binding code…" : "Connect a project")
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(BellwireTheme.ink)
-                                    Text("Create a one-time code for your Agent.")
-                                        .font(.caption)
-                                        .foregroundStyle(BellwireTheme.mutedInk)
+                    if !model.projects.isEmpty {
+                        VStack(alignment: .leading, spacing: BellwireSpacing.compact) {
+                            SectionHeaderView(title: "Connect")
+                            Button(action: createBinding) {
+                                HStack(spacing: BellwireSpacing.small) {
+                                    Image(systemName: BellwireIcons.binding)
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundStyle(BellwireTheme.accent)
+                                        .frame(width: 38, height: 38)
+                                        .background(BellwireTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(isGeneratingBinding ? "Generating binding code…" : "Connect a project")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(BellwireTheme.ink)
+                                        Text("Create a one-time code for your Agent.")
+                                            .font(.caption)
+                                            .foregroundStyle(BellwireTheme.mutedInk)
+                                    }
+                                    Spacer()
+                                    if isGeneratingBinding {
+                                        ProgressView().controlSize(.small)
+                                    } else {
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(BellwireTheme.mutedInk)
+                                    }
                                 }
-                                Spacer()
-                                if isGeneratingBinding {
-                                    ProgressView().controlSize(.small)
-                                } else {
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(BellwireTheme.mutedInk)
-                                }
+                                .padding(.horizontal, BellwireSpacing.standard)
+                                .frame(minHeight: 68)
+                                .contentShape(Rectangle())
                             }
-                            .padding(.horizontal, BellwireSpacing.standard)
-                            .frame(minHeight: 68)
-                            .contentShape(Rectangle())
+                            .buttonStyle(PressableButtonStyle())
+                            .disabled(isGeneratingBinding)
+                            .bellwireListGroup()
                         }
-                        .buttonStyle(PressableButtonStyle())
-                        .disabled(isGeneratingBinding)
-                        .bellwireListGroup()
                     }
                 }
                 .padding(.horizontal, BellwireSpacing.roomy)
@@ -101,9 +100,6 @@ struct ProjectsView: View {
             .bellwirePageBackground()
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { await model.loadDashboard() }
-            .sheet(item: $model.binding) { binding in
-                BindingCodeSheet(binding: binding)
-            }
             .navigationDestination(for: AppRoute.self) { route in
                 switch route {
                 case .project(let id): ProjectDetailView(projectID: id)
@@ -146,6 +142,15 @@ struct ProjectsView: View {
         }
     }
 
+    private func createBinding() {
+        guard !isGeneratingBinding else { return }
+        isGeneratingBinding = true
+        Task {
+            await model.createBinding()
+            isGeneratingBinding = false
+        }
+    }
+
     private var filteredProjects: [ProjectSummary] {
         model.projects.filter { project in
             switch filter {
@@ -169,6 +174,40 @@ struct ProjectsView: View {
         model.liveSurfaces.contains {
             $0.projectId == projectID && ["progress", "segmented_progress", "timer"].contains($0.type)
         }
+    }
+}
+
+private struct ProjectConnectionEmptyView: View {
+    let isGeneratingBinding: Bool
+    let connect: () -> Void
+
+    var body: some View {
+        VStack(spacing: BellwireSpacing.standard) {
+            MascotView(
+                state: isGeneratingBinding ? .connecting : .allQuiet,
+                size: 68
+            )
+            Text("Connect your first project")
+                .font(.headline)
+                .foregroundStyle(BellwireTheme.ink)
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
+            Text("Generate a one-time binding code here, then give it to the Agent working in your project.")
+                .font(.subheadline)
+                .foregroundStyle(BellwireTheme.secondaryInk)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            PrimaryButton(
+                title: isGeneratingBinding ? "Generating binding code…" : "Generate binding code",
+                systemImage: BellwireIcons.binding,
+                isLoading: isGeneratingBinding,
+                isDisabled: isGeneratingBinding,
+                action: connect
+            )
+        }
+        .frame(maxWidth: .infinity)
+        .padding(BellwireSpacing.roomy)
+        .bellwireSurface(elevated: false)
     }
 }
 
@@ -290,14 +329,14 @@ struct EventsView: View {
                         ErrorBanner(message: error) { model.errorMessage = nil }
                     }
 
-                    if model.isLoading && model.events.isEmpty {
+                    if model.isPreparingInitialDashboard {
                         LoadingEventRows(count: 6)
                     } else if filteredEvents.isEmpty {
                         EmptyState(
                             icon: filter == .all ? "bolt" : "line.3.horizontal.decrease.circle",
                             title: filter == .all ? "No events yet" : "No matching events",
                             message: filter == .all
-                                ? "Events appear after a connected project sends its first signal."
+                                ? emptyEventsMessage
                                 : "Choose another filter to view the rest of your event history."
                         )
                         .bellwireSurface(elevated: false)
@@ -342,6 +381,14 @@ struct EventsView: View {
             }
         }
     }
+
+    private var emptyEventsMessage: String {
+        if model.projects.isEmpty {
+            "Connect a project first. Its Signals will appear here."
+        } else {
+            "A project is connected. Ask your Agent to send the first Signal; it will appear here."
+        }
+    }
 }
 
 enum EventFilter: String, CaseIterable, Identifiable {
@@ -353,12 +400,163 @@ enum EventFilter: String, CaseIterable, Identifiable {
     var label: String { rawValue.capitalized }
 }
 
+private struct FirstSessionActivationView: View {
+    let isGeneratingBinding: Bool
+    let isCreatingHostedDemo: Bool
+    let connectAgent: () -> Void
+    let createHostedDemo: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: BellwireSpacing.roomy) {
+            VStack(alignment: .leading, spacing: BellwireSpacing.standard) {
+                MascotView(
+                    state: isGeneratingBinding || isCreatingHostedDemo ? .connecting : .allQuiet,
+                    size: 76,
+                    facing: .right
+                )
+                Text("Connect your first project.")
+                    .font(BellwireTypography.pageTitle)
+                    .tracking(-0.5)
+                    .foregroundStyle(BellwireTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                Text("Your Agent can wire real project Signals to this iPhone with a one-time binding code.")
+                    .font(.body)
+                    .foregroundStyle(BellwireTheme.secondaryInk)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: BellwireSpacing.standard) {
+                PrimaryButton(
+                    title: isGeneratingBinding ? "Generating binding code…" : "Connect your Agent",
+                    systemImage: BellwireIcons.binding,
+                    isLoading: isGeneratingBinding,
+                    isDisabled: isGeneratingBinding || isCreatingHostedDemo,
+                    action: connectAgent
+                )
+
+                Divider().overlay(BellwireTheme.separator)
+
+                VStack(alignment: .leading, spacing: BellwireSpacing.compact) {
+                    Text("Or explore with sample data")
+                        .font(.subheadline)
+                        .bold()
+                        .foregroundStyle(BellwireTheme.ink)
+                    Text("Creates revenue, service health, and lifecycle samples in one project.")
+                        .font(.subheadline)
+                        .foregroundStyle(BellwireTheme.mutedInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button(action: createHostedDemo) {
+                    HStack(spacing: BellwireSpacing.compact) {
+                        if isCreatingHostedDemo {
+                            ProgressView().tint(BellwireTheme.ink)
+                        } else {
+                            Image(systemName: "cloud")
+                        }
+                        Text(LocalizedStringKey(
+                            isCreatingHostedDemo ? "Creating Hosted demo…" : "Try a Hosted demo"
+                        ))
+                            .font(.body)
+                            .bold()
+                    }
+                    .foregroundStyle(BellwireTheme.ink)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(
+                        BellwireTheme.surface,
+                        in: RoundedRectangle(cornerRadius: BellwireRadius.control, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: BellwireRadius.control, style: .continuous)
+                            .stroke(BellwireTheme.strongSeparator, lineWidth: 1)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableButtonStyle())
+                .disabled(isGeneratingBinding || isCreatingHostedDemo)
+                .accessibilityHint("Creates a Hosted sample in Bellwire Cloud")
+
+                Label {
+                    Text("Sample content is stored in Bellwire Cloud. Delete the demo at any time.")
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "cloud.fill")
+                }
+                .font(.footnote)
+                .foregroundStyle(BellwireTheme.mutedInk)
+            }
+            .padding(BellwireSpacing.standard)
+            .bellwireListGroup()
+        }
+    }
+}
+
+private struct FirstSignalPromptView: View {
+    let project: ProjectSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: BellwireSpacing.standard) {
+            HStack(alignment: .top, spacing: BellwireSpacing.standard) {
+                MascotView(
+                    state: .verified,
+                    size: 58,
+                    facing: .right
+                )
+                VStack(alignment: .leading, spacing: BellwireSpacing.compact) {
+                    Text("Ready for the first Signal")
+                        .font(.headline)
+                        .foregroundStyle(BellwireTheme.ink)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("A project is connected. Open it for connection details, then ask your Agent to send the first Signal.")
+                        .font(.subheadline)
+                        .foregroundStyle(BellwireTheme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            NavigationLink(value: AppRoute.project(project.id)) {
+                HStack(spacing: BellwireSpacing.compact) {
+                    Label("Open project", systemImage: "arrow.right.circle")
+                        .font(.body)
+                        .bold()
+                    Spacer()
+                    Text(project.name)
+                        .font(.subheadline)
+                        .foregroundStyle(BellwireTheme.mutedInk)
+                        .lineLimit(1)
+                }
+                .foregroundStyle(BellwireTheme.ink)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .padding(.horizontal, BellwireSpacing.standard)
+                .background(
+                    BellwireTheme.surface,
+                    in: RoundedRectangle(cornerRadius: BellwireRadius.control, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: BellwireRadius.control, style: .continuous)
+                        .stroke(BellwireTheme.strongSeparator, lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableButtonStyle())
+            .accessibilityHint("Opens connection details for this project")
+        }
+        .padding(BellwireSpacing.standard)
+        .bellwireListGroup()
+    }
+}
+
 struct InboxView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.locale) private var locale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var path: [AppRoute] = []
     @State private var hasPresentedGreeting = false
+    @State private var isGeneratingBinding = false
+    @State private var isStartingHostedDemo = false
     let onOpenEvents: (_ preferUnread: Bool) -> Void
 
     init(onOpenEvents: @escaping (_ preferUnread: Bool) -> Void = { _ in }) {
@@ -369,38 +567,29 @@ struct InboxView: View {
         NavigationStack(path: $path) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: BellwireSpacing.section) {
-                    homeHeader
-                    digestStrip
-
-                    if let error = model.errorMessage {
-                        ErrorBanner(message: error) { model.errorMessage = nil }
-                    }
-
-                    if !model.isLoading && model.projects.isEmpty {
-                        VStack(alignment: .leading, spacing: BellwireSpacing.standard) {
-                            VStack(alignment: .leading, spacing: BellwireSpacing.compact) {
-                                Text("Explore Bellwire")
-                                    .font(.headline)
-                                    .foregroundStyle(BellwireTheme.ink)
-                                Text("Create a private sample project with a live card and event. You can delete it at any time.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(BellwireTheme.mutedInk)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            PrimaryButton(
-                                title: model.isCreatingDemo ? "Creating demo…" : "Create demo project",
-                                systemImage: "sparkles",
-                                isLoading: model.isCreatingDemo
-                            ) {
-                                Task { await model.createDemoExperience() }
-                            }
+                    if model.isPreparingInitialDashboard {
+                        homeHeader
+                        LoadingEventRows(count: 4)
+                    } else if model.projects.isEmpty {
+                        if let error = model.errorMessage {
+                            ErrorBanner(message: error) { model.errorMessage = nil }
                         }
-                        .padding(BellwireSpacing.standard)
-                        .bellwireListGroup()
-                    }
+                        firstSessionActivation
+                    } else {
+                        homeHeader
+                        digestStrip
 
-                    liveSection
-                    eventsSection
+                        if let error = model.errorMessage {
+                            ErrorBanner(message: error) { model.errorMessage = nil }
+                        }
+
+                        if model.events.isEmpty && model.liveSurfaces.isEmpty {
+                            firstSignalSection
+                        } else {
+                            liveSection
+                            eventsSection
+                        }
+                    }
                 }
                 .padding(.horizontal, BellwireSpacing.page)
                 .padding(.top, BellwireSpacing.standard)
@@ -424,6 +613,23 @@ struct InboxView: View {
                 guard !hasPresentedGreeting else { return }
                 if !reduceMotion { await Task.yield() }
                 hasPresentedGreeting = true
+            }
+        }
+    }
+
+    private var firstSessionActivation: some View {
+        FirstSessionActivationView(
+            isGeneratingBinding: isGeneratingBinding,
+            isCreatingHostedDemo: isStartingHostedDemo || model.isCreatingDemo,
+            connectAgent: createBinding,
+            createHostedDemo: createHostedDemo
+        )
+    }
+
+    private var firstSignalSection: some View {
+        Group {
+            if let project = model.projects.first {
+                FirstSignalPromptView(project: project)
             }
         }
     }
@@ -495,12 +701,10 @@ struct InboxView: View {
             DigestMetricView(value: runningSurfaceCount, label: "running", isAccented: true)
         }
         .padding(BellwireSpacing.standard)
-        .background {
-            RoundedRectangle(cornerRadius: BellwireRadius.card, style: .continuous)
-                .fill(BellwireTheme.surface)
-                .overlay(BellwireTheme.amberGlow.clipShape(RoundedRectangle(cornerRadius: BellwireRadius.card, style: .continuous)))
-                .overlay(BellwireTheme.amberGlowLeading.clipShape(RoundedRectangle(cornerRadius: BellwireRadius.card, style: .continuous)))
-        }
+        .background(
+            BellwireTheme.surface,
+            in: RoundedRectangle(cornerRadius: BellwireRadius.card, style: .continuous)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: BellwireRadius.card, style: .continuous)
                 .stroke(BellwireTheme.separator, lineWidth: 1)
@@ -535,13 +739,8 @@ struct InboxView: View {
 
             if model.isLoading && model.events.isEmpty {
                 LoadingEventRows()
-            } else if model.events.isEmpty {
-                EmptyState(
-                    icon: "tray",
-                    title: "No events yet",
-                    message: "Generate a binding code in Settings, then ask your Agent to connect the first project."
-                )
-                .bellwireSurface(elevated: false)
+            } else if model.events.isEmpty, let project = model.projects.first {
+                FirstSignalPromptView(project: project)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(model.events.prefix(6).enumerated()), id: \.element.id) { index, event in
@@ -569,6 +768,24 @@ struct InboxView: View {
         case 5..<12: return "Good morning."
         case 12..<18: return "Good afternoon."
         default: return "Good evening."
+        }
+    }
+
+    private func createBinding() {
+        guard !isGeneratingBinding else { return }
+        isGeneratingBinding = true
+        Task {
+            await model.createBinding()
+            isGeneratingBinding = false
+        }
+    }
+
+    private func createHostedDemo() {
+        guard !isStartingHostedDemo else { return }
+        isStartingHostedDemo = true
+        Task {
+            await model.createDemoExperience()
+            isStartingHostedDemo = false
         }
     }
 }

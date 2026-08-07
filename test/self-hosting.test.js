@@ -39,8 +39,12 @@ describe("self-host bootstrap and doctor", () => {
     expect(ios).toContain("BELLWIRE_WIDGET_BUNDLE_ID = com.example.bellwire.Widgets");
     expect(ios).toContain("BELLWIRE_APP_GROUP = group.com.example.bellwire.shared");
     expect(worker).toContain('APP_URL_SCHEME = "bellwire-self-host"');
+    expect(worker).toContain('compatibility_flags = ["nodejs_compat"]');
     expect(worker).toContain('ENTITLEMENT_ENFORCEMENT_MODE = "disabled"');
     expect(worker).toContain('crons = ["17 * * * *"]');
+    expect(worker).toContain('name = "APNS_PROVIDER_TOKEN_AUTHORITY"');
+    expect(worker).toContain('class_name = "ApnsProviderTokenAuthority"');
+    expect(worker).toContain('new_sqlite_classes = ["ApnsProviderTokenAuthority"]');
     expect(`${ios}\n${worker}`).not.toMatch(/sb_secret_|PRIVATE KEY|YOUR_/u);
 
     const doctor = run(doctorScript, ["--root", root, "--json"]);

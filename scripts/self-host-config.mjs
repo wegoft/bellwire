@@ -111,6 +111,7 @@ export function renderWranglerConfiguration(configuration) {
   return `name = ${JSON.stringify(configuration.workerName)}
 main = "src/index.ts"
 compatibility_date = "2026-07-20"
+compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 preview_urls = true
 
@@ -135,6 +136,14 @@ max_batch_size = 10
 max_batch_timeout = 5
 max_retries = 3
 dead_letter_queue = ${JSON.stringify(`${deliveryQueue}-dlq`)}
+
+[[durable_objects.bindings]]
+name = "APNS_PROVIDER_TOKEN_AUTHORITY"
+class_name = "ApnsProviderTokenAuthority"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ApnsProviderTokenAuthority"]
 `;
 }
 
@@ -182,7 +191,14 @@ export function parseXcconfig(source) {
 }
 
 export function parseWranglerConfiguration(source) {
-  const result = { root: {}, vars: {}, producer: {}, consumer: {} };
+  const result = {
+    root: {},
+    vars: {},
+    producer: {},
+    consumer: {},
+    durableObject: {},
+    migration: {},
+  };
   let section = "root";
   for (const rawLine of source.split(/\r?\n/u)) {
     const line = rawLine.replace(/\s+#.*$/u, "").trim();
@@ -190,6 +206,8 @@ export function parseWranglerConfiguration(source) {
     if (line === "[vars]") section = "vars";
     else if (line === "[[queues.producers]]") section = "producer";
     else if (line === "[[queues.consumers]]") section = "consumer";
+    else if (line === "[[durable_objects.bindings]]") section = "durableObject";
+    else if (line === "[[migrations]]") section = "migration";
     else if (line.startsWith("[")) section = "other";
     else {
       const match = /^([A-Za-z0-9_]+)\s*=\s*(.+)$/u.exec(line);

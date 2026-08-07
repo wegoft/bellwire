@@ -117,10 +117,14 @@ npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY -c wrangler.self-host.toml
 npx wrangler secret put APNS_KEY_ID -c wrangler.self-host.toml
 npx wrangler secret put APNS_TEAM_ID -c wrangler.self-host.toml
 npx wrangler secret put APNS_PRIVATE_KEY -c wrangler.self-host.toml
+npx wrangler secret put APPLE_TOKEN_ENCRYPTION_KEY -c wrangler.self-host.toml
 ```
 
 Wrangler prompts for each value and stores it as an encrypted Worker secret;
-do not paste these values into the TOML file. See Cloudflare's official guides
+do not paste these values into the TOML file. Generate
+`APPLE_TOKEN_ENCRYPTION_KEY` as a random base64-encoded 32-byte value. The
+generated Wrangler configuration provisions the global APNs provider-token
+Durable Object on first deploy. See Cloudflare's official guides
 for [Queue creation](https://developers.cloudflare.com/queues/get-started/) and
 [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/).
 

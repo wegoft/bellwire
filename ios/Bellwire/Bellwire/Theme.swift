@@ -5,87 +5,79 @@ import UIKit
 enum BellwireTheme {
     // MARK: Brand and semantic color roles
 
-    static let brandOrange = Color(red: 233 / 255, green: 149 / 255, blue: 32 / 255)
+    static let brandOrange = Color(red: 245 / 255, green: 161 / 255, blue: 26 / 255)
 
     static let accent = adaptiveColor(
-        light: UIColor(red: 0.74, green: 0.44, blue: 0.06, alpha: 1),
-        dark: UIColor(red: 0.96, green: 0.66, blue: 0.18, alpha: 1)
+        light: UIColor(red: 0.66, green: 0.35, blue: 0.00, alpha: 1),
+        dark: UIColor(red: 0.96, green: 0.63, blue: 0.10, alpha: 1)
     )
     static let accentInk = adaptiveColor(
-        light: UIColor(red: 0.13, green: 0.09, blue: 0.04, alpha: 1),
-        dark: UIColor(red: 0.13, green: 0.09, blue: 0.04, alpha: 1)
+        light: UIColor(red: 0.04, green: 0.06, blue: 0.15, alpha: 1),
+        dark: UIColor(red: 0.04, green: 0.06, blue: 0.15, alpha: 1)
     )
     static let primaryButtonForeground = adaptiveColor(
-        light: UIColor(red: 1.00, green: 0.97, blue: 0.91, alpha: 1),
-        dark: UIColor(red: 1.00, green: 0.97, blue: 0.91, alpha: 1)
+        light: UIColor(red: 0.04, green: 0.06, blue: 0.15, alpha: 1),
+        dark: UIColor(red: 0.04, green: 0.06, blue: 0.15, alpha: 1)
     )
     static let primaryButtonBackground = adaptiveColor(
-        light: UIColor(red: 0.66, green: 0.36, blue: 0.03, alpha: 1),
-        dark: UIColor(red: 0.62, green: 0.34, blue: 0.03, alpha: 1)
-    )
-    static let proActiveSurface = adaptiveColor(
-        light: UIColor(red: 0.985, green: 0.955, blue: 0.89, alpha: 1),
-        dark: UIColor(red: 0.235, green: 0.205, blue: 0.16, alpha: 1)
-    )
-    static let proActiveBorder = adaptiveColor(
-        light: UIColor(red: 0.64, green: 0.38, blue: 0.09, alpha: 0.34),
-        dark: UIColor(red: 0.95, green: 0.69, blue: 0.27, alpha: 0.48)
+        light: UIColor(red: 0.96, green: 0.63, blue: 0.10, alpha: 1),
+        dark: UIColor(red: 0.96, green: 0.63, blue: 0.10, alpha: 1)
     )
     static let proActiveInk = adaptiveColor(
-        light: UIColor(red: 0.56, green: 0.29, blue: 0.02, alpha: 1),
-        dark: UIColor(red: 0.96, green: 0.66, blue: 0.18, alpha: 1)
+        light: UIColor(red: 0.66, green: 0.35, blue: 0.00, alpha: 1),
+        dark: UIColor(red: 1.00, green: 0.77, blue: 0.36, alpha: 1)
     )
     static let background = adaptiveColor(
-        light: UIColor(red: 0.955, green: 0.942, blue: 0.912, alpha: 1),
-        dark: UIColor(red: 0.145, green: 0.139, blue: 0.129, alpha: 1)
+        light: UIColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1),
+        dark: UIColor(red: 0.04, green: 0.06, blue: 0.15, alpha: 1)
     )
     static let surface = adaptiveColor(
-        light: UIColor(red: 0.992, green: 0.982, blue: 0.956, alpha: 1),
-        dark: UIColor(red: 0.195, green: 0.187, blue: 0.174, alpha: 1)
+        light: UIColor(red: 1.00, green: 1.00, blue: 1.00, alpha: 1),
+        dark: UIColor(red: 0.07, green: 0.09, blue: 0.20, alpha: 1)
     )
     static let raisedSurface = adaptiveColor(
-        light: UIColor(red: 0.925, green: 0.902, blue: 0.856, alpha: 1),
-        dark: UIColor(red: 0.235, green: 0.224, blue: 0.207, alpha: 1)
+        light: UIColor(red: 0.93, green: 0.94, blue: 0.97, alpha: 1),
+        dark: UIColor(red: 0.10, green: 0.13, blue: 0.25, alpha: 1)
     )
     static let tertiarySurface = adaptiveColor(
-        light: UIColor(red: 0.875, green: 0.846, blue: 0.790, alpha: 1),
-        dark: UIColor(red: 0.282, green: 0.267, blue: 0.245, alpha: 1)
+        light: UIColor(red: 0.88, green: 0.90, blue: 0.94, alpha: 1),
+        dark: UIColor(red: 0.13, green: 0.16, blue: 0.30, alpha: 1)
     )
     static let ink = adaptiveColor(
-        light: UIColor(red: 0.12, green: 0.112, blue: 0.10, alpha: 1),
-        dark: UIColor(red: 0.97, green: 0.955, blue: 0.925, alpha: 1)
+        light: UIColor(red: 0.09, green: 0.10, blue: 0.18, alpha: 1),
+        dark: UIColor(red: 0.97, green: 0.97, blue: 1.00, alpha: 1)
     )
     static let secondaryInk = adaptiveColor(
-        light: UIColor(red: 0.37, green: 0.345, blue: 0.305, alpha: 1),
-        dark: UIColor(red: 0.78, green: 0.745, blue: 0.69, alpha: 1)
+        light: UIColor(red: 0.25, green: 0.27, blue: 0.38, alpha: 1),
+        dark: UIColor(red: 0.84, green: 0.85, blue: 0.91, alpha: 1)
     )
     static let mutedInk = adaptiveColor(
-        light: UIColor(red: 0.45, green: 0.415, blue: 0.365, alpha: 1),
-        dark: UIColor(red: 0.60, green: 0.57, blue: 0.52, alpha: 1)
+        light: UIColor(red: 0.41, green: 0.44, blue: 0.54, alpha: 1),
+        dark: UIColor(red: 0.58, green: 0.61, blue: 0.72, alpha: 1)
     )
     static let separator = adaptiveColor(
-        light: UIColor(red: 0.22, green: 0.18, blue: 0.12, alpha: 0.09),
-        dark: UIColor(red: 0.56, green: 0.52, blue: 0.45, alpha: 0.22)
+        light: UIColor(red: 0.84, green: 0.85, blue: 0.91, alpha: 1),
+        dark: UIColor(red: 0.17, green: 0.20, blue: 0.35, alpha: 1)
     )
     static let strongSeparator = adaptiveColor(
-        light: UIColor.black.withAlphaComponent(0.16),
-        dark: UIColor.white.withAlphaComponent(0.18)
+        light: UIColor(red: 0.72, green: 0.75, blue: 0.82, alpha: 1),
+        dark: UIColor(red: 0.23, green: 0.27, blue: 0.44, alpha: 1)
     )
     static let live = adaptiveColor(
-        light: UIColor(red: 0.15, green: 0.56, blue: 0.31, alpha: 1),
-        dark: UIColor(red: 0.44, green: 0.86, blue: 0.53, alpha: 1)
+        light: UIColor(red: 0.05, green: 0.47, blue: 0.31, alpha: 1),
+        dark: UIColor(red: 0.21, green: 0.79, blue: 0.55, alpha: 1)
     )
     static let success = adaptiveColor(
-        light: UIColor(red: 0.12, green: 0.52, blue: 0.33, alpha: 1),
-        dark: UIColor(red: 0.43, green: 0.83, blue: 0.58, alpha: 1)
+        light: UIColor(red: 0.05, green: 0.47, blue: 0.31, alpha: 1),
+        dark: UIColor(red: 0.21, green: 0.79, blue: 0.55, alpha: 1)
     )
     static let warning = adaptiveColor(
-        light: UIColor(red: 0.71, green: 0.43, blue: 0.05, alpha: 1),
-        dark: UIColor(red: 0.95, green: 0.72, blue: 0.25, alpha: 1)
+        light: UIColor(red: 0.60, green: 0.38, blue: 0.00, alpha: 1),
+        dark: UIColor(red: 0.96, green: 0.77, blue: 0.33, alpha: 1)
     )
     static let danger = adaptiveColor(
-        light: UIColor(red: 0.72, green: 0.20, blue: 0.16, alpha: 1),
-        dark: UIColor(red: 0.95, green: 0.39, blue: 0.32, alpha: 1)
+        light: UIColor(red: 0.79, green: 0.22, blue: 0.26, alpha: 1),
+        dark: UIColor(red: 1.00, green: 0.38, blue: 0.42, alpha: 1)
     )
 
     static var amberGlow: RadialGradient {
@@ -108,8 +100,8 @@ enum BellwireTheme {
 
     static var cardShadow: Color {
         adaptiveColor(
-            light: UIColor(red: 0.31, green: 0.24, blue: 0.14, alpha: 0.055),
-            dark: UIColor.black.withAlphaComponent(0.12)
+            light: UIColor(red: 0.04, green: 0.06, blue: 0.15, alpha: 0.08),
+            dark: UIColor(red: 0.01, green: 0.02, blue: 0.08, alpha: 0.32)
         )
     }
 
@@ -163,6 +155,7 @@ enum BellwireAnimation {
     static let quick = Animation.easeOut(duration: 0.15)
     static let standard = Animation.easeOut(duration: 0.25)
     static let spring = Animation.spring(response: 0.34, dampingFraction: 0.88)
+    static let mascotArrival = Animation.spring(response: 0.48, dampingFraction: 0.86)
 }
 
 enum BellwireHaptics {

@@ -30,6 +30,7 @@ import type {
 import type {
   BellwireRepository,
   CreateDeliveryResult,
+  CreateProjectResult,
 } from "./bellwire-repository";
 import { decodeEventCursor, encodeEventCursor } from "./event-cursor";
 
@@ -115,6 +116,22 @@ export class SupabaseBellwireRepository implements BellwireRepository {
       prefer: "return=representation",
     });
     return toProject(requiredFirst(rows));
+  }
+
+  async createProjectIfAbsent(project: Project): Promise<CreateProjectResult> {
+    const rows = await this.request<JsonRecord[]>("/projects?on_conflict=user_id,slug", {
+      method: "POST",
+      body: projectRow(project),
+      prefer: "resolution=ignore-duplicates,return=representation",
+    });
+    if (rows[0]) return { project: toProject(rows[0]), created: true };
+    const existing = await this.one(
+      "/projects",
+      { user_id: `eq.${project.userId}`, slug: `eq.${project.slug}` },
+      toProject,
+    );
+    if (!existing) throw new Error("Project conflict could not be resolved");
+    return { project: existing, created: false };
   }
 
   async getProject(projectId: string): Promise<Project | undefined> {
@@ -466,6 +483,46 @@ export class SupabaseBellwireRepository implements BellwireRepository {
     return toEventSchema(requiredFirst(rows));
   }
 
+  async ensureEventSchemaAndNotificationSurface(
+    schema: EventSchema,
+    surface: NotificationSurface,
+  ): Promise<{ schema: EventSchema; surface: NotificationSurface }> {
+    const [existingSchema, existingSurface] = await Promise.all([
+      this.getEventSchema(schema.projectId, schema.eventType),
+      this.getNotificationSurface(surface.projectId, surface.eventType),
+    ]);
+    const [schemaRows, surfaceRows] = await Promise.all([
+      existingSchema ? Promise.resolve([]) : this.request<JsonRecord[]>(
+        "/event_schemas?on_conflict=project_id,event_type,version",
+        {
+          method: "POST",
+          body: eventSchemaRow(schema),
+          prefer: "resolution=ignore-duplicates,return=representation",
+        },
+      ),
+      existingSurface ? Promise.resolve([]) : this.request<JsonRecord[]>(
+        "/notification_surfaces?on_conflict=project_id,event_type,version",
+        {
+          method: "POST",
+          body: notificationSurfaceRow(surface),
+          prefer: "resolution=ignore-duplicates,return=representation",
+        },
+      ),
+    ]);
+    const [savedSchema, savedSurface] = await Promise.all([
+      existingSchema ? Promise.resolve(existingSchema)
+        : schemaRows[0] ? Promise.resolve(toEventSchema(schemaRows[0]))
+        : this.getEventSchema(schema.projectId, schema.eventType),
+      existingSurface ? Promise.resolve(existingSurface)
+        : surfaceRows[0] ? Promise.resolve(toSurface(surfaceRows[0]))
+        : this.getNotificationSurface(surface.projectId, surface.eventType),
+    ]);
+    if (!savedSchema || !savedSurface) {
+      throw new Error("Demo configuration conflict could not be resolved");
+    }
+    return { schema: savedSchema, surface: savedSurface };
+  }
+
   async getEventSchema(projectId: string, eventType: string): Promise<EventSchema | undefined> {
     return this.one(
       "/event_schemas",
@@ -783,6 +840,39 @@ export class SupabaseBellwireRepository implements BellwireRepository {
 
   async getEvent(eventId: string): Promise<BellwireEvent | undefined> {
     return this.one("/events", { id: `eq.${eventId}` }, toEvent);
+  }
+
+  async getEventByIdempotencyHash(
+    projectId: string,
+    idempotencyKeyHash: string,
+  ): Promise<BellwireEvent | undefined> {
+    return this.one(
+      "/events",
+      {
+        project_id: `eq.${projectId}`,
+        idempotency_key_hash: `eq.${idempotencyKeyHash}`,
+      },
+      toEvent,
+    );
+  }
+
+  async replaceEventIdempotencyHash(
+    eventId: string,
+    expectedHash: string,
+    replacementHash: string,
+  ): Promise<BellwireEvent | undefined> {
+    const rows = await this.request<JsonRecord[]>(
+      `/events?${params({
+        id: `eq.${eventId}`,
+        idempotency_key_hash: `eq.${expectedHash}`,
+      })}`,
+      {
+        method: "PATCH",
+        body: { idempotency_key_hash: replacementHash },
+        prefer: "return=representation",
+      },
+    );
+    return rows[0] ? toEvent(rows[0]) : undefined;
   }
 
   async markEventRead(eventId: string, readAt: string): Promise<void> {
@@ -1113,6 +1203,36 @@ function projectRow(value: Project): JsonRecord {
     icon: value.icon, logo_url: value.logoUrl ?? null, display_order: value.displayOrder,
     category: value.category, status: value.status, delivery_mode: value.deliveryMode,
     endpoint: value.endpoint, created_at: value.createdAt, updated_at: value.updatedAt,
+  };
+}
+
+function eventSchemaRow(value: EventSchema): JsonRecord {
+  return {
+    id: value.id,
+    project_id: value.projectId,
+    event_type: value.eventType,
+    fields: value.fields,
+    version: value.version,
+    status: value.status,
+    created_at: value.createdAt,
+  };
+}
+
+function notificationSurfaceRow(value: NotificationSurface): JsonRecord {
+  return {
+    id: value.id,
+    project_id: value.projectId,
+    event_type: value.eventType,
+    type: value.type,
+    title_template: value.titleTemplate,
+    body_template: value.bodyTemplate,
+    subtitle_template: value.subtitleTemplate ?? null,
+    sound: value.sound,
+    group_name: value.group,
+    priority: value.priority,
+    enabled: value.enabled,
+    version: value.version,
+    created_at: value.createdAt,
   };
 }
 
@@ -1547,7 +1667,9 @@ function toAccountEntitlement(row: JsonRecord): AccountEntitlement {
       courtesySignals,
       ingestPerMinute: Number(row.ingest_per_minute),
       hostedRetentionDays: Number(row.hosted_retention_days),
-      surfacesPerProject: Number(row.surfaces_per_project),
+      surfacesPerProject: row.surfaces_per_project == null
+        ? null
+        : Number(row.surfaces_per_project),
     },
     usage: {
       periodStart: new Date(`${String(row.month_start)}T00:00:00.000Z`).toISOString(),

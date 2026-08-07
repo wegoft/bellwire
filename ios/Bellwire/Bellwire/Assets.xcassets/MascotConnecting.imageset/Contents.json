@@ -1,0 +1,8 @@
+{
+  "images" : [
+    { "filename" : "MascotConnecting.png", "idiom" : "universal", "scale" : "1x" },
+    { "filename" : "MascotConnecting@2x.png", "idiom" : "universal", "scale" : "2x" },
+    { "filename" : "MascotConnecting@3x.png", "idiom" : "universal", "scale" : "3x" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}

@@ -248,7 +248,7 @@ struct ProjectDetailView: View {
                     projectHeader(overview)
                     planUsage(overview)
                     health(overview)
-                    liveSurfaces(overview)
+                    liveSurfaces
                     recentEvents
                     TechnicalDisclosure(title: "Technical details") {
                         VStack(alignment: .leading, spacing: BellwireSpacing.roomy) {
@@ -311,8 +311,11 @@ struct ProjectDetailView: View {
                 }
             }
         }
-        .refreshable { await load() }
+        .refreshable { await load(refreshDashboard: true) }
         .task(id: projectID) { await load() }
+        .onChange(of: model.liveSurfaces) { _, _ in
+            synchronizeLiveActivitySurfaceIDs()
+        }
         .alert("Delete project?", isPresented: $showsDeleteConfirmation) {
             Button("Delete project", role: .destructive) {
                 Task { await deleteProject() }
@@ -465,7 +468,13 @@ struct ProjectDetailView: View {
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 3) {
-                            Text("\(project.liveSurfaces.count)/\(entitlement.limits.surfacesPerProject)")
+                            Group {
+                                if let surfaceLimit = entitlement.limits.surfacesPerProject {
+                                    Text("\(projectSurfaces.count)/\(surfaceLimit)")
+                                } else {
+                                    Text("Unlimited")
+                                }
+                            }
                                 .font(BellwireTypography.technicalStrong)
                                 .foregroundStyle(BellwireTheme.accent)
                             Text("Surfaces")
@@ -496,10 +505,10 @@ struct ProjectDetailView: View {
     }
 
     @ViewBuilder
-    private func liveSurfaces(_ project: ProjectOverview) -> some View {
+    private var liveSurfaces: some View {
         VStack(alignment: .leading, spacing: BellwireSpacing.small) {
-            SectionHeaderView(title: "Live surfaces", hint: project.liveSurfaces.isEmpty ? nil : "\(project.liveSurfaces.count) active")
-            if project.liveSurfaces.isEmpty {
+            SectionHeaderView(title: "Live surfaces", hint: projectSurfaces.isEmpty ? nil : "\(projectSurfaces.count) active")
+            if projectSurfaces.isEmpty {
                 EmptyState(
                     icon: "waveform.path.ecg",
                     title: "No live surfaces",
@@ -507,7 +516,7 @@ struct ProjectDetailView: View {
                 )
                 .bellwireSurface(elevated: false)
             } else {
-                ForEach(project.liveSurfaces) { surface in
+                ForEach(projectSurfaces) { surface in
                     VStack(spacing: BellwireSpacing.compact) {
                         LiveSurfaceCard(surface: surface)
                         Button {
@@ -701,20 +710,31 @@ struct ProjectDetailView: View {
         }
     }
 
-    private func load() async {
+    private var projectSurfaces: [LiveSurfaceRecord] {
+        model.liveSurfaces.filter { $0.projectId == projectID }
+    }
+
+    private func load(refreshDashboard: Bool = false) async {
         errorMessage = nil
+        if refreshDashboard {
+            await model.loadDashboard()
+        }
         do {
             let result = try await model.loadProject(id: projectID)
             overview = result.0
             events = result.1
-            liveActivitySurfaceIDs = Set(
-                result.0.liveSurfaces
-                    .filter { model.isLiveActivityActive(surfaceID: $0.id) }
-                    .map(\.id)
-            )
+            synchronizeLiveActivitySurfaceIDs()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func synchronizeLiveActivitySurfaceIDs() {
+        liveActivitySurfaceIDs = Set(
+            projectSurfaces
+                .filter { model.isLiveActivityActive(surfaceID: $0.id) }
+                .map(\.id)
+        )
     }
 
     private func togglePause(_ project: ProjectOverview) async {

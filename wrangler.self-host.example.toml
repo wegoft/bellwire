@@ -1,6 +1,7 @@
 name = "bellwire-self-host"
 main = "src/index.ts"
 compatibility_date = "2026-07-20"
+compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 preview_urls = true
 
@@ -25,3 +26,11 @@ max_batch_size = 10
 max_batch_timeout = 5
 max_retries = 3
 dead_letter_queue = "bellwire-self-host-deliveries-dlq"
+
+[[durable_objects.bindings]]
+name = "APNS_PROVIDER_TOKEN_AUTHORITY"
+class_name = "ApnsProviderTokenAuthority"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ApnsProviderTokenAuthority"]

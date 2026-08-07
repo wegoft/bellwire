@@ -168,12 +168,15 @@ wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 wrangler secret put APNS_KEY_ID
 wrangler secret put APNS_TEAM_ID
 wrangler secret put APNS_PRIVATE_KEY
+wrangler secret put APPLE_TOKEN_ENCRYPTION_KEY
 ```
 
 `APNS_PRIVATE_KEY` is the complete `.p8` content. Use `sandbox` while running a
 development-signed app and switch both the Worker environment and device build
-to production together. Never commit service-role, Agent, Ingest, or APNs
-private keys.
+to production together. `APPLE_TOKEN_ENCRYPTION_KEY` must be a random,
+base64-encoded 32-byte value; the Worker uses it to encrypt the shared APNs
+provider token in its Durable Object. Never commit service-role, Agent, Ingest,
+APNs, or encryption keys.
 
 Verify an APNs key locally without persisting or printing it. Add `-- --online`
 to let APNs validate the provider token, bundle topic, and environment with a

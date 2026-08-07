@@ -40,6 +40,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var notificationPermission: NotificationPermissionState = .unknown
     @Published private(set) var notificationAuthorizationDiagnostic = "unknown"
     @Published private(set) var isLoading = false
+    @Published private(set) var hasCompletedInitialDashboardLoad = false
+    @Published private(set) var hasLoadedDashboardSuccessfully = false
     @Published private(set) var isAuthenticating = false
     @Published private(set) var isMarkingAllRead = false
     @Published private(set) var isCreatingDemo = false
@@ -65,15 +67,19 @@ final class AppModel: ObservableObject {
     init() {
 #if DEBUG
         if let mode = Self.screenshotMode {
-            session = mode == "welcome" ? nil : AuthSession(
+            let isWelcome = mode == "welcome"
+            let isEmptyState = mode == "home-empty" || mode == "projects-empty"
+            session = isWelcome ? nil : AuthSession(
                 accessToken: "app-store-screenshot",
                 refreshToken: "app-store-screenshot",
                 expiresAt: .distantFuture,
                 user: AuthUser(id: "screenshot-user", email: "hello@bellwire.app")
             )
-            if mode != "welcome" {
+            if !isWelcome {
                 UserDefaults.standard.set(true, forKey: "notificationOnboardingSeen")
-                loadScreenshotFixtures()
+                if !isEmptyState { loadScreenshotFixtures() }
+                hasCompletedInitialDashboardLoad = true
+                hasLoadedDashboardSuccessfully = true
             }
             return
         }
@@ -82,6 +88,9 @@ final class AppModel: ObservableObject {
     }
 
     var isAuthenticated: Bool { session != nil }
+    var isPreparingInitialDashboard: Bool {
+        isAuthenticated && !hasCompletedInitialDashboardLoad
+    }
     var unreadCount: Int { events.filter(\.isUnread).count }
     var todayCount: Int {
         events.filter { event in
@@ -246,7 +255,8 @@ final class AppModel: ObservableObject {
             await dashboardLoadTask.value
             return
         }
-        if showLoading { isLoading = true }
+        let isInitialLoad = !hasCompletedInitialDashboardLoad
+        if showLoading || isInitialLoad { isLoading = true }
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.performDashboardLoad()
@@ -258,7 +268,8 @@ final class AppModel: ObservableObject {
         if dashboardLoadID == loadID {
             dashboardLoadTask = nil
             dashboardLoadID = nil
-            if showLoading { isLoading = false }
+            if isInitialLoad { hasCompletedInitialDashboardLoad = true }
+            if showLoading || isInitialLoad { isLoading = false }
         }
     }
 
@@ -266,52 +277,38 @@ final class AppModel: ObservableObject {
         guard let userID = session?.user.id else { return }
         let storedDirectConnections = keychain.directConnectionManifests(userID: userID)
         let directProjectIDs = Set(storedDirectConnections.map(\.project.id))
-        let cachedDirectProjects = deduplicatedProjects(
-            projects.filter { directProjectIDs.contains($0.id) }
-        )
         let cachedDirectSurfaces = deduplicatedSurfaces(
             liveSurfaces.filter { directProjectIDs.contains($0.projectId) }
         )
         do {
-            try? await registerCurrentDeviceKey(userID: userID)
+            async let deviceKeyRegistration: Void? = try? registerCurrentDeviceKey(userID: userID)
             async let projectRequest: ProjectsResponse = api.request("v1/projects")
             async let surfaceRequest: LiveSurfacesResponse = api.request("v1/surfaces")
             async let inboxRequest: InboxResponse = api.request("v1/inbox?limit=60")
-            async let deviceRequest: DevicesResponse = api.request("v1/devices")
-            async let connectionRequest: AgentConnectionsResponse = api.request("v1/agent-connections")
-            async let entitlementRequest: AccountEntitlement? = try? await api.request(
+            async let deviceRequest: DevicesResponse? = try? api.request("v1/devices")
+            async let connectionRequest: AgentConnectionsResponse? = try? api.request(
+                "v1/agent-connections"
+            )
+            async let entitlementRequest: AccountEntitlement? = try? api.request(
                 "v1/account/entitlement"
             )
-            async let modeRequest: DeliveryModeChangeRequestsResponse? = try? await api.request(
+            async let modeRequest: DeliveryModeChangeRequestsResponse? = try? api.request(
                 "v1/delivery-mode-requests?status=pending"
             )
             let (
                 projectResponse,
                 surfaceResponse,
-                inboxResponse,
-                deviceResponse,
-                connectionResponse,
-                entitlementResponse,
-                modeResponse
+                inboxResponse
             ) = try await (
                 projectRequest,
                 surfaceRequest,
-                inboxRequest,
-                deviceRequest,
-                connectionRequest,
-                entitlementRequest,
-                modeRequest
+                inboxRequest
             )
             guard !Task.isCancelled, session?.user.id == userID else { return }
             let orderedProjects = projectResponse.projects.sorted(by: stableProjectOrder)
             let missingManifestProjects = orderedProjects.filter { project in
                 project.deliveryMode == .private && !directProjectIDs.contains(project.id)
             }
-            let privateProjectIDs = Set(
-                orderedProjects.filter { project in
-                    project.deliveryMode == .private
-                }.map(\.id)
-            )
             let hostedProjectIDs = Set(
                 orderedProjects.filter { project in
                     project.deliveryMode == .hosted
@@ -325,20 +322,16 @@ final class AppModel: ObservableObject {
                 if left.displayOrder != right.displayOrder { return left.displayOrder < right.displayOrder }
                 return left.id < right.id
             }
-            let cloudProjects = orderedProjects.filter { project in
-                project.deliveryMode == .hosted || !directProjectIDs.contains(project.id)
-            }
+            projects = orderedProjects
+            let privateProjectIDs = Set(
+                projects.filter { $0.deliveryMode == .private }.map(\.id)
+            )
             let cloudSurfaces = orderedSurfaces.filter {
                 hostedProjectIDs.contains($0.projectId)
-            }
-            let currentDirectProjects = cachedDirectProjects.filter {
-                privateProjectIDs.contains($0.id)
             }
             let currentDirectSurfaces = cachedDirectSurfaces.filter {
                 privateProjectIDs.contains($0.projectId)
             }
-            projects = deduplicatedProjects(cloudProjects + currentDirectProjects)
-                .sorted(by: stableProjectOrder)
             for project in projects where project.deliveryMode == .private {
                 if let fetchedAt = privateEventStore.lastFetchedAt(
                     accountID: userID,
@@ -355,14 +348,34 @@ final class AppModel: ObservableObject {
                 accountID: userID,
                 projects: projects
             )
-            events = (inboxResponse.events + cachedPrivateEvents)
+            events = ProjectDataConsistency.normalizeEvents(
+                inboxResponse.events + cachedPrivateEvents,
+                projects: projects
+            )
                 .sorted { $0.receivedAt > $1.receivedAt }
-            devices = deviceResponse.devices
-            agentConnections = connectionResponse.connections
+            lastDashboardRefreshAt = .now
+            hasLoadedDashboardSuccessfully = true
+            hasCompletedInitialDashboardLoad = true
+            isLoading = false
+            errorMessage = nil
+
+            _ = await deviceKeyRegistration
+            let (
+                deviceResponse,
+                connectionResponse,
+                entitlementResponse,
+                modeResponse
+            ) = await (
+                deviceRequest,
+                connectionRequest,
+                entitlementRequest,
+                modeRequest
+            )
+            guard !Task.isCancelled, session?.user.id == userID else { return }
+            if let deviceResponse { devices = deviceResponse.devices }
+            if let connectionResponse { agentConnections = connectionResponse.connections }
             if let entitlementResponse { entitlement = entitlementResponse }
             if let modeResponse { pendingModeRequests = modeResponse.requests }
-            lastDashboardRefreshAt = Date()
-            errorMessage = nil
             for project in missingManifestProjects {
                 await requestDirectConnectionRecovery(project: project, userID: userID)
             }
@@ -421,14 +434,39 @@ final class AppModel: ObservableObject {
             createdAt: overview.createdAt,
             updatedAt: overview.updatedAt
         )
+        let nextProjects = ProjectDataConsistency.mergeProjects(
+            cloud: [summary],
+            fallbacks: projects
+        ).sorted(by: stableProjectOrder)
+        let currentProjectSurfaces = overview.deliveryMode == .hosted
+            ? overview.liveSurfaces
+            : liveSurfaces.filter { $0.projectId == id }
+        projects = nextProjects
+        liveSurfaces = sortedSurfaces(
+            liveSurfaces.filter { $0.projectId != id } + currentProjectSurfaces,
+            projects: nextProjects
+        )
+        events = ProjectDataConsistency.normalizeEvents(events, projects: nextProjects)
         if overview.deliveryMode == .private {
             let privateEvents = session.map {
                 privateEventStore.inboxEvents(accountID: $0.user.id, projects: [summary])
             } ?? []
-            return (overview, Array(privateEvents.prefix(30)))
+            return (
+                overview,
+                Array(
+                    ProjectDataConsistency.normalizeEvents(privateEvents, projects: [summary])
+                        .prefix(30)
+                )
+            )
         }
         let page: EventPage = try await api.request("v1/projects/\(id)/events?limit=30")
-        return (overview, page.events.map { $0.inboxEvent(project: summary) })
+        return (
+            overview,
+            ProjectDataConsistency.normalizeEvents(
+                page.events.map { $0.inboxEvent(project: summary) },
+                projects: [summary]
+            )
+        )
     }
 
     func exportProject(_ project: ProjectOverview) async throws -> URL {
@@ -506,14 +544,6 @@ final class AppModel: ObservableObject {
         return left.id < right.id
     }
 
-    private func deduplicatedProjects(_ values: [ProjectSummary]) -> [ProjectSummary] {
-        var projectsByID: [String: ProjectSummary] = [:]
-        for project in values {
-            projectsByID[project.id] = project
-        }
-        return Array(projectsByID.values)
-    }
-
     private func deduplicatedSurfaces(_ values: [LiveSurfaceRecord]) -> [LiveSurfaceRecord] {
         var surfacesByKey: [String: LiveSurfaceRecord] = [:]
         for surface in values {
@@ -529,7 +559,7 @@ final class AppModel: ObservableObject {
         let projectOrders = Dictionary(
             uniqueKeysWithValues: projects.map { ($0.id, $0.displayOrder) }
         )
-        return values.sorted { left, right in
+        return ProjectDataConsistency.normalizeSurfaces(values, projects: projects).sorted { left, right in
             let leftProjectOrder = projectOrders[left.projectId] ?? Int.max
             let rightProjectOrder = projectOrders[right.projectId] ?? Int.max
             if leftProjectOrder != rightProjectOrder {
@@ -748,6 +778,7 @@ final class AppModel: ObservableObject {
     }
 
     func createBinding() async {
+        errorMessage = nil
         do {
             guard let userID = session?.user.id else { throw ClientError.signedOut }
             struct Payload: Encodable {
@@ -781,14 +812,18 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func requestNotificationPermission() async {
+    @discardableResult
+    func requestNotificationPermission() async -> Bool {
+        errorMessage = nil
         do {
             let granted = try await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .badge, .sound])
             await refreshNotificationStatus()
             if granted { UIApplication.shared.registerForRemoteNotifications() }
+            return true
         } catch {
             errorMessage = "Notification permission could not be requested."
+            return false
         }
     }
 
@@ -929,6 +964,8 @@ final class AppModel: ObservableObject {
         pendingModeRequestNavigation = false
         lastDashboardRefreshAt = nil
         isLoading = false
+        hasCompletedInitialDashboardLoad = false
+        hasLoadedDashboardSuccessfully = false
         Task { await NativeDisplayManager.shared.clear() }
     }
 
@@ -1017,6 +1054,10 @@ final class AppModel: ObservableObject {
     }
 
     private func saveSession(_ value: AuthSession) throws {
+        if session?.user.id != value.user.id {
+            hasCompletedInitialDashboardLoad = false
+            hasLoadedDashboardSuccessfully = false
+        }
         try keychain.save(value)
         session = value
     }
@@ -1068,8 +1109,11 @@ final class AppModel: ObservableObject {
         )
 
         for manifest in manifests {
+            guard projects.contains(where: {
+                $0.id == manifest.project.id && $0.deliveryMode == .private
+            }) else { continue }
             do {
-                async let surfaceResult = fetchDirectSurfaces(
+                async let directSurfaces = fetchDirectSurfaces(
                     manifest: manifest,
                     identity: identity
                 )
@@ -1077,20 +1121,16 @@ final class AppModel: ObservableObject {
                     manifest: manifest,
                     identity: identity
                 )
-                let (result, payloads) = try await (surfaceResult, inboxPayloads)
+                let (surfaces, payloads) = try await (directSurfaces, inboxPayloads)
                 try privateEventStore.merge(
                     accountID: userID,
                     projectID: manifest.project.id,
                     payloads: payloads
                 )
-                let nextProjects = deduplicatedProjects(
-                    projects.filter { $0.id != result.project.id } + [result.project]
-                ).sorted(by: stableProjectOrder)
                 let nextSurfaces = deduplicatedSurfaces(
-                    liveSurfaces.filter { $0.projectId != result.project.id } + result.surfaces
+                    liveSurfaces.filter { $0.projectId != manifest.project.id } + surfaces
                 )
-                projects = nextProjects
-                liveSurfaces = sortedSurfaces(nextSurfaces, projects: nextProjects)
+                liveSurfaces = sortedSurfaces(nextSurfaces, projects: projects)
                 privateLastSyncAt[manifest.project.id] = .now
                 privateSyncErrors.removeValue(forKey: manifest.project.id)
             } catch {
@@ -1098,7 +1138,10 @@ final class AppModel: ObservableObject {
             }
         }
         let hostedEvents = events.filter { !$0.id.hasPrefix("private:") }
-        events = (hostedEvents + privateEventStore.inboxEvents(accountID: userID, projects: projects))
+        events = ProjectDataConsistency.normalizeEvents(
+            hostedEvents + privateEventStore.inboxEvents(accountID: userID, projects: projects),
+            projects: projects
+        )
             .sorted { $0.receivedAt > $1.receivedAt }
     }
 
@@ -1148,7 +1191,7 @@ final class AppModel: ObservableObject {
     private func fetchDirectSurfaces(
         manifest: DirectConnectionManifest,
         identity: DeviceIdentity
-    ) async throws -> DirectSurfaceResult {
+    ) async throws -> [LiveSurfaceRecord] {
         guard let url = manifest.surfacesURL else {
             throw DirectConnectionError.invalidManifest
         }
@@ -1169,22 +1212,7 @@ final class AppModel: ObservableObject {
         guard payload.surfaces.allSatisfy({ $0.projectId == manifest.project.id }) else {
             throw DirectConnectionError.invalidResponse
         }
-        let now = ISO8601DateFormatter.bellwire.string(from: .now)
-        let project = ProjectSummary(
-            id: manifest.project.id,
-            name: manifest.project.name,
-            slug: "direct-\(manifest.connectionId)",
-            icon: manifest.project.icon,
-            logoUrl: manifest.project.logoUrl,
-            displayOrder: manifest.project.displayOrder,
-            category: manifest.project.category,
-            status: "active",
-            deliveryMode: .private,
-            endpoint: manifest.baseUrl,
-            createdAt: now,
-            updatedAt: now
-        )
-        return DirectSurfaceResult(project: project, surfaces: payload.surfaces)
+        return payload.surfaces
     }
 
     private func fetchDirectInbox(
@@ -1329,9 +1357,4 @@ private enum ProjectExportError: LocalizedError {
     var errorDescription: String? {
         String(localized: "Project export is included with Bellwire Pro.")
     }
-}
-
-private struct DirectSurfaceResult {
-    let project: ProjectSummary
-    let surfaces: [LiveSurfaceRecord]
 }

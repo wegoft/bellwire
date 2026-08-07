@@ -1,5 +1,8 @@
 # Bellwire Lovable → Native iOS UI Mapping
 
+> [!IMPORTANT]
+> 本文保留旧 Lovable 到原生 iOS 的功能映射和业务逻辑边界。新的视觉主题、字体、Surface、吉祥物使用和逐屏布局以 [Bellwire UI 重构总纲](./brand/ui-redesign-blueprint.md) 为准；旧暖纸色与衬线视觉方向不再作为实现依据。
+
 ## Scope and source of truth
 
 - Design reference (read-only): `/Users/xwchris/projects/agent-whisper-sync`, HEAD `7ac14e8f46b9df97f4c6159e2571e3b73d4076e0`.
