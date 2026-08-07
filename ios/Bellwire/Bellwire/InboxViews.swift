@@ -569,6 +569,10 @@ struct InboxView: View {
                 LazyVStack(alignment: .leading, spacing: BellwireSpacing.section) {
                     if model.isPreparingInitialDashboard {
                         homeHeader
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeaderView(title: "Live surfaces")
+                            LiveSurfaceLoadingView()
+                        }
                         LoadingEventRows(count: 4)
                     } else if model.projects.isEmpty {
                         if let error = model.errorMessage {
@@ -583,7 +587,9 @@ struct InboxView: View {
                             ErrorBanner(message: error) { model.errorMessage = nil }
                         }
 
-                        if model.events.isEmpty && model.liveSurfaces.isEmpty {
+                        if model.events.isEmpty
+                            && model.liveSurfaces.isEmpty
+                            && !model.isLoadingLiveSurfaces {
                             firstSignalSection
                         } else {
                             liveSection
@@ -718,8 +724,8 @@ struct InboxView: View {
                 title: "Live surfaces",
                 hint: model.liveSurfaces.isEmpty ? nil : "\(model.liveSurfaces.count) active"
             )
-            if model.isLoading && model.liveSurfaces.isEmpty {
-                LoadingEventRows(count: 2)
+            if model.isLoadingLiveSurfaces && model.liveSurfaces.isEmpty {
+                LiveSurfaceLoadingView()
             } else if model.liveSurfaces.isEmpty {
                 EmptyState(
                     icon: "waveform.path.ecg",
@@ -728,6 +734,9 @@ struct InboxView: View {
                 )
                 .bellwireSurface(elevated: false)
             } else {
+                if model.isLoadingLiveSurfaces {
+                    LiveSurfaceLoadingView(presentation: .compact)
+                }
                 LiveSurfacesSection(surfaces: model.liveSurfaces, showsHeader: false)
             }
         }

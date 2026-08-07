@@ -38,6 +38,7 @@
 		B0000000000000000000001E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000029 /* Localizable.strings */; };
 		B0000000000000000000001F /* ProjectLogoCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000002A /* ProjectLogoCache.swift */; };
 		B00000000000000000000020 /* ProjectDataConsistency.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000002B /* ProjectDataConsistency.swift */; };
+		B00000000000000000000021 /* LiveSurfaceLoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000002C /* LiveSurfaceLoadingView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -114,6 +115,7 @@
 		F00000000000000000000028 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		F0000000000000000000002A /* ProjectLogoCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectLogoCache.swift; sourceTree = "<group>"; };
 		F0000000000000000000002B /* ProjectDataConsistency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDataConsistency.swift; sourceTree = "<group>"; };
+		F0000000000000000000002C /* LiveSurfaceLoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSurfaceLoadingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -164,6 +166,7 @@
 				F00000000000000000000007 /* PushDelegate.swift */,
 				F00000000000000000000008 /* Theme.swift */,
 				F00000000000000000000009 /* Components.swift */,
+				F0000000000000000000002C /* LiveSurfaceLoadingView.swift */,
 				F0000000000000000000002A /* ProjectLogoCache.swift */,
 				F0000000000000000000000A /* RootView.swift */,
 				F0000000000000000000000B /* OnboardingViews.swift */,
@@ -379,6 +382,7 @@
 				B00000000000000000000007 /* PushDelegate.swift in Sources */,
 				B00000000000000000000008 /* Theme.swift in Sources */,
 				B00000000000000000000009 /* Components.swift in Sources */,
+				B00000000000000000000021 /* LiveSurfaceLoadingView.swift in Sources */,
 				B0000000000000000000001F /* ProjectLogoCache.swift in Sources */,
 				B0000000000000000000000A /* RootView.swift in Sources */,
 				B0000000000000000000000B /* OnboardingViews.swift in Sources */,

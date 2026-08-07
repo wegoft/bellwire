@@ -89,6 +89,9 @@
 "unread" = "未读";
 "running" = "运行中";
 "Live surfaces" = "实时卡片";
+"Loading live cards…" = "正在加载实时卡片…";
+"Refreshing live cards" = "正在刷新实时卡片";
+"Syncing Hosted and Private sources." = "正在同步托管与私有数据源。";
 "Recent events" = "最近事件";
 "Updated by Agents" = "由 Agent 更新";
 "No live surfaces" = "暂无实时卡片";

@@ -237,6 +237,7 @@ struct ProjectDetailView: View {
     @State private var isExporting = false
     @State private var exportDocument: ProjectExportDocument?
     @State private var liveActivitySurfaceIDs = Set<String>()
+    @State private var isLoadingProject = true
 
     var body: some View {
         ScrollView {
@@ -508,7 +509,9 @@ struct ProjectDetailView: View {
     private var liveSurfaces: some View {
         VStack(alignment: .leading, spacing: BellwireSpacing.small) {
             SectionHeaderView(title: "Live surfaces", hint: projectSurfaces.isEmpty ? nil : "\(projectSurfaces.count) active")
-            if projectSurfaces.isEmpty {
+            if projectSurfaces.isEmpty && (isLoadingProject || model.isLoadingLiveSurfaces) {
+                LiveSurfaceLoadingView()
+            } else if projectSurfaces.isEmpty {
                 EmptyState(
                     icon: "waveform.path.ecg",
                     title: "No live surfaces",
@@ -516,6 +519,9 @@ struct ProjectDetailView: View {
                 )
                 .bellwireSurface(elevated: false)
             } else {
+                if isLoadingProject || model.isLoadingLiveSurfaces {
+                    LiveSurfaceLoadingView(presentation: .compact)
+                }
                 ForEach(projectSurfaces) { surface in
                     VStack(spacing: BellwireSpacing.compact) {
                         LiveSurfaceCard(surface: surface)
@@ -715,6 +721,8 @@ struct ProjectDetailView: View {
     }
 
     private func load(refreshDashboard: Bool = false) async {
+        isLoadingProject = true
+        defer { isLoadingProject = false }
         errorMessage = nil
         if refreshDashboard {
             await model.loadDashboard()

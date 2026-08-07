@@ -40,6 +40,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var notificationPermission: NotificationPermissionState = .unknown
     @Published private(set) var notificationAuthorizationDiagnostic = "unknown"
     @Published private(set) var isLoading = false
+    @Published private(set) var isLoadingLiveSurfaces = false
     @Published private(set) var hasCompletedInitialDashboardLoad = false
     @Published private(set) var hasLoadedDashboardSuccessfully = false
     @Published private(set) var isAuthenticating = false
@@ -257,6 +258,7 @@ final class AppModel: ObservableObject {
         }
         let isInitialLoad = !hasCompletedInitialDashboardLoad
         if showLoading || isInitialLoad { isLoading = true }
+        isLoadingLiveSurfaces = true
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.performDashboardLoad()
@@ -270,6 +272,7 @@ final class AppModel: ObservableObject {
             dashboardLoadID = nil
             if isInitialLoad { hasCompletedInitialDashboardLoad = true }
             if showLoading || isInitialLoad { isLoading = false }
+            isLoadingLiveSurfaces = false
         }
     }
 
@@ -295,14 +298,9 @@ final class AppModel: ObservableObject {
             async let modeRequest: DeliveryModeChangeRequestsResponse? = try? api.request(
                 "v1/delivery-mode-requests?status=pending"
             )
-            let (
-                projectResponse,
-                surfaceResponse,
-                inboxResponse
-            ) = try await (
+            let (projectResponse, surfaceResponse) = try await (
                 projectRequest,
-                surfaceRequest,
-                inboxRequest
+                surfaceRequest
             )
             guard !Task.isCancelled, session?.user.id == userID else { return }
             let orderedProjects = projectResponse.projects.sorted(by: stableProjectOrder)
@@ -344,6 +342,17 @@ final class AppModel: ObservableObject {
                 deduplicatedSurfaces(cloudSurfaces + currentDirectSurfaces),
                 projects: projects
             )
+
+            _ = await deviceKeyRegistration
+            for project in missingManifestProjects {
+                await requestDirectConnectionRecovery(project: project, userID: userID)
+            }
+            await refreshDirectConnections(userID: userID)
+            guard !Task.isCancelled, session?.user.id == userID else { return }
+            isLoadingLiveSurfaces = false
+
+            let inboxResponse = try await inboxRequest
+            guard !Task.isCancelled, session?.user.id == userID else { return }
             let cachedPrivateEvents = privateEventStore.inboxEvents(
                 accountID: userID,
                 projects: projects
@@ -359,7 +368,6 @@ final class AppModel: ObservableObject {
             isLoading = false
             errorMessage = nil
 
-            _ = await deviceKeyRegistration
             let (
                 deviceResponse,
                 connectionResponse,
@@ -376,13 +384,10 @@ final class AppModel: ObservableObject {
             if let connectionResponse { agentConnections = connectionResponse.connections }
             if let entitlementResponse { entitlement = entitlementResponse }
             if let modeResponse { pendingModeRequests = modeResponse.requests }
-            for project in missingManifestProjects {
-                await requestDirectConnectionRecovery(project: project, userID: userID)
-            }
-            await refreshDirectConnections(userID: userID)
             await synchronizeNativeDisplays()
         } catch {
             guard !Task.isCancelled else { return }
+            isLoadingLiveSurfaces = false
             errorMessage = friendlyMessage(error)
         }
     }
@@ -964,6 +969,7 @@ final class AppModel: ObservableObject {
         pendingModeRequestNavigation = false
         lastDashboardRefreshAt = nil
         isLoading = false
+        isLoadingLiveSurfaces = false
         hasCompletedInitialDashboardLoad = false
         hasLoadedDashboardSuccessfully = false
         Task { await NativeDisplayManager.shared.clear() }

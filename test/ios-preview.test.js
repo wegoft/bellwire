@@ -124,6 +124,42 @@ describe("iOS Inbox preview", () => {
     expect(push.match(/handleRemoteNotification/gu)).toHaveLength(2);
   });
 
+  it("loads live cards independently and keeps stale cards visible while refreshing", () => {
+    const model = readFileSync("ios/Bellwire/Bellwire/AppModel.swift", "utf8");
+    const inbox = readFileSync("ios/Bellwire/Bellwire/InboxViews.swift", "utf8");
+    const details = readFileSync("ios/Bellwire/Bellwire/DetailViews.swift", "utf8");
+    const loading = readFileSync(
+      "ios/Bellwire/Bellwire/LiveSurfaceLoadingView.swift",
+      "utf8",
+    );
+    const dashboardLoad = model.slice(
+      model.indexOf("private func performDashboardLoad()"),
+      model.indexOf("func loadEvent(id:"),
+    );
+
+    expect(model).toContain(
+      "@Published private(set) var isLoadingLiveSurfaces = false",
+    );
+    expect(dashboardLoad.indexOf("liveSurfaces = sortedSurfaces(")).toBeLessThan(
+      dashboardLoad.indexOf("let inboxResponse = try await inboxRequest"),
+    );
+    expect(dashboardLoad.indexOf("await refreshDirectConnections(userID: userID)")).toBeLessThan(
+      dashboardLoad.indexOf("let (\n                deviceResponse"),
+    );
+    expect(inbox).toContain(
+      "if model.isLoadingLiveSurfaces && model.liveSurfaces.isEmpty",
+    );
+    expect(inbox).toContain(
+      "LiveSurfaceLoadingView(presentation: .compact)",
+    );
+    expect(inbox).not.toContain("LoadingEventRows(count: 2)");
+    expect(details).toContain(
+      "projectSurfaces.isEmpty && (isLoadingProject || model.isLoadingLiveSurfaces)",
+    );
+    expect(loading).toContain("@Environment(\\.accessibilityReduceMotion)");
+    expect(loading).toContain("paused: scenePhase != .active");
+  });
+
   it("recovers a missing Private manifest before refreshing encrypted envelopes", () => {
     const model = readFileSync("ios/Bellwire/Bellwire/AppModel.swift", "utf8");
     const project = readFileSync(
