@@ -464,6 +464,9 @@ describe("iOS Inbox preview", () => {
     expect(home).toContain("await model.createBinding()");
     expect(activation).toContain('"Try a Hosted demo"');
     expect(activation).toContain(
+      '"Creates revenue, service health, and lifecycle samples in one project."',
+    );
+    expect(activation).toContain(
       '"Sample content is stored in Bellwire Cloud. Delete the demo at any time."',
     );
     expect(activation).toContain("ProgressView().tint(BellwireTheme.ink)");
@@ -480,6 +483,9 @@ describe("iOS Inbox preview", () => {
     );
     expect(chinese).toContain(
       '"Sample content is stored in Bellwire Cloud. Delete the demo at any time." = "示例内容会存储在 Bellwire Cloud 中，你可以随时删除。";',
+    );
+    expect(chinese).toContain(
+      '"Creates revenue, service health, and lifecycle samples in one project." = "在一个项目中创建收入、服务健康和生命周期示例。";',
     );
   });
 

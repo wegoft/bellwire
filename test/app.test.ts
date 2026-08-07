@@ -566,8 +566,8 @@ describe("Bellwire MVP API", () => {
       deliveryMode: "hosted",
       slug: "bellwire-system-demo-v1",
     });
-    expect(await repository.listLiveSurfaces(demo.projectId)).toHaveLength(1);
-    expect((await repository.listEvents(demo.projectId, { limit: 10 })).events).toHaveLength(1);
+    expect(await repository.listLiveSurfaces(demo.projectId)).toHaveLength(3);
+    expect((await repository.listEvents(demo.projectId, { limit: 10 })).events).toHaveLength(3);
 
     const second = await app.request("/v1/demo", {
       method: "POST",
@@ -580,10 +580,32 @@ describe("Bellwire MVP API", () => {
       .toMatchObject({ version: 1 });
     expect(await repository.getNotificationSurface(demo.projectId, "deployment.completed"))
       .toMatchObject({ version: 1 });
-    expect(await repository.getLiveSurface(demo.projectId, "demo-status"))
+    expect(await repository.getEventSchema(demo.projectId, "payment.received"))
       .toMatchObject({ version: 1 });
-    expect(await repository.listLiveSurfaces(demo.projectId)).toHaveLength(1);
-    expect((await repository.listEvents(demo.projectId, { limit: 10 })).events).toHaveLength(1);
+    expect(await repository.getNotificationSurface(demo.projectId, "payment.received"))
+      .toMatchObject({ version: 1 });
+    expect(await repository.getEventSchema(demo.projectId, "service.recovered"))
+      .toMatchObject({ version: 1 });
+    expect(await repository.getNotificationSurface(demo.projectId, "service.recovered"))
+      .toMatchObject({ version: 1 });
+    expect(await repository.getLiveSurface(demo.projectId, "demo-status"))
+      .toMatchObject({
+        version: 1,
+        type: "stats",
+        title: "Production services",
+        subtitle: "All systems operational",
+      });
+    expect(await repository.getLiveSurface(demo.projectId, "demo-revenue"))
+      .toMatchObject({ version: 1, type: "stats", title: "Revenue today", displayOrder: 0 });
+    expect(await repository.getLiveSurface(demo.projectId, "demo-revenue-goal"))
+      .toMatchObject({ version: 1, type: "progress", displayOrder: 2 });
+    expect(await repository.listLiveSurfaces(demo.projectId)).toHaveLength(3);
+    expect(new Set((await repository.listEvents(demo.projectId, { limit: 10 })).events
+      .map((event) => event.eventType))).toEqual(new Set([
+        "deployment.completed",
+        "payment.received",
+        "service.recovered",
+      ]));
     expect(dispatcher.eventIds).toEqual([]);
   });
 
@@ -672,7 +694,7 @@ describe("Bellwire MVP API", () => {
     });
     expect(await repository.getEventByIdempotencyHash(demo.projectId, fixedHash))
       .toMatchObject({ id: event.id });
-    expect((await repository.listEvents(demo.projectId, { limit: 10 })).events).toHaveLength(1);
+    expect((await repository.listEvents(demo.projectId, { limit: 10 })).events).toHaveLength(3);
   });
 
   it("adopts a fully verified legacy demo after retention removed its sample Event", async () => {
@@ -740,7 +762,8 @@ describe("Bellwire MVP API", () => {
     const fixedHash = await hashSecret("bellwire-demo-deployment-v1");
     expect(await repository.getEventByIdempotencyHash(legacy.id, fixedHash))
       .toMatchObject({ eventType: "deployment.completed" });
-    expect((await repository.listEvents(legacy.id, { limit: 10 })).events).toHaveLength(1);
+    expect((await repository.listEvents(legacy.id, { limit: 10 })).events).toHaveLength(3);
+    expect(await repository.listLiveSurfaces(legacy.id)).toHaveLength(3);
     expect(await repository.listProjects(userPrincipal.userId)).toHaveLength(1);
   });
 
@@ -789,8 +812,12 @@ describe("Bellwire MVP API", () => {
       .toMatchObject({ version: 1 });
     expect(await repository.getNotificationSurface(projectId, "deployment.completed"))
       .toMatchObject({ version: 1 });
-    expect(await repository.listLiveSurfaces(projectId)).toHaveLength(1);
-    expect((await repository.listEvents(projectId, { limit: 10 })).events).toHaveLength(1);
+    expect(await repository.getEventSchema(projectId, "payment.received"))
+      .toMatchObject({ version: 1 });
+    expect(await repository.getNotificationSurface(projectId, "service.recovered"))
+      .toMatchObject({ version: 1 });
+    expect(await repository.listLiveSurfaces(projectId)).toHaveLength(3);
+    expect((await repository.listEvents(projectId, { limit: 10 })).events).toHaveLength(3);
   });
 
   it("delivers the fixed-key demo Event once when an enabled device registers afterward", async () => {
@@ -799,7 +826,8 @@ describe("Bellwire MVP API", () => {
       headers: { authorization: "Bearer test" },
     });
     const demo = await demoResponse.json<{ projectId: string }>();
-    const event = (await repository.listEvents(demo.projectId, { limit: 10 })).events[0];
+    const fixedHash = await hashSecret("bellwire-demo-deployment-v1");
+    const event = await repository.getEventByIdempotencyHash(demo.projectId, fixedHash);
     expect(event).toBeDefined();
     expect(dispatcher.eventIds).toEqual([]);
 
@@ -858,8 +886,8 @@ describe("Bellwire MVP API", () => {
     expect(repeatedDemo.status).toBe(200);
     expect(dispatcher.eventIds).toEqual([event!.id, event!.id]);
     expect(await repository.listDeliveries(event!.id)).toHaveLength(1);
-    expect((await repository.listEvents(demo.projectId, { limit: 10 })).events).toHaveLength(2);
-    expect(await repository.listLiveSurfaces(demo.projectId)).toHaveLength(1);
+    expect((await repository.listEvents(demo.projectId, { limit: 10 })).events).toHaveLength(4);
+    expect(await repository.listLiveSurfaces(demo.projectId)).toHaveLength(3);
   });
 
   it("replays a demo delivery stranded before its queue enqueue", async () => {

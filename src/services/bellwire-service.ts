@@ -130,6 +130,10 @@ const DEMO_PROJECT_SLUG = "bellwire-system-demo-v1";
 const DEMO_EVENT_TYPE = "deployment.completed";
 const DEMO_SURFACE_KEY = "demo-status";
 const DEMO_EVENT_IDEMPOTENCY_KEY = "bellwire-demo-deployment-v1";
+const DEMO_REVENUE_EVENT_TYPE = "payment.received";
+const DEMO_REVENUE_EVENT_IDEMPOTENCY_KEY = "bellwire-demo-payment-v1";
+const DEMO_SERVICE_EVENT_TYPE = "service.recovered";
+const DEMO_SERVICE_EVENT_IDEMPOTENCY_KEY = "bellwire-demo-service-v1";
 
 const demoFields: Record<string, EventFieldDefinition> = {
   deployment: { type: "string", required: true },
@@ -148,13 +152,127 @@ const demoEventData = {
   duration: 24,
 };
 
+const demoRevenueFields: Record<string, EventFieldDefinition> = {
+  amount: { type: "number", required: true },
+  currency: { type: "enum", required: true, values: ["USD"] },
+  product: { type: "string", required: true },
+  customer: { type: "string", required: true },
+};
+
+const demoRevenueNotification = {
+  title: "Payment received",
+  body: "{{ currency }} {{ amount }} · {{ product }}",
+};
+
+const demoRevenueEventData = {
+  amount: 249,
+  currency: "USD",
+  product: "Pro annual",
+  customer: "Acme Studio",
+};
+
+const demoServiceFields: Record<string, EventFieldDefinition> = {
+  service: { type: "string", required: true },
+  status: { type: "enum", required: true, values: ["Healthy"] },
+  latency: { type: "number", required: true },
+  region: { type: "string", required: true },
+};
+
+const demoServiceNotification = {
+  title: "Service recovered",
+  body: "{{ service }} is {{ status }} · {{ latency }}ms",
+};
+
+const demoServiceEventData = {
+  service: "Production API",
+  status: "Healthy",
+  latency: 82,
+  region: "Global",
+};
+
 const demoSurfaceContent = {
+  metrics: [
+    { label: "Overall", value: "Healthy", color: "green" },
+    { label: "Availability", value: "99.99%", color: "green" },
+    { label: "P95 latency", value: "82 ms", color: "blue" },
+    { label: "Queue", value: 0, color: "cyan" },
+  ],
+};
+
+const legacyDemoSurfaceContent = {
   metrics: [
     { label: "Status", value: "Healthy", color: "green" },
     { label: "Events", value: 1, color: "orange" },
     { label: "Agents", value: 1, color: "blue" },
   ],
 };
+
+interface DemoEventDefinition {
+  eventType: string;
+  idempotencyKey: string;
+  fields: Record<string, EventFieldDefinition>;
+  notification: { title: string; body: string; group: string };
+  data: Record<string, unknown>;
+}
+
+const demoEventDefinitions: DemoEventDefinition[] = [
+  {
+    eventType: DEMO_EVENT_TYPE,
+    idempotencyKey: DEMO_EVENT_IDEMPOTENCY_KEY,
+    fields: demoFields,
+    notification: { ...demoNotification, group: "deployment" },
+    data: demoEventData,
+  },
+  {
+    eventType: DEMO_SERVICE_EVENT_TYPE,
+    idempotencyKey: DEMO_SERVICE_EVENT_IDEMPOTENCY_KEY,
+    fields: demoServiceFields,
+    notification: { ...demoServiceNotification, group: "service" },
+    data: demoServiceEventData,
+  },
+  {
+    eventType: DEMO_REVENUE_EVENT_TYPE,
+    idempotencyKey: DEMO_REVENUE_EVENT_IDEMPOTENCY_KEY,
+    fields: demoRevenueFields,
+    notification: { ...demoRevenueNotification, group: "revenue" },
+    data: demoRevenueEventData,
+  },
+];
+
+const demoSurfaceDefinitions = [
+  {
+    key: "demo-revenue",
+    input: {
+      type: "stats",
+      title: "Revenue today",
+      subtitle: "Live commerce snapshot",
+      metrics: [
+        { label: "Revenue", value: "$12,840", color: "green" },
+        { label: "Orders", value: 184, color: "blue" },
+        { label: "Avg order", value: "$69.78", color: "purple" },
+        { label: "Refunds", value: "0.6%", color: "orange" },
+      ],
+    },
+  },
+  {
+    key: DEMO_SURFACE_KEY,
+    input: {
+      type: "stats",
+      title: "Production services",
+      subtitle: "All systems operational",
+      metrics: demoSurfaceContent.metrics,
+    },
+  },
+  {
+    key: "demo-revenue-goal",
+    input: {
+      type: "progress",
+      title: "Monthly revenue goal",
+      subtitle: "$36,000 of $50,000",
+      percentage: 72,
+    },
+  },
+] as const;
 
 export class BellwireService {
   constructor(
@@ -308,49 +426,59 @@ export class BellwireService {
     }
 
     const configurationCreatedAt = new Date().toISOString();
-    await this.repository.ensureEventSchemaAndNotificationSurface({
-      id: crypto.randomUUID(),
-      projectId: project.id,
-      eventType: DEMO_EVENT_TYPE,
-      fields: demoFields,
-      version: 1,
-      status: "active",
-      createdAt: configurationCreatedAt,
-    }, {
-      id: crypto.randomUUID(),
-      projectId: project.id,
-      eventType: DEMO_EVENT_TYPE,
-      type: "notification",
-      titleTemplate: demoNotification.title,
-      bodyTemplate: demoNotification.body,
-      sound: "default",
-      group: "deployment",
-      priority: "normal",
-      enabled: true,
-      version: 1,
-      createdAt: configurationCreatedAt,
-    });
-
-    if (!await this.repository.getLiveSurface(project.id, DEMO_SURFACE_KEY)) {
-      await this.upsertLiveSurface(principal, project.id, DEMO_SURFACE_KEY, {
-        type: "stats",
-        title: "Bellwire is connected",
-        subtitle: "Live sample data",
-        metrics: demoSurfaceContent.metrics,
+    for (const definition of demoEventDefinitions) {
+      await this.repository.ensureEventSchemaAndNotificationSurface({
+        id: crypto.randomUUID(),
+        projectId: project.id,
+        eventType: definition.eventType,
+        fields: definition.fields,
+        version: 1,
+        status: "active",
+        createdAt: configurationCreatedAt,
+      }, {
+        id: crypto.randomUUID(),
+        projectId: project.id,
+        eventType: definition.eventType,
+        type: "notification",
+        titleTemplate: definition.notification.title,
+        bodyTemplate: definition.notification.body,
+        sound: "default",
+        group: definition.notification.group,
+        priority: "normal",
+        enabled: true,
+        version: 1,
+        createdAt: configurationCreatedAt,
       });
     }
 
-    const accepted = await this.acceptEvent(project, DEMO_EVENT_IDEMPOTENCY_KEY, {
-      type: DEMO_EVENT_TYPE,
-      data: demoEventData,
-      occurredAt: new Date().toISOString(),
-    }, false);
-    const event = await this.repository.getEvent(accepted.eventId);
-    if (!event) throw new Error("Demo Event was not persisted");
+    for (const [index, definition] of demoSurfaceDefinitions.entries()) {
+      const surface = await this.upsertLiveSurface(
+        principal,
+        project.id,
+        definition.key,
+        definition.input,
+      );
+      if (surface.displayOrder !== index) {
+        await this.repository.updateLiveSurfaceDisplayOrder(surface.id, index);
+      }
+    }
+
+    let notificationEvent: BellwireEvent | undefined;
+    for (const definition of demoEventDefinitions) {
+      const accepted = await this.acceptEvent(project, definition.idempotencyKey, {
+        type: definition.eventType,
+        data: definition.data,
+        occurredAt: new Date().toISOString(),
+      }, false);
+      const event = await this.repository.getEvent(accepted.eventId);
+      if (!event) throw new Error(`Demo Event ${definition.eventType} was not persisted`);
+      if (definition.eventType === DEMO_EVENT_TYPE) notificationEvent = event;
+    }
+    if (!notificationEvent) throw new Error("Demo notification Event was not persisted");
 
     const devices = (await this.repository.listDevices(project.userId))
       .filter((device) => device.pushEnabled);
-    await this.ensureDemoEventDelivery(project, event, devices);
+    await this.ensureDemoEventDelivery(project, notificationEvent, devices);
     return { projectId: project.id, created };
   }
 
@@ -2437,12 +2565,18 @@ function isCanonicalDemoConfiguration(
     && notification.group === "deployment"
     && notification.priority === "normal"
     && notification.enabled
-    && liveSurface !== undefined
-    && liveSurface.type === "stats"
-    && liveSurface.title === "Bellwire is connected"
+    && isCanonicalDemoStatusSurface(liveSurface);
+}
+
+function isCanonicalDemoStatusSurface(liveSurface: LiveSurface | undefined): boolean {
+  if (!liveSurface || liveSurface.type !== "stats" || liveSurface.action !== undefined) return false;
+  const isCurrent = liveSurface.title === "Production services"
+    && liveSurface.subtitle === "All systems operational"
+    && sameJson(liveSurface.content, demoSurfaceContent);
+  const isLegacy = liveSurface.title === "Bellwire is connected"
     && liveSurface.subtitle === "Live sample data"
-    && sameJson(liveSurface.content, demoSurfaceContent)
-    && liveSurface.action === undefined;
+    && sameJson(liveSurface.content, legacyDemoSurfaceContent);
+  return isCurrent || isLegacy;
 }
 
 function sameJson(left: unknown, right: unknown): boolean {

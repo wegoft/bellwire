@@ -193,7 +193,7 @@
 "Your Agent can wire real project Signals to this iPhone with a one-time binding code." = "你的 Agent 可以通过一次性绑定码，把真实项目的 Signal 接入这台 iPhone。";
 "Connect your Agent" = "连接你的 Agent";
 "Or explore with sample data" = "或先体验示例数据";
-"Creates one sample project, Signal, and live Surface." = "创建一个示例项目、一条 Signal 和一张实时 Surface。";
+"Creates revenue, service health, and lifecycle samples in one project." = "在一个项目中创建收入、服务健康和生命周期示例。";
 "Try a Hosted demo" = "试用 Hosted 示例";
 "Creating Hosted demo…" = "正在创建 Hosted 示例…";
 "Creates a Hosted sample in Bellwire Cloud" = "在 Bellwire Cloud 中创建 Hosted 示例";

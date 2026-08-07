@@ -443,7 +443,7 @@ private struct FirstSessionActivationView: View {
                         .font(.subheadline)
                         .bold()
                         .foregroundStyle(BellwireTheme.ink)
-                    Text("Creates one sample project, Signal, and live Surface.")
+                    Text("Creates revenue, service health, and lifecycle samples in one project.")
                         .font(.subheadline)
                         .foregroundStyle(BellwireTheme.mutedInk)
                         .fixedSize(horizontal: false, vertical: true)
