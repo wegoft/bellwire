@@ -3,14 +3,33 @@ import ActivityKit
 import Foundation
 
 struct BellwireNativeSurface: Codable, Hashable, Identifiable {
+    struct ChecklistItem: Codable, Hashable, Identifiable {
+        let id: String
+        let title: String
+        let state: String
+    }
+
+    struct TrendPoint: Codable, Hashable {
+        let label: String
+        let value: Double
+    }
+
     let id: String
     let projectID: String
     let projectName: String
     let projectIcon: String
+    let surfaceKey: String
+    let type: String
     let title: String
     let subtitle: String?
     let value: String?
     let progress: Double?
+    let statusState: String?
+    let statusLabel: String?
+    let checklistItems: [ChecklistItem]
+    let trendPoints: [TrendPoint]
+    let trendGoal: String?
+    let trendUnit: String?
     let updatedAt: Date
 }
 
@@ -26,10 +45,22 @@ struct BellwireActivityAttributes: ActivityAttributes {
         let subtitle: String?
         let value: String?
         let progress: Double?
+        let type: String?
+        let statusState: String?
+        let statusLabel: String?
+        let checklistItems: [BellwireNativeSurface.ChecklistItem]?
+        let trendPoints: [BellwireNativeSurface.TrendPoint]?
+        let trendGoal: String?
+        let trendUnit: String?
         let updatedAt: Date
     }
 
     let surfaceID: String
     let projectName: String
     let projectIcon: String
+    let projectID: String?
+    let surfaceKey: String?
+    let sessionID: String?
+    let origin: String?
+    let deliveryMode: String?
 }

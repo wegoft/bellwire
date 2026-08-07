@@ -46,6 +46,7 @@ class CapturingDispatcher implements DeliveryDispatcher {
   readonly eventIds: string[] = [];
   readonly wakeIds: string[] = [];
   readonly modeRequestIds: string[] = [];
+  readonly liveActivitySurfaceIds: string[] = [];
 
   async enqueue(event: { id: string }): Promise<void> {
     this.eventIds.push(event.id);
@@ -57,6 +58,10 @@ class CapturingDispatcher implements DeliveryDispatcher {
 
   async enqueueModeRequest(request: { id: string }): Promise<void> {
     this.modeRequestIds.push(request.id);
+  }
+
+  async enqueueLiveSurface(surface: { id: string }): Promise<void> {
+    this.liveActivitySurfaceIds.push(surface.id);
   }
 }
 
@@ -151,7 +156,7 @@ describe("Bellwire MVP API", () => {
       compatibility: {
         appVersion: "1.0.1",
         apiVersion: "v1",
-        schemaMigration: "202608040001",
+        schemaMigration: "202608070001",
       },
     });
   });
@@ -1132,6 +1137,162 @@ describe("Bellwire MVP API", () => {
     });
     expect(removed.status).toBe(204);
     expect((await repository.listLiveSurfaces(projectId))).toEqual([]);
+  });
+
+  it("validates status, checklist, and single-series trend Surfaces", async () => {
+    const projectId = await createProject();
+    await makeHosted(projectId);
+    const putSurface = (key: string, body: Record<string, unknown>) => app.request(
+      `/v1/projects/${projectId}/surfaces/${key}`,
+      {
+        method: "PUT",
+        headers: { authorization: "Bearer test", "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+
+    const status = await putSurface("api-status", {
+      type: "status",
+      title: "API status",
+      subtitle: "All regions are serving traffic",
+      state: "success",
+      label: "Operational",
+    });
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({
+      type: "status",
+      content: { state: "success", label: "Operational" },
+    });
+
+    const checklist = await putSurface("release-checklist", {
+      type: "checklist",
+      title: "Production release",
+      items: [
+        { id: "build", title: "Build", state: "completed" },
+        { id: "deploy", title: "Deploy", detail: "Cloudflare Worker", state: "running" },
+        { id: "smoke", title: "Smoke test", state: "pending" },
+      ],
+    });
+    expect(checklist.status).toBe(200);
+    expect(await checklist.json()).toMatchObject({
+      type: "checklist",
+      content: {
+        items: [
+          { id: "build", title: "Build", state: "completed" },
+          { id: "deploy", title: "Deploy", detail: "Cloudflare Worker", state: "running" },
+          { id: "smoke", title: "Smoke test", state: "pending" },
+        ],
+      },
+    });
+
+    const trend = await putSurface("latency-trend", {
+      type: "trend",
+      title: "API latency",
+      points: [
+        { label: "09:00", value: 142 },
+        { label: "10:00", value: 128 },
+        { label: "11:00", value: 119 },
+      ],
+      goal: "down",
+      displayValue: "119 ms",
+      unit: "ms",
+    });
+    expect(trend.status).toBe(200);
+    expect(await trend.json()).toMatchObject({
+      type: "trend",
+      content: {
+        goal: "down",
+        displayValue: "119 ms",
+        unit: "ms",
+        points: [
+          { label: "09:00", value: 142 },
+          { label: "10:00", value: 128 },
+          { label: "11:00", value: 119 },
+        ],
+      },
+    });
+
+    const duplicateChecklist = await putSurface("bad-checklist", {
+      type: "checklist",
+      title: "Bad checklist",
+      items: [
+        { id: "same", title: "One", state: "pending" },
+        { id: "same", title: "Two", state: "completed" },
+      ],
+    });
+    expect(duplicateChecklist.status).toBe(400);
+
+    const shortTrend = await putSurface("bad-trend", {
+      type: "trend",
+      title: "Bad trend",
+      points: [{ label: "now", value: 1 }],
+      goal: "up",
+    });
+    expect(shortTrend.status).toBe(400);
+  });
+
+  it("registers explicit Agent Live Activity capability and update tokens", async () => {
+    const installationId = "22222222-2222-4222-8222-222222222222";
+    await registerDevice(installationId);
+    const capability = await app.request("/v1/devices/live-activity-capability", {
+      method: "PUT",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({
+        installationId,
+        activitiesEnabled: true,
+        autoStartEnabled: true,
+        pushToStartToken: "b".repeat(64),
+        osVersion: "17.2",
+      }),
+    });
+    expect(capability.status).toBe(200);
+    expect(await capability.json()).toMatchObject({
+      activitiesEnabled: true,
+      autoStartEnabled: true,
+      pushToStartToken: "b".repeat(64),
+    });
+
+    const projectId = await createProject();
+    await makeHosted(projectId);
+    const surfaceResponse = await app.request(`/v1/projects/${projectId}/surfaces/deploy-run`, {
+      method: "PUT",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({
+        type: "status",
+        title: "Deploying production",
+        state: "running",
+        liveActivity: { sessionId: "deploy-20260807", state: "active" },
+      }),
+    });
+    expect(surfaceResponse.status).toBe(200);
+    const surface = await surfaceResponse.json<{ id: string }>();
+    expect(dispatcher.liveActivitySurfaceIds).toEqual([surface.id]);
+
+    const registration = await app.request("/v1/live-activities/activity-123", {
+      method: "PUT",
+      headers: { authorization: "Bearer test", "content-type": "application/json" },
+      body: JSON.stringify({
+        installationId,
+        projectId,
+        surfaceId: surface.id,
+        sessionId: "deploy-20260807",
+        updateToken: "c".repeat(64),
+        apnsEnvironment: "sandbox",
+      }),
+    });
+    expect(registration.status).toBe(200);
+    expect(await registration.json()).toMatchObject({
+      activityId: "activity-123",
+      sessionId: "deploy-20260807",
+      origin: "agent",
+    });
+
+    const removed = await app.request("/v1/live-activities/activity-123", {
+      method: "DELETE",
+      headers: { authorization: "Bearer test" },
+    });
+    expect(removed.status).toBe(204);
+    expect(await repository.listLiveActivityRegistrations(userPrincipal.userId)).toEqual([]);
   });
 
   it("treats JSON object key order changes from storage as an unchanged Surface", async () => {

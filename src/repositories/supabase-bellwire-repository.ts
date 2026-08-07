@@ -10,6 +10,7 @@ import type {
   Device,
   DeviceBinding,
   DeviceKey,
+  DeviceLiveActivityCapability,
   DirectConnectionEnvelope,
   DirectConnectionRecoveryRequest,
   EventListOptions,
@@ -17,6 +18,8 @@ import type {
   EventSchema,
   IngestToken,
   LiveSurface,
+  LiveActivityRegistration,
+  LiveActivityStartRequest,
   MeteredEventWrite,
   MeteredLiveSurfaceWrite,
   MeteredPrivateWakeWrite,
@@ -208,6 +211,103 @@ export class SupabaseBellwireRepository implements BellwireRepository {
         installation_id: `eq.${device.installationId}`,
       })}`, { method: "DELETE" });
     }
+  }
+
+  async saveDeviceLiveActivityCapability(
+    capability: DeviceLiveActivityCapability,
+  ): Promise<DeviceLiveActivityCapability> {
+    const rows = await this.request<JsonRecord[]>(
+      "/device_live_activity_capabilities?on_conflict=device_id",
+      {
+        method: "POST",
+        body: deviceLiveActivityCapabilityRow(capability),
+        prefer: "resolution=merge-duplicates,return=representation",
+      },
+    );
+    return toDeviceLiveActivityCapability(requiredFirst(rows));
+  }
+
+  async listDeviceLiveActivityCapabilities(
+    userId: string,
+  ): Promise<DeviceLiveActivityCapability[]> {
+    const rows = await this.getRows("/device_live_activity_capabilities", {
+      user_id: `eq.${userId}`,
+    });
+    return rows.map(toDeviceLiveActivityCapability);
+  }
+
+  async saveLiveActivityRegistration(
+    registration: LiveActivityRegistration,
+  ): Promise<LiveActivityRegistration> {
+    const rows = await this.request<JsonRecord[]>(
+      "/live_activity_registrations?on_conflict=activity_id",
+      {
+        method: "POST",
+        body: liveActivityRegistrationRow(registration),
+        prefer: "resolution=merge-duplicates,return=representation",
+      },
+    );
+    return toLiveActivityRegistration(requiredFirst(rows));
+  }
+
+  async listLiveActivityRegistrations(userId: string): Promise<LiveActivityRegistration[]> {
+    const rows = await this.getRows("/live_activity_registrations", {
+      user_id: `eq.${userId}`,
+      order: "created_at.asc",
+    });
+    return rows.map(toLiveActivityRegistration);
+  }
+
+  async deleteLiveActivityRegistration(activityId: string): Promise<void> {
+    await this.request(`/live_activity_registrations?${params({
+      activity_id: `eq.${activityId}`,
+    })}`, { method: "DELETE" });
+  }
+
+  async createLiveActivityStartRequestIfAbsent(
+    request: LiveActivityStartRequest,
+  ): Promise<boolean> {
+    const rows = await this.request<JsonRecord[]>(
+      "/live_activity_start_requests?on_conflict=device_id,project_id,session_id",
+      {
+        method: "POST",
+        body: {
+          device_id: request.deviceId,
+          project_id: request.projectId,
+          surface_id: request.surfaceId,
+          session_id: request.sessionId,
+          created_at: request.createdAt,
+        },
+        prefer: "resolution=ignore-duplicates,return=representation",
+      },
+    );
+    return rows.length > 0;
+  }
+
+  async listLiveActivityStartRequests(deviceId: string): Promise<LiveActivityStartRequest[]> {
+    const rows = await this.getRows("/live_activity_start_requests", {
+      device_id: `eq.${deviceId}`,
+      order: "created_at.asc",
+    });
+    return rows.map((row) => ({
+      deviceId: String(row.device_id),
+      projectId: String(row.project_id),
+      surfaceId: String(row.surface_id),
+      sessionId: String(row.session_id),
+      createdAt: String(row.created_at),
+    }));
+  }
+
+  async deleteLiveActivityStartRequest(
+    deviceId: string,
+    projectId: string,
+    sessionId: string,
+  ): Promise<void> {
+    await this.request(`/live_activity_start_requests?${params({
+      device_id: `eq.${deviceId}`,
+      project_id: `eq.${projectId}`,
+      session_id: `eq.${sessionId}`,
+    })}`, { method: "DELETE" });
   }
 
   async saveDeviceBinding(binding: DeviceBinding): Promise<DeviceBinding> {
@@ -599,6 +699,7 @@ export class SupabaseBellwireRepository implements BellwireRepository {
         p_subtitle: surface.subtitle ?? null,
         p_content: surface.content,
         p_action: surface.action ?? null,
+        p_live_activity: surface.liveActivity ?? null,
         p_display_order: surface.displayOrder,
         p_created_at: surface.createdAt,
         p_updated_at: surface.updatedAt,
@@ -622,6 +723,7 @@ export class SupabaseBellwireRepository implements BellwireRepository {
         p_subtitle: surface.subtitle ?? null,
         p_content: surface.content,
         p_action: surface.action ?? null,
+        p_live_activity: surface.liveActivity ?? null,
         p_display_order: surface.displayOrder,
         p_created_at: surface.createdAt,
         p_updated_at: surface.updatedAt,
@@ -637,6 +739,10 @@ export class SupabaseBellwireRepository implements BellwireRepository {
       { project_id: `eq.${projectId}`, surface_key: `eq.${surfaceKey}` },
       toLiveSurface,
     );
+  }
+
+  async getLiveSurfaceById(surfaceId: string): Promise<LiveSurface | undefined> {
+    return this.one("/live_surfaces", { id: `eq.${surfaceId}` }, toLiveSurface);
   }
 
   async listLiveSurfaces(projectId: string): Promise<LiveSurface[]> {
@@ -1133,10 +1239,20 @@ export class SupabaseBellwireRepository implements BellwireRepository {
   }
 
   async runMaintenance(now: string): Promise<unknown> {
-    return this.request("/rpc/cleanup_bellwire_retention", {
-      method: "POST",
-      body: { p_now: now },
-    });
+    const cutoff = new Date(new Date(now).getTime() - 8 * 60 * 60 * 1_000).toISOString();
+    const [retention] = await Promise.all([
+      this.request("/rpc/cleanup_bellwire_retention", {
+        method: "POST",
+        body: { p_now: now },
+      }),
+      this.request(`/live_activity_start_requests?${params({
+        created_at: `lt.${cutoff}`,
+      })}`, { method: "DELETE" }),
+      this.request(`/live_activity_registrations?${params({
+        expires_at: `lte.${now}`,
+      })}`, { method: "DELETE" }),
+    ]);
+    return retention;
   }
 
   private async one<T>(
@@ -1261,6 +1377,68 @@ function toDevice(row: JsonRecord): Device {
     ),
     lastActiveAt: String(row.last_active_at), pushEnabled: row.push_enabled === true,
     createdAt: String(row.created_at),
+  };
+}
+
+function deviceLiveActivityCapabilityRow(value: DeviceLiveActivityCapability): JsonRecord {
+  return {
+    device_id: value.deviceId,
+    user_id: value.userId,
+    activities_enabled: value.activitiesEnabled,
+    auto_start_enabled: value.autoStartEnabled,
+    push_to_start_token: value.pushToStartToken ?? null,
+    os_version: value.osVersion,
+    updated_at: value.updatedAt,
+  };
+}
+
+function toDeviceLiveActivityCapability(row: JsonRecord): DeviceLiveActivityCapability {
+  return {
+    deviceId: String(row.device_id),
+    userId: String(row.user_id),
+    activitiesEnabled: row.activities_enabled === true,
+    autoStartEnabled: row.auto_start_enabled === true,
+    pushToStartToken: optionalString(row.push_to_start_token),
+    osVersion: String(row.os_version),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+function liveActivityRegistrationRow(value: LiveActivityRegistration): JsonRecord {
+  return {
+    id: value.id,
+    user_id: value.userId,
+    device_id: value.deviceId,
+    project_id: value.projectId,
+    surface_id: value.surfaceId,
+    session_id: value.sessionId,
+    activity_id: value.activityId,
+    update_token: value.updateToken,
+    apns_environment: value.apnsEnvironment,
+    origin: value.origin,
+    last_version: value.lastVersion,
+    expires_at: value.expiresAt,
+    created_at: value.createdAt,
+    updated_at: value.updatedAt,
+  };
+}
+
+function toLiveActivityRegistration(row: JsonRecord): LiveActivityRegistration {
+  return {
+    id: String(row.id),
+    userId: String(row.user_id),
+    deviceId: String(row.device_id),
+    projectId: String(row.project_id),
+    surfaceId: String(row.surface_id),
+    sessionId: String(row.session_id),
+    activityId: String(row.activity_id),
+    updateToken: String(row.update_token),
+    apnsEnvironment: row.apns_environment === "sandbox" ? "sandbox" : "production",
+    origin: row.origin === "manual" ? "manual" : "agent",
+    lastVersion: Number(row.last_version),
+    expiresAt: String(row.expires_at),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
   };
 }
 
@@ -1464,6 +1642,9 @@ function toLiveSurface(row: JsonRecord): LiveSurface {
     subtitle: optionalString(row.subtitle), content: row.content as Record<string, unknown>,
     ...(row.action && typeof row.action === "object"
       ? { action: row.action as unknown as LiveSurface["action"] }
+      : {}),
+    ...(row.live_activity && typeof row.live_activity === "object"
+      ? { liveActivity: row.live_activity as unknown as LiveSurface["liveActivity"] }
       : {}),
     displayOrder: Number(row.display_order), version: Number(row.version),
     createdAt: String(row.created_at), updatedAt: String(row.updated_at),

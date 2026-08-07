@@ -39,6 +39,12 @@
 		B0000000000000000000001F /* ProjectLogoCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000002A /* ProjectLogoCache.swift */; };
 		B00000000000000000000020 /* ProjectDataConsistency.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000002B /* ProjectDataConsistency.swift */; };
 		B00000000000000000000021 /* LiveSurfaceLoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000002C /* LiveSurfaceLoadingView.swift */; };
+		B00000000000000000000022 /* ChecklistSurfaceItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000002D /* ChecklistSurfaceItem.swift */; };
+		B00000000000000000000023 /* TrendSurfacePoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000002E /* TrendSurfacePoint.swift */; };
+		B00000000000000000000024 /* SurfaceSparkline.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000002F /* SurfaceSparkline.swift */; };
+		B00000000000000000000025 /* StatusSurfaceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000030 /* StatusSurfaceCard.swift */; };
+		B00000000000000000000026 /* ChecklistSurfaceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000031 /* ChecklistSurfaceCard.swift */; };
+		B00000000000000000000027 /* TrendSurfaceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000032 /* TrendSurfaceCard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -116,6 +122,12 @@
 		F0000000000000000000002A /* ProjectLogoCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectLogoCache.swift; sourceTree = "<group>"; };
 		F0000000000000000000002B /* ProjectDataConsistency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDataConsistency.swift; sourceTree = "<group>"; };
 		F0000000000000000000002C /* LiveSurfaceLoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSurfaceLoadingView.swift; sourceTree = "<group>"; };
+		F0000000000000000000002D /* ChecklistSurfaceItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChecklistSurfaceItem.swift; sourceTree = "<group>"; };
+		F0000000000000000000002E /* TrendSurfacePoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendSurfacePoint.swift; sourceTree = "<group>"; };
+		F0000000000000000000002F /* SurfaceSparkline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurfaceSparkline.swift; sourceTree = "<group>"; };
+		F00000000000000000000030 /* StatusSurfaceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusSurfaceCard.swift; sourceTree = "<group>"; };
+		F00000000000000000000031 /* ChecklistSurfaceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChecklistSurfaceCard.swift; sourceTree = "<group>"; };
+		F00000000000000000000032 /* TrendSurfaceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendSurfaceCard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -172,6 +184,12 @@
 				F0000000000000000000000B /* OnboardingViews.swift */,
 				F0000000000000000000000C /* InboxViews.swift */,
 				F00000000000000000000013 /* SurfaceViews.swift */,
+				F0000000000000000000002D /* ChecklistSurfaceItem.swift */,
+				F0000000000000000000002E /* TrendSurfacePoint.swift */,
+				F0000000000000000000002F /* SurfaceSparkline.swift */,
+				F00000000000000000000030 /* StatusSurfaceCard.swift */,
+				F00000000000000000000031 /* ChecklistSurfaceCard.swift */,
+				F00000000000000000000032 /* TrendSurfaceCard.swift */,
 				F0000000000000000000000D /* DetailViews.swift */,
 				F0000000000000000000000E /* SettingsView.swift */,
 				F0000000000000000000001E /* PurchaseManager.swift */,
@@ -388,6 +406,12 @@
 				B0000000000000000000000B /* OnboardingViews.swift in Sources */,
 				B0000000000000000000000C /* InboxViews.swift in Sources */,
 				B00000000000000000000010 /* SurfaceViews.swift in Sources */,
+				B00000000000000000000022 /* ChecklistSurfaceItem.swift in Sources */,
+				B00000000000000000000023 /* TrendSurfacePoint.swift in Sources */,
+				B00000000000000000000024 /* SurfaceSparkline.swift in Sources */,
+				B00000000000000000000025 /* StatusSurfaceCard.swift in Sources */,
+				B00000000000000000000026 /* ChecklistSurfaceCard.swift in Sources */,
+				B00000000000000000000027 /* TrendSurfaceCard.swift in Sources */,
 				B0000000000000000000000D /* DetailViews.swift in Sources */,
 				B0000000000000000000000E /* SettingsView.swift in Sources */,
 				B00000000000000000000016 /* PurchaseManager.swift in Sources */,

@@ -179,6 +179,7 @@ struct LiveSurfaceRecord: Decodable, Identifiable, Hashable {
     let subtitle: String?
     let content: [String: JSONValue]
     let action: LiveSurfaceAction?
+    var liveActivity: LiveActivityDirective? = nil
     let displayOrder: Int
     let version: Int
     let createdAt: String
@@ -186,6 +187,11 @@ struct LiveSurfaceRecord: Decodable, Identifiable, Hashable {
     let project: EventProject?
 
     var updatedDate: Date? { ISO8601DateFormatter.bellwireDate(from: updatedAt) }
+}
+
+struct LiveActivityDirective: Decodable, Hashable {
+    let sessionId: String
+    let state: String
 }
 
 struct LiveSurfaceAction: Decodable, Hashable {

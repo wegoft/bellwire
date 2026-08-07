@@ -92,7 +92,11 @@ Bellwire Skill for the current repository. See the
 - Supabase-backed projects, devices, schemas, notification surfaces, tokens,
   events, delivery attempts, and per-token rate limits.
 - Mutable live Surfaces keyed by project and stable name, with native `stats`,
-  `metrics`, `progress`, `segmented_progress`, `alert`, and `timer` renderers.
+  `metrics`, `progress`, `segmented_progress`, `alert`, `timer`, `status`,
+  `checklist`, and `trend` renderers.
+- Explicit, consent-gated Agent Live Activities with Hosted APNs delivery and
+  foreground-only Private delivery. Hosted automation is staged behind
+  `LIVE_ACTIVITY_AUTOMATION_ENABLED=true`.
 - Supabase JWT authentication for users and one-time six-digit binding codes
   for scoped Agent tokens.
 - Typed event validation, sensitive-field protection, idempotent ingestion,

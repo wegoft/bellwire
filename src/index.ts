@@ -14,6 +14,7 @@ import { ApnsClientPool } from "./services/apns-client";
 import { DurableObjectApnsProviderTokenSource } from "./services/apns-provider-token-authority";
 import { DeliveryProcessor } from "./services/delivery-processor";
 import { ModeRequestNotificationProcessor } from "./services/mode-request-notification-processor";
+import { LiveActivityProcessor } from "./services/live-activity-processor";
 import { PrivateWakeProcessor } from "./services/private-wake-processor";
 import {
   PostHogProductAnalytics,
@@ -42,6 +43,7 @@ export interface Env {
   APNS_PRIVATE_KEY?: string;
   APNS_ENVIRONMENT?: "sandbox" | "production";
   ENTITLEMENT_ENFORCEMENT_MODE?: "disabled" | "shadow" | "enforce";
+  LIVE_ACTIVITY_AUTOMATION_ENABLED?: "true" | "false";
   POSTHOG_PROJECT_KEY?: string;
   POSTHOG_HOST?: string;
   DELIVERY_QUEUE?: Queue<DeliveryQueueMessage>;
@@ -74,6 +76,7 @@ export default {
         appleAuthService,
         env.ENTITLEMENT_ENFORCEMENT_MODE ?? "shadow",
         analytics,
+        env.LIVE_ACTIVITY_AUTOMATION_ENABLED === "true",
       ),
       authenticator,
       appleBillingService,
@@ -92,6 +95,7 @@ export default {
     const processor = new DeliveryProcessor(repository, apnsForEnvironment);
     const privateWakeProcessor = new PrivateWakeProcessor(repository, apnsForEnvironment);
     const modeRequestProcessor = new ModeRequestNotificationProcessor(repository, apnsForEnvironment);
+    const liveActivityProcessor = new LiveActivityProcessor(repository, apnsForEnvironment);
     await Promise.all(
       batch.messages.map(async (message) => {
         try {
@@ -99,6 +103,10 @@ export default {
             await privateWakeProcessor.process(message.body.wakeId);
           } else if (message.body.kind === "mode_request") {
             await modeRequestProcessor.process(message.body.requestId, message.body.userId);
+          } else if (message.body.kind === "live_activity_surface") {
+            if (env.LIVE_ACTIVITY_AUTOMATION_ENABLED === "true") {
+              await liveActivityProcessor.process(message.body.surfaceId, message.body.userId);
+            }
           } else {
             await processor.process(message.body.eventId);
           }

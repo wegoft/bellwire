@@ -6,7 +6,10 @@ import { createCipheriv, createECDH, hkdfSync, randomBytes } from "node:crypto";
 
 const DEFAULT_API_URL = "https://api.bellwire.app";
 const FIELD_TYPES = new Set(["string", "number", "boolean", "datetime", "url", "enum"]);
-const SURFACE_TYPES = new Set(["stats", "metrics", "segmented_progress", "progress", "alert", "timer"]);
+const SURFACE_TYPES = new Set([
+  "stats", "metrics", "segmented_progress", "progress", "alert", "timer",
+  "status", "checklist", "trend",
+]);
 const SURFACE_COLORS = new Set(["lime", "green", "cyan", "blue", "purple", "magenta", "red", "orange", "yellow", "gray"]);
 
 const { command, options } = parseArguments(process.argv.slice(2));
@@ -452,6 +455,7 @@ function validateSurface(value) {
   bounded(value.title, "title", 80, true);
   bounded(value.subtitle, "subtitle", 120, false);
   validateAction(value.action);
+  validateLiveActivity(value.liveActivity);
   switch (value.type) {
     case "stats": validateMetrics(value.metrics, 8, false); break;
     case "metrics": validateMetrics(value.metrics, 4, true); break;
@@ -485,7 +489,51 @@ function validateSurface(value) {
         throw new Error("countsDown must be boolean");
       }
       break;
+    case "status":
+      oneOf(value.state, "state", ["neutral", "running", "success", "warning", "critical", "paused"]);
+      bounded(value.label, "label", 32, false);
+      break;
+    case "checklist": {
+      if (!Array.isArray(value.items) || value.items.length < 1 || value.items.length > 8) {
+        throw new Error("items must contain between 1 and 8 checklist entries");
+      }
+      const ids = new Set();
+      value.items.forEach((item, index) => {
+        if (!isRecord(item)) throw new Error(`items[${index}] must be an object`);
+        bounded(item.id, `items[${index}].id`, 64, true);
+        if (!/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/u.test(item.id)) {
+          throw new Error(`items[${index}].id must be a stable lowercase key`);
+        }
+        if (ids.has(item.id)) throw new Error("Checklist item IDs must be unique");
+        ids.add(item.id);
+        bounded(item.title, `items[${index}].title`, 80, true);
+        bounded(item.detail, `items[${index}].detail`, 120, false);
+        oneOf(
+          item.state,
+          `items[${index}].state`,
+          ["pending", "running", "completed", "failed", "skipped"],
+        );
+      });
+      break;
+    }
+    case "trend":
+      if (!Array.isArray(value.points) || value.points.length < 2 || value.points.length > 30) {
+        throw new Error("points must contain between 2 and 30 trend points");
+      }
+      value.points.forEach((point, index) => {
+        if (!isRecord(point)) throw new Error(`points[${index}] must be an object`);
+        bounded(point.label, `points[${index}].label`, 24, true);
+        if (!finite(point.value)) throw new Error(`points[${index}].value must be a finite number`);
+      });
+      oneOf(value.goal, "goal", ["up", "down", "neutral"]);
+      bounded(value.displayValue, "displayValue", 64, false);
+      bounded(value.unit, "unit", 16, false);
+      break;
   }
+}
+
+function oneOf(value, name, allowed) {
+  if (!allowed.includes(value)) throw new Error(`${name} must be one of: ${allowed.join(", ")}`);
 }
 
 function validateMetrics(value, maximum, numeric) {
@@ -521,6 +569,16 @@ function validateAction(value) {
   } catch {
     throw new Error("action.url must use http or https");
   }
+}
+
+function validateLiveActivity(value) {
+  if (value === undefined) return;
+  if (!isRecord(value)) throw new Error("liveActivity must be an object");
+  bounded(value.sessionId, "liveActivity.sessionId", 80, true);
+  if (!/^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/u.test(value.sessionId)) {
+    throw new Error("liveActivity.sessionId must be a stable key");
+  }
+  oneOf(value.state, "liveActivity.state", ["active", "ended"]);
 }
 
 function validateColor(value, name) {

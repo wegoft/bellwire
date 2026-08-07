@@ -1,0 +1,10 @@
+{
+  "type": "status",
+  "title": "Deploying production",
+  "subtitle": "Publishing Worker and running smoke checks",
+  "state": "running",
+  "liveActivity": {
+    "sessionId": "deploy-20260807",
+    "state": "active"
+  }
+}

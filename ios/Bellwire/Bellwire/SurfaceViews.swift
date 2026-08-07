@@ -35,6 +35,12 @@ struct LiveSurfaceCard: View {
             AlertSurfaceCard(surface: surface)
         case "timer":
             TimerSurfaceCard(surface: surface)
+        case "status":
+            StatusSurfaceCard(surface: surface)
+        case "checklist":
+            ChecklistSurfaceCard(surface: surface)
+        case "trend":
+            TrendSurfaceCard(surface: surface)
         default:
             GenericSurfaceCard(surface: surface)
         }
@@ -217,7 +223,7 @@ private struct GenericSurfaceCard: View {
     }
 }
 
-private struct SurfaceIdentity: View {
+struct SurfaceIdentity: View {
     let surface: LiveSurfaceRecord
     var size: CGFloat
     var fallbackSubtitle: String? = nil
@@ -254,7 +260,7 @@ private struct SurfaceIdentity: View {
     }
 }
 
-private struct SurfaceTypeBadge: View {
+struct SurfaceTypeBadge: View {
     let title: String
     let color: Color
 
@@ -270,7 +276,7 @@ private struct SurfaceTypeBadge: View {
     }
 }
 
-private struct SurfaceFooter: View {
+struct SurfaceFooter: View {
     let surface: LiveSurfaceRecord
     var showsProject = true
     @Environment(\.locale) private var locale
@@ -449,7 +455,7 @@ private struct SurfaceCardModifier: ViewModifier {
     }
 }
 
-private extension View {
+extension View {
     func surfaceCard(isAlert: Bool = false) -> some View {
         modifier(SurfaceCardModifier(isAlert: isAlert))
     }
@@ -462,7 +468,7 @@ private func surfaceProgress(_ surface: LiveSurfaceRecord) -> Double {
     return upper > 0 ? value / upper : 0
 }
 
-private func surfaceColor(_ name: String?, fallback: Color = BellwireTheme.secondaryInk) -> Color {
+func surfaceColor(_ name: String?, fallback: Color = BellwireTheme.secondaryInk) -> Color {
     switch name {
     case "lime": Color(red: 0.54, green: 0.73, blue: 0.24)
     case "green": BellwireTheme.live

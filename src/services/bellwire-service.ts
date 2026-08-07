@@ -10,6 +10,7 @@ import {
   type AgentScope,
   type Delivery,
   type Device,
+  type DeviceLiveActivityCapability,
   type DeviceKey,
   type DeliveryModeChangeRequest,
   type DirectConnectionEnvelope,
@@ -19,6 +20,7 @@ import {
   type EventSchema,
   type IngestToken,
   type LiveSurface,
+  type LiveActivityDirective,
   type LiveSurfaceAction,
   type LiveSurfaceType,
   type NotificationSurface,
@@ -281,6 +283,7 @@ export class BellwireService {
     private readonly appleAuthService?: AppleAuthService,
     private readonly enforcementMode: "disabled" | "shadow" | "enforce" = "disabled",
     private readonly analytics?: ProductAnalytics,
+    private readonly liveActivityAutomationEnabled = true,
   ) {}
 
   async captureProductEvent(principal: Principal, input: unknown): Promise<void> {
@@ -677,6 +680,103 @@ export class BellwireService {
       throw new ServiceError(404, "DEVICE_NOT_FOUND", "Device not found");
     }
     await this.repository.deleteDevice(deviceId);
+  }
+
+  async registerDeviceLiveActivityCapability(principal: Principal, input: unknown) {
+    this.requireSignedInUser(principal);
+    const body = asRecord(input);
+    const installationId = readNonEmptyString(body.installationId)?.toLowerCase();
+    if (!installationId || !isUUID(installationId)) {
+      throw invalidRequest("Installation ID must be a UUID");
+    }
+    if (typeof body.activitiesEnabled !== "boolean" || typeof body.autoStartEnabled !== "boolean") {
+      throw invalidRequest("activitiesEnabled and autoStartEnabled must be boolean");
+    }
+    const osVersion = readBoundedString(body.osVersion, "OS version", 32);
+    const pushToStartToken = readOptionalHexToken(body.pushToStartToken, "pushToStartToken");
+    const device = (await this.repository.listDevices(principal.userId)).find(
+      (candidate) => candidate.installationId === installationId,
+    );
+    if (!device) throw new ServiceError(404, "DEVICE_NOT_FOUND", "Device not found");
+    const capability: DeviceLiveActivityCapability = {
+      deviceId: device.id,
+      userId: principal.userId,
+      activitiesEnabled: body.activitiesEnabled,
+      autoStartEnabled: body.autoStartEnabled,
+      ...(pushToStartToken ? { pushToStartToken } : {}),
+      osVersion,
+      updatedAt: new Date().toISOString(),
+    };
+    return this.repository.saveDeviceLiveActivityCapability(capability);
+  }
+
+  async registerLiveActivity(
+    principal: Principal,
+    activityIdValue: string,
+    input: unknown,
+  ) {
+    this.requireSignedInUser(principal);
+    const activityId = readBoundedString(activityIdValue, "Activity ID", 128);
+    const body = asRecord(input);
+    const installationId = readNonEmptyString(body.installationId)?.toLowerCase();
+    if (!installationId || !isUUID(installationId)) {
+      throw invalidRequest("Installation ID must be a UUID");
+    }
+    const projectId = readNonEmptyString(body.projectId);
+    const surfaceId = readNonEmptyString(body.surfaceId);
+    const sessionId = parseLiveActivitySessionId(body.sessionId);
+    const updateToken = readRequiredHexToken(body.updateToken, "updateToken");
+    const environment = body.apnsEnvironment;
+    if (environment !== "sandbox" && environment !== "production") {
+      throw invalidRequest("APNs environment must be sandbox or production");
+    }
+    const device = (await this.repository.listDevices(principal.userId)).find(
+      (candidate) => candidate.installationId === installationId,
+    );
+    if (!device) throw new ServiceError(404, "DEVICE_NOT_FOUND", "Device not found");
+    const project = projectId ? await this.repository.getProject(projectId) : undefined;
+    if (!project || project.userId !== principal.userId) {
+      throw new ServiceError(404, "PROJECT_NOT_FOUND", "Project not found");
+    }
+    const surface = (await this.repository.listLiveSurfaces(project.id)).find(
+      (candidate) => candidate.id === surfaceId,
+    );
+    if (!surface || surface.liveActivity?.sessionId !== sessionId) {
+      throw new ServiceError(404, "SURFACE_NOT_FOUND", "Live Activity Surface not found");
+    }
+    const now = new Date();
+    const registration = await this.repository.saveLiveActivityRegistration({
+      id: crypto.randomUUID(),
+      userId: principal.userId,
+      deviceId: device.id,
+      projectId: project.id,
+      surfaceId: surface.id,
+      sessionId,
+      activityId,
+      updateToken,
+      apnsEnvironment: environment,
+      origin: "agent",
+      lastVersion: surface.version,
+      expiresAt: new Date(now.getTime() + 8 * 60 * 60 * 1_000).toISOString(),
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+    await this.repository.deleteLiveActivityStartRequest(device.id, project.id, sessionId);
+    if (this.liveActivityAutomationEnabled && surface.liveActivity.state === "ended") {
+      await this.deliveryDispatcher?.enqueueLiveSurface?.(surface, project);
+    }
+    return registration;
+  }
+
+  async deleteLiveActivityRegistration(
+    principal: Principal,
+    activityIdValue: string,
+  ): Promise<void> {
+    this.requireSignedInUser(principal);
+    const activityId = readBoundedString(activityIdValue, "Activity ID", 128);
+    const registration = (await this.repository.listLiveActivityRegistrations(principal.userId))
+      .find((candidate) => candidate.activityId === activityId);
+    if (registration) await this.repository.deleteLiveActivityRegistration(activityId);
   }
 
   async createDeviceBinding(principal: Principal, input: unknown = {}) {
@@ -1205,6 +1305,9 @@ export class BellwireService {
     const content = parseLiveSurfaceContent(type, body);
     const action = parseLiveSurfaceAction(body.action);
     const existing = await this.repository.getLiveSurface(projectId, surfaceKey);
+    const liveActivity = body.liveActivity === undefined
+      ? existing?.liveActivity
+      : parseLiveActivityDirective(body.liveActivity);
     const now = new Date().toISOString();
     const displayOrder = existing?.displayOrder
       ?? nextDisplayOrder(await this.repository.listLiveSurfaces(projectId));
@@ -1217,6 +1320,7 @@ export class BellwireService {
       ...(subtitle ? { subtitle } : {}),
       content,
       ...(action ? { action } : {}),
+      ...(liveActivity ? { liveActivity } : {}),
       displayOrder,
       version: 1,
       createdAt: now,
@@ -1238,6 +1342,16 @@ export class BellwireService {
     if (!accepted.surface) throw new Error("Hosted Surface was not persisted");
     if (accepted.created) {
       await this.captureQuotaEvent(project.userId, project.deliveryMode, accepted);
+      if (this.liveActivityAutomationEnabled && accepted.surface.liveActivity) {
+        try {
+          await this.deliveryDispatcher?.enqueueLiveSurface?.(accepted.surface, project);
+        } catch (error) {
+          console.error(
+            "Live Activity queue enqueue failed",
+            error instanceof Error ? error.message.slice(0, 240) : "Queue unavailable",
+          );
+        }
+      }
     }
     return accepted.surface;
   }
@@ -2314,6 +2428,16 @@ const SURFACE_COLORS = [
   "lime", "green", "cyan", "blue", "purple", "magenta", "red", "orange", "yellow", "gray",
 ] as const;
 
+const SURFACE_STATUS_STATES = [
+  "neutral", "running", "success", "warning", "critical", "paused",
+] as const;
+
+const SURFACE_CHECKLIST_STATES = [
+  "pending", "running", "completed", "failed", "skipped",
+] as const;
+
+const SURFACE_TREND_GOALS = ["up", "down", "neutral"] as const;
+
 function parseLiveSurfaceContent(
   type: LiveSurfaceType,
   body: Record<string, unknown>,
@@ -2364,7 +2488,72 @@ function parseLiveSurfaceContent(
       }
       return { durationSeconds, countsDown: body.countsDown !== false };
     }
+    case "status": {
+      const state = readEnumValue(
+        body.state,
+        SURFACE_STATUS_STATES,
+        "state",
+      );
+      const label = readOptionalBoundedString(body.label, "label", 32);
+      return { state, ...(label ? { label } : {}) };
+    }
+    case "checklist": {
+      if (!Array.isArray(body.items) || body.items.length === 0 || body.items.length > 8) {
+        throw invalidRequest("items must contain between 1 and 8 checklist entries");
+      }
+      const ids = new Set<string>();
+      const items = body.items.map((rawItem, index) => {
+        const item = asRecord(rawItem);
+        const id = readBoundedString(item.id, `items[${index}].id`, 64);
+        if (!/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/u.test(id)) {
+          throw invalidRequest(`items[${index}].id must be a stable lowercase key`);
+        }
+        if (ids.has(id)) throw invalidRequest("Checklist item IDs must be unique");
+        ids.add(id);
+        const title = readBoundedString(item.title, `items[${index}].title`, 80);
+        const detail = readOptionalBoundedString(item.detail, `items[${index}].detail`, 120);
+        const state = readEnumValue(
+          item.state,
+          SURFACE_CHECKLIST_STATES,
+          `items[${index}].state`,
+        );
+        return { id, title, state, ...(detail ? { detail } : {}) };
+      });
+      return { items };
+    }
+    case "trend": {
+      if (!Array.isArray(body.points) || body.points.length < 2 || body.points.length > 30) {
+        throw invalidRequest("points must contain between 2 and 30 trend points");
+      }
+      const points = body.points.map((rawPoint, index) => {
+        const point = asRecord(rawPoint);
+        const label = readBoundedString(point.label, `points[${index}].label`, 24);
+        const value = readFiniteNumber(point.value);
+        if (value === undefined) throw invalidRequest(`points[${index}].value must be a finite number`);
+        return { label, value };
+      });
+      const goal = readEnumValue(body.goal, SURFACE_TREND_GOALS, "goal");
+      const displayValue = readOptionalBoundedString(body.displayValue, "displayValue", 64);
+      const unit = readOptionalBoundedString(body.unit, "unit", 16);
+      return {
+        points,
+        goal,
+        ...(displayValue ? { displayValue } : {}),
+        ...(unit ? { unit } : {}),
+      };
+    }
   }
+}
+
+function readEnumValue<const Values extends readonly string[]>(
+  value: unknown,
+  values: Values,
+  name: string,
+): Values[number] {
+  if (typeof value !== "string" || !(values as readonly string[]).includes(value)) {
+    throw invalidRequest(`${name} must be one of: ${values.join(", ")}`);
+  }
+  return value as Values[number];
 }
 
 function parseSurfaceMetrics(value: unknown, maximum: number, numeric: boolean) {
@@ -2422,6 +2611,41 @@ function parseLiveSurfaceAction(value: unknown): LiveSurfaceAction | undefined {
   const url = readBoundedString(action.url, "Action URL", 2_048);
   if (!isHttpUrl(url)) throw invalidRequest("Action URL must use http or https");
   return { type: "open_url", title, url };
+}
+
+function parseLiveActivityDirective(value: unknown): LiveActivityDirective | undefined {
+  if (value === undefined || value === null) return undefined;
+  const directive = asStrictRecord(value, ["sessionId", "state"]);
+  const sessionId = parseLiveActivitySessionId(directive.sessionId);
+  if (directive.state !== "active" && directive.state !== "ended") {
+    throw invalidRequest("liveActivity.state must be active or ended");
+  }
+  return { sessionId, state: directive.state };
+}
+
+function parseLiveActivitySessionId(value: unknown): string {
+  const sessionId = readBoundedString(value, "Live Activity session ID", 80);
+  if (!/^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/u.test(sessionId)) {
+    throw invalidRequest("Live Activity session ID must be a stable key");
+  }
+  return sessionId;
+}
+
+function readOptionalHexToken(value: unknown, name: string): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  return readRequiredHexToken(value, name);
+}
+
+function readRequiredHexToken(value: unknown, name: string): string {
+  const token = readNonEmptyString(value)?.toLowerCase();
+  if (!token || !/^[a-f0-9]{32,512}$/u.test(token)) {
+    throw invalidRequest(`${name} must be a hexadecimal APNs token`);
+  }
+  return token;
+}
+
+function isUUID(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
 }
 
 function readFiniteNumber(value: unknown): number | undefined {
