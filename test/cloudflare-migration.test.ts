@@ -33,7 +33,7 @@ describe("Supabase to D1 migration preparation", () => {
     expect(JSON.parse(readFileSync(join(outputPath, "report.json"), "utf8")))
       .toMatchObject({
         business: { projects: 1, events: 1, billing_entitlements: 1, bellwire_waitlist: 1 },
-        auth: { auth_users: 1, auth_identities: 1 },
+        auth: { auth_users: 1, auth_identities: 1, apple_auth_tokens: 1 },
         identityCoverage: {
           userOwnedIds: 1,
           matchedAuthUsers: 1,
@@ -66,6 +66,8 @@ describe("Supabase to D1 migration preparation", () => {
         .toMatchObject({ status: "expired", downgradeDeadline: "2026-08-14T10:00:00.000Z" });
       await expect(auth.prepare('SELECT email FROM "user"').first())
         .resolves.toMatchObject({ email: "user@example.com" });
+      await expect(auth.prepare("SELECT encrypted_refresh_token FROM apple_auth_tokens").first())
+        .resolves.toMatchObject({ encrypted_refresh_token: "v1.iv.ciphertext" });
     } finally {
       await miniflare.dispose();
     }
@@ -127,6 +129,12 @@ function snapshot() {
       user_id: "user-1",
       provider: "apple",
       identity_data: { sub: "apple-user-1" },
+      created_at: now,
+      updated_at: now,
+    }],
+    apple_auth_tokens: [{
+      user_id: "user-1",
+      refresh_token_ciphertext: "v1.iv.ciphertext",
       created_at: now,
       updated_at: now,
     }],

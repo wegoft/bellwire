@@ -307,7 +307,8 @@ function prepareAuth(snapshot, preparedAt) {
   }
   for (const row of appleTokens) {
     const userId = required(row.user_id, "apple_auth_tokens user_id");
-    lines.push(`INSERT OR REPLACE INTO apple_auth_tokens (user_id, encrypted_refresh_token, updated_at) VALUES (${sql(userId)}, ${sql(required(row.encrypted_refresh_token, `apple_auth_tokens ${userId} encrypted_refresh_token`))}, ${sql(required(row.updated_at, `apple_auth_tokens ${userId} updated_at`))});`);
+    const encryptedRefreshToken = row.encrypted_refresh_token ?? row.refresh_token_ciphertext;
+    lines.push(`INSERT OR REPLACE INTO apple_auth_tokens (user_id, encrypted_refresh_token, updated_at) VALUES (${sql(userId)}, ${sql(required(encryptedRefreshToken, `apple_auth_tokens ${userId} encrypted refresh token`))}, ${sql(required(row.updated_at, `apple_auth_tokens ${userId} updated_at`))});`);
   }
   return {
     sql: `${lines.join("\n")}\n`,
