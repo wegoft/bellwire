@@ -17,7 +17,10 @@ not commit them here.
 
 The API Worker reaches Auth through `AUTH_SERVICE`. Public clients use the Auth
 origin configured by `AUTH_ISSUER`; the expected JWT audience is
-`bellwire-api`.
+`bellwire-api`. In hosted production, Auth obtains its signed Apple client
+client secret and token exchange/revocation operations from API through
+`APPLE_AUTH_SERVICE`; the Apple private key remains an unreadable secret on the
+existing API Worker and is never exported.
 
 ## 1. Freeze and export
 

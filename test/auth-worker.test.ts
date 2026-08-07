@@ -5,12 +5,19 @@ import { resolve } from "node:path";
 import { Miniflare } from "miniflare";
 import { serializeSignedCookie } from "better-call";
 import { exportPKCS8, generateKeyPair } from "jose";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import authWorker, { type AuthEnv } from "../src/auth/index";
+import authWorker, {
+  createBellwireAuth,
+  ServiceBoundAppleOAuthClient,
+  type AuthEnv,
+} from "../src/auth/index";
 import { InMemoryBellwireRepository } from "../src/repositories/in-memory-bellwire-repository";
 import { PrincipalAuthenticator } from "../src/security/authenticator";
-import { decryptAppleRefreshToken } from "../src/services/apple-auth-service";
+import {
+  AppleTokenClient,
+  decryptAppleRefreshToken,
+} from "../src/services/apple-auth-service";
 
 let miniflare: Miniflare;
 let database: D1Database;
@@ -83,6 +90,69 @@ describe("Bellwire Auth Worker", () => {
     );
     expect(blocked.status).toBe(503);
     expect(blocked.headers.get("retry-after")).toBe("120");
+  });
+
+  it("obtains the Apple client secret over a service binding without a local private key", async () => {
+    const env = authEnv();
+    const clientSecret = await new AppleTokenClient({
+      keyId: env.APPLE_SIGN_IN_KEY_ID!,
+      teamId: env.APPLE_SIGN_IN_TEAM_ID!,
+      clientId: env.APPLE_SIGN_IN_CLIENT_ID,
+      privateKey: env.APPLE_SIGN_IN_PRIVATE_KEY!,
+    }).createClientSecret();
+    const serviceFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      expect(new URL(request.url).pathname).toBe("/internal/auth/apple/client-secret");
+      expect(request.headers.get("authorization"))
+        .toBe(`Bearer ${env.AUTH_INTERNAL_SECRET}`);
+      return Response.json({ clientSecret });
+    });
+    const remoteEnv: AuthEnv = {
+      ...env,
+      APPLE_SIGN_IN_KEY_ID: undefined,
+      APPLE_SIGN_IN_TEAM_ID: undefined,
+      APPLE_SIGN_IN_PRIVATE_KEY: undefined,
+      APPLE_AUTH_SERVICE: { fetch: serviceFetch } as unknown as Fetcher,
+    };
+
+    const auth = await createBellwireAuth(remoteEnv);
+    const response = await auth.handler(new Request(
+      "https://auth.bellwire.app/api/auth/jwks",
+    ));
+    expect(response.status).toBe(200);
+    expect(serviceFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("exchanges and revokes Apple tokens through the API service binding", async () => {
+    const requests: Request[] = [];
+    const service = {
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(input, init);
+        requests.push(request);
+        return request.url.endsWith("/exchange")
+          ? Response.json({ refreshToken: "remote-refresh-token" })
+          : new Response(null, { status: 204 });
+      },
+    } as unknown as Fetcher;
+    const client = new ServiceBoundAppleOAuthClient(
+      service,
+      "internal-secret",
+      "https://auth.bellwire.app",
+    );
+
+    await expect(client.exchangeAuthorizationCode("authorization-code"))
+      .resolves.toBe("remote-refresh-token");
+    await client.revokeRefreshToken("remote-refresh-token");
+    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+      "/internal/auth/apple/exchange",
+      "/internal/auth/apple/revoke",
+    ]);
+    await expect(requests[0]!.json()).resolves.toEqual({
+      authorizationCode: "authorization-code",
+    });
+    await expect(requests[1]!.json()).resolves.toEqual({
+      refreshToken: "remote-refresh-token",
+    });
   });
 
   it("protects internal deletion and cascades Better Auth sessions", async () => {

@@ -18,3 +18,7 @@ binding = "AUTH_DB"
 database_name = "auth-bellwire"
 database_id = "11111111-1111-4111-8111-111111111111"
 migrations_dir = "d1/auth"
+
+[[services]]
+binding = "APPLE_AUTH_SERVICE"
+service = "bellwire-api"

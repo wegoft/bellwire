@@ -9,6 +9,7 @@ import {
   AppleTokenClient,
   decryptAppleRefreshToken,
   encryptAppleRefreshToken,
+  type AppleOAuthClient,
 } from "../services/apple-auth-service";
 
 export interface AuthEnv {
@@ -18,13 +19,14 @@ export interface AuthEnv {
   AUTH_AUDIENCE: string;
   BETTER_AUTH_SECRET: string;
   AUTH_INTERNAL_SECRET: string;
-  APPLE_SIGN_IN_KEY_ID: string;
-  APPLE_SIGN_IN_TEAM_ID: string;
+  APPLE_SIGN_IN_KEY_ID?: string;
+  APPLE_SIGN_IN_TEAM_ID?: string;
   APPLE_SIGN_IN_CLIENT_ID: string;
   APPLE_APP_BUNDLE_ID: string;
-  APPLE_SIGN_IN_PRIVATE_KEY: string;
+  APPLE_SIGN_IN_PRIVATE_KEY?: string;
   APPLE_TOKEN_ENCRYPTION_KEY: string;
   APPLE_TOKEN_REWRAP_SECRET?: string;
+  APPLE_AUTH_SERVICE?: Fetcher;
   CUTOVER_WRITE_FREEZE?: "true" | "false";
 }
 
@@ -290,26 +292,46 @@ export async function createBellwireAuth(env: AuthEnv) {
 }
 
 async function appleClientSecretFor(env: AuthEnv): Promise<string> {
+  if (env.APPLE_AUTH_SERVICE) {
+    const response = await env.APPLE_AUTH_SERVICE.fetch(new Request(
+      new URL("/internal/auth/apple/client-secret", env.AUTH_ISSUER),
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${env.AUTH_INTERNAL_SECRET}` },
+      },
+    ));
+    const body = await response.json<{ clientSecret?: unknown }>().catch(() => null);
+    if (!response.ok || typeof body?.clientSecret !== "string" || !body.clientSecret) {
+      throw new Error(`Apple client secret service failed with status ${response.status}`);
+    }
+    return body.clientSecret;
+  }
+  const keyId = requiredAuthEnv(env.APPLE_SIGN_IN_KEY_ID, "APPLE_SIGN_IN_KEY_ID");
+  const teamId = requiredAuthEnv(env.APPLE_SIGN_IN_TEAM_ID, "APPLE_SIGN_IN_TEAM_ID");
+  const privateKey = requiredAuthEnv(
+    env.APPLE_SIGN_IN_PRIVATE_KEY,
+    "APPLE_SIGN_IN_PRIVATE_KEY",
+  );
   const cached = appleClientSecretCache;
   if (
     cached
     && cached.expiresAt > Date.now()
-    && cached.keyId === env.APPLE_SIGN_IN_KEY_ID
-    && cached.teamId === env.APPLE_SIGN_IN_TEAM_ID
+    && cached.keyId === keyId
+    && cached.teamId === teamId
     && cached.clientId === env.APPLE_SIGN_IN_CLIENT_ID
-    && cached.privateKey === env.APPLE_SIGN_IN_PRIVATE_KEY
+    && cached.privateKey === privateKey
   ) return cached.value;
   const value = await new AppleTokenClient({
-    keyId: env.APPLE_SIGN_IN_KEY_ID,
-    teamId: env.APPLE_SIGN_IN_TEAM_ID,
+    keyId,
+    teamId,
     clientId: env.APPLE_SIGN_IN_CLIENT_ID,
-    privateKey: env.APPLE_SIGN_IN_PRIVATE_KEY,
+    privateKey,
   }).createClientSecret();
   appleClientSecretCache = {
-    keyId: env.APPLE_SIGN_IN_KEY_ID,
-    teamId: env.APPLE_SIGN_IN_TEAM_ID,
+    keyId,
+    teamId,
     clientId: env.APPLE_SIGN_IN_CLIENT_ID,
-    privateKey: env.APPLE_SIGN_IN_PRIVATE_KEY,
+    privateKey,
     value,
     expiresAt: Date.now() + APPLE_CLIENT_SECRET_CACHE_SECONDS * 1_000,
   };
@@ -339,16 +361,67 @@ async function issueNativeSession(
 }
 
 function appleAuthService(env: AuthEnv): AppleAuthService {
+  let oauthClient: AppleOAuthClient;
+  if (env.APPLE_AUTH_SERVICE) {
+    oauthClient = new ServiceBoundAppleOAuthClient(
+      env.APPLE_AUTH_SERVICE,
+      env.AUTH_INTERNAL_SECRET,
+      env.AUTH_ISSUER,
+    );
+  } else {
+    oauthClient = new AppleTokenClient({
+      keyId: requiredAuthEnv(env.APPLE_SIGN_IN_KEY_ID, "APPLE_SIGN_IN_KEY_ID"),
+      teamId: requiredAuthEnv(env.APPLE_SIGN_IN_TEAM_ID, "APPLE_SIGN_IN_TEAM_ID"),
+      clientId: env.APPLE_SIGN_IN_CLIENT_ID,
+      privateKey: requiredAuthEnv(
+        env.APPLE_SIGN_IN_PRIVATE_KEY,
+        "APPLE_SIGN_IN_PRIVATE_KEY",
+      ),
+    });
+  }
   return new AppleAuthService(
     new D1AppleRefreshTokenStore(env.AUTH_DB),
-    new AppleTokenClient({
-      keyId: env.APPLE_SIGN_IN_KEY_ID,
-      teamId: env.APPLE_SIGN_IN_TEAM_ID,
-      clientId: env.APPLE_SIGN_IN_CLIENT_ID,
-      privateKey: env.APPLE_SIGN_IN_PRIVATE_KEY,
-    }),
+    oauthClient,
     env.APPLE_TOKEN_ENCRYPTION_KEY,
   );
+}
+
+export class ServiceBoundAppleOAuthClient implements AppleOAuthClient {
+  constructor(
+    private readonly service: Fetcher,
+    private readonly internalSecret: string,
+    private readonly issuer: string,
+  ) {}
+
+  async exchangeAuthorizationCode(authorizationCode: string): Promise<string> {
+    const response = await this.request("exchange", { authorizationCode });
+    const body = await response.json<{ refreshToken?: unknown }>().catch(() => null);
+    if (!response.ok || typeof body?.refreshToken !== "string" || !body.refreshToken) {
+      throw new Error(`Apple authorization exchange service failed with status ${response.status}`);
+    }
+    return body.refreshToken;
+  }
+
+  async revokeRefreshToken(refreshToken: string): Promise<void> {
+    const response = await this.request("revoke", { refreshToken });
+    if (!response.ok) {
+      throw new Error(`Apple token revocation service failed with status ${response.status}`);
+    }
+  }
+
+  private request(operation: "exchange" | "revoke", body: object): Promise<Response> {
+    return this.service.fetch(new Request(
+      new URL(`/internal/auth/apple/${operation}`, this.issuer),
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${this.internalSecret}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      },
+    ));
+  }
 }
 
 function requireAuthConfiguration(env: AuthEnv): void {
@@ -357,16 +430,25 @@ function requireAuthConfiguration(env: AuthEnv): void {
     ["AUTH_AUDIENCE", env.AUTH_AUDIENCE, 3],
     ["BETTER_AUTH_SECRET", env.BETTER_AUTH_SECRET, 32],
     ["AUTH_INTERNAL_SECRET", env.AUTH_INTERNAL_SECRET, 32],
-    ["APPLE_SIGN_IN_KEY_ID", env.APPLE_SIGN_IN_KEY_ID, 3],
-    ["APPLE_SIGN_IN_TEAM_ID", env.APPLE_SIGN_IN_TEAM_ID, 10],
     ["APPLE_SIGN_IN_CLIENT_ID", env.APPLE_SIGN_IN_CLIENT_ID, 3],
     ["APPLE_APP_BUNDLE_ID", env.APPLE_APP_BUNDLE_ID, 3],
-    ["APPLE_SIGN_IN_PRIVATE_KEY", env.APPLE_SIGN_IN_PRIVATE_KEY, 64],
     ["APPLE_TOKEN_ENCRYPTION_KEY", env.APPLE_TOKEN_ENCRYPTION_KEY, 32],
   ];
+  if (!env.APPLE_AUTH_SERVICE) {
+    required.push(
+      ["APPLE_SIGN_IN_KEY_ID", env.APPLE_SIGN_IN_KEY_ID, 3],
+      ["APPLE_SIGN_IN_TEAM_ID", env.APPLE_SIGN_IN_TEAM_ID, 10],
+      ["APPLE_SIGN_IN_PRIVATE_KEY", env.APPLE_SIGN_IN_PRIVATE_KEY, 64],
+    );
+  }
   for (const [name, value, minimum] of required) {
     if (!value || value.length < minimum) throw new Error(`${name} is missing or invalid`);
   }
+}
+
+function requiredAuthEnv(value: string | undefined, name: string): string {
+  if (!value) throw new Error(`${name} is missing or invalid`);
+  return value;
 }
 
 function normalizedIssuer(value: string): string {

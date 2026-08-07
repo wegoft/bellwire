@@ -6,7 +6,11 @@ import { InMemoryBellwireRepository } from "./repositories/in-memory-bellwire-re
 import { PrincipalAuthenticator } from "./security/authenticator";
 import { BellwireService } from "./services/bellwire-service";
 import { AuthAdminClient } from "./services/auth-admin-client";
-import { decryptAppleRefreshToken } from "./services/apple-auth-service";
+import {
+  AppleTokenClient,
+  decryptAppleRefreshToken,
+  type AppleOAuthClient,
+} from "./services/apple-auth-service";
 import {
   AppleBillingService,
   OfficialAppleBillingVerifier,
@@ -37,6 +41,10 @@ export interface Env {
   SUPABASE_SERVICE_ROLE_KEY?: string;
   APPLE_TOKEN_ENCRYPTION_KEY?: string;
   APPLE_TOKEN_REWRAP_SECRET?: string;
+  APPLE_SIGN_IN_KEY_ID?: string;
+  APPLE_SIGN_IN_TEAM_ID?: string;
+  APPLE_SIGN_IN_CLIENT_ID?: string;
+  APPLE_SIGN_IN_PRIVATE_KEY?: string;
   CUTOVER_WRITE_FREEZE?: "true" | "false";
   APPLE_ROOT_CERTIFICATES_BASE64?: string;
   APPLE_APP_ID?: string;
@@ -68,6 +76,12 @@ export default {
       && url.pathname === "/internal/migrations/apple-refresh-tokens"
     ) {
       return migrateLegacyAppleRefreshTokens(request, env);
+    }
+    if (
+      request.method === "POST"
+      && url.pathname.startsWith("/internal/auth/apple/")
+    ) {
+      return handleAppleAuthInternal(request, env);
     }
     if (env.CUTOVER_WRITE_FREEZE === "true" && url.pathname !== "/health") {
       return cutoverWriteFreezeResponse();
@@ -165,6 +179,50 @@ function cutoverWriteFreezeResponse(): Response {
     status: 503,
     headers: { "cache-control": "no-store", "retry-after": "120" },
   });
+}
+
+type AppleOAuthOperator = AppleOAuthClient & { createClientSecret(): Promise<string> };
+
+export async function handleAppleAuthInternal(
+  request: Request,
+  env: Env,
+  oauthClient?: AppleOAuthOperator,
+): Promise<Response> {
+  const internalSecret = requiredMigrationEnv(env.AUTH_INTERNAL_SECRET, "AUTH_INTERNAL_SECRET");
+  if (!await secretsMatch(readBearer(request.headers.get("authorization")), internalSecret)) {
+    return Response.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const client = oauthClient ?? new AppleTokenClient({
+    keyId: requiredMigrationEnv(env.APPLE_SIGN_IN_KEY_ID, "APPLE_SIGN_IN_KEY_ID"),
+    teamId: requiredMigrationEnv(env.APPLE_SIGN_IN_TEAM_ID, "APPLE_SIGN_IN_TEAM_ID"),
+    clientId: requiredMigrationEnv(env.APPLE_SIGN_IN_CLIENT_ID, "APPLE_SIGN_IN_CLIENT_ID"),
+    privateKey: requiredMigrationEnv(
+      env.APPLE_SIGN_IN_PRIVATE_KEY,
+      "APPLE_SIGN_IN_PRIVATE_KEY",
+    ),
+  });
+  const path = new URL(request.url).pathname;
+  if (path === "/internal/auth/apple/client-secret") {
+    return Response.json({ clientSecret: await client.createClientSecret() }, {
+      headers: { "cache-control": "no-store" },
+    });
+  }
+  const body: Record<string, unknown> = await request.json<Record<string, unknown>>()
+    .catch(() => ({}));
+  if (path === "/internal/auth/apple/exchange") {
+    const authorizationCode = nonEmptyString(body.authorizationCode);
+    if (!authorizationCode) return Response.json({ error: "invalid request" }, { status: 400 });
+    return Response.json({
+      refreshToken: await client.exchangeAuthorizationCode(authorizationCode),
+    }, { headers: { "cache-control": "no-store" } });
+  }
+  if (path === "/internal/auth/apple/revoke") {
+    const refreshToken = nonEmptyString(body.refreshToken);
+    if (!refreshToken) return Response.json({ error: "invalid request" }, { status: 400 });
+    await client.revokeRefreshToken(refreshToken);
+    return new Response(null, { status: 204 });
+  }
+  return new Response("Not Found", { status: 404 });
 }
 
 interface LegacyAppleRefreshTokenRow {
@@ -279,6 +337,12 @@ function requiredMigrationEnv(value: string | undefined, name: string): string {
 function readBearer(value: string | null): string {
   if (!value?.toLowerCase().startsWith("bearer ")) return "";
   return value.slice(7).trim();
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
 }
 
 async function secretsMatch(left: string, right: string): Promise<boolean> {
