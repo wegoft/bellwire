@@ -118,7 +118,7 @@ describe("iOS Inbox preview", () => {
     const buildNumbers = [...project.matchAll(/CURRENT_PROJECT_VERSION = ([^;]+);/gu)]
       .map((match) => match[1]);
     expect(buildNumbers.length).toBeGreaterThan(0);
-    expect(new Set(buildNumbers)).toEqual(new Set(["12"]));
+    expect(new Set(buildNumbers)).toEqual(new Set(["13"]));
 
     const marketingVersions = [...project.matchAll(/MARKETING_VERSION = ([^;]+);/gu)]
       .map((match) => match[1]);
