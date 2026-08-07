@@ -6,6 +6,7 @@ import { InMemoryBellwireRepository } from "./repositories/in-memory-bellwire-re
 import { PrincipalAuthenticator } from "./security/authenticator";
 import { BellwireService } from "./services/bellwire-service";
 import { AuthAdminClient } from "./services/auth-admin-client";
+import { decryptAppleRefreshToken } from "./services/apple-auth-service";
 import {
   AppleBillingService,
   OfficialAppleBillingVerifier,
@@ -32,6 +33,10 @@ export interface Env {
   AUTH_AUDIENCE?: string;
   AUTH_INTERNAL_SECRET?: string;
   AUTH_SERVICE?: Fetcher;
+  LEGACY_SUPABASE_URL?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
+  APPLE_TOKEN_ENCRYPTION_KEY?: string;
+  APPLE_TOKEN_REWRAP_SECRET?: string;
   APPLE_ROOT_CERTIFICATES_BASE64?: string;
   APPLE_APP_ID?: string;
   APNS_KEY_ID?: string;
@@ -56,7 +61,14 @@ export { ApnsProviderTokenAuthority } from "./services/apns-provider-token-autho
 
 export default {
   async fetch(request: Request, env: Env, executionContext: ExecutionContext): Promise<Response> {
-    if (env.DB && request.method === "GET" && new URL(request.url).pathname === "/health") {
+    const url = new URL(request.url);
+    if (
+      request.method === "POST"
+      && url.pathname === "/internal/migrations/apple-refresh-tokens"
+    ) {
+      return migrateLegacyAppleRefreshTokens(request, env);
+    }
+    if (env.DB && request.method === "GET" && url.pathname === "/health") {
       const health = await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
       if (health?.ok !== 1) throw new Error("D1 health check failed");
     }
@@ -134,6 +146,97 @@ export default {
   },
 };
 
+interface LegacyAppleRefreshTokenRow {
+  user_id?: unknown;
+  refresh_token_ciphertext?: unknown;
+}
+
+export async function migrateLegacyAppleRefreshTokens(
+  request: Request,
+  env: Env,
+  fetchImpl: typeof fetch = (input, init) => fetch(input, init),
+): Promise<Response> {
+  const migrationSecret = env.APPLE_TOKEN_REWRAP_SECRET?.trim();
+  if (!migrationSecret) return new Response("Not Found", { status: 404 });
+  if (!await secretsMatch(readBearer(request.headers.get("authorization")), migrationSecret)) {
+    return Response.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const supabaseUrl = requiredMigrationEnv(env.LEGACY_SUPABASE_URL, "LEGACY_SUPABASE_URL")
+    .replace(/\/$/u, "");
+  const serviceRoleKey = requiredMigrationEnv(
+    env.SUPABASE_SERVICE_ROLE_KEY,
+    "SUPABASE_SERVICE_ROLE_KEY",
+  );
+  const sourceEncryptionKey = requiredMigrationEnv(
+    env.APPLE_TOKEN_ENCRYPTION_KEY,
+    "APPLE_TOKEN_ENCRYPTION_KEY",
+  );
+  const authService = env.AUTH_SERVICE;
+  if (!authService) throw new Error("AUTH_SERVICE is required for Apple token migration");
+
+  const sourceResponse = await fetchImpl(
+    `${supabaseUrl}/rest/v1/apple_auth_tokens?select=user_id,refresh_token_ciphertext&order=user_id.asc`,
+    {
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`,
+      },
+    },
+  );
+  if (!sourceResponse.ok) {
+    throw new Error(`Legacy Apple token read failed with status ${sourceResponse.status}`);
+  }
+  const rows = await sourceResponse.json<unknown>();
+  if (!Array.isArray(rows) || rows.length > 100) {
+    throw new Error("Legacy Apple token source returned an invalid payload");
+  }
+  const tokens = await Promise.all(rows.map(async (candidate) => {
+    if (!candidate || typeof candidate !== "object") {
+      throw new Error("Legacy Apple token source returned an invalid row");
+    }
+    const row = candidate as LegacyAppleRefreshTokenRow;
+    if (
+      typeof row.user_id !== "string" || !row.user_id
+      || typeof row.refresh_token_ciphertext !== "string" || !row.refresh_token_ciphertext
+    ) {
+      throw new Error("Legacy Apple token source returned an incomplete row");
+    }
+    return {
+      userId: row.user_id,
+      refreshToken: await decryptAppleRefreshToken(
+        row.refresh_token_ciphertext,
+        sourceEncryptionKey,
+      ),
+    };
+  }));
+
+  const authResponse = await authService.fetch(new Request(
+    new URL(
+      "/internal/migrations/apple-refresh-tokens",
+      requiredMigrationEnv(env.AUTH_ISSUER, "AUTH_ISSUER"),
+    ),
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${migrationSecret}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ tokens }),
+    },
+  ));
+  const result = await authResponse.json<{ migrated?: unknown; verified?: unknown }>()
+    .catch(() => null);
+  if (
+    !authResponse.ok
+    || result?.migrated !== tokens.length
+    || result.verified !== tokens.length
+  ) {
+    throw new Error(`Auth Apple token migration failed with status ${authResponse.status}`);
+  }
+  return Response.json({ source: rows.length, migrated: result.migrated, verified: result.verified });
+}
+
 function repositoryForEnv(env: Env): BellwireRepository {
   if (env.DB) return new D1BellwireRepository(env.DB);
   if (env.APP_ENV !== "development") {
@@ -145,6 +248,32 @@ function repositoryForEnv(env: Env): BellwireRepository {
 function requiredEnv(value: string | undefined, name: string): string {
   if (!value) throw new Error(`${name} is required for delivery processing`);
   return value;
+}
+
+function requiredMigrationEnv(value: string | undefined, name: string): string {
+  if (!value) throw new Error(`${name} is required for Apple token migration`);
+  return value;
+}
+
+function readBearer(value: string | null): string {
+  if (!value?.toLowerCase().startsWith("bearer ")) return "";
+  return value.slice(7).trim();
+}
+
+async function secretsMatch(left: string, right: string): Promise<boolean> {
+  if (!left || !right) return false;
+  const encoder = new TextEncoder();
+  const [leftDigest, rightDigest] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(left)),
+    crypto.subtle.digest("SHA-256", encoder.encode(right)),
+  ]);
+  const leftBytes = new Uint8Array(leftDigest);
+  const rightBytes = new Uint8Array(rightDigest);
+  let difference = leftBytes.length ^ rightBytes.length;
+  for (let index = 0; index < Math.min(leftBytes.length, rightBytes.length); index += 1) {
+    difference |= (leftBytes[index] ?? 0) ^ (rightBytes[index] ?? 0);
+  }
+  return difference === 0;
 }
 
 function providerTokenSourceForEnv(env: Env): DurableObjectApnsProviderTokenSource {

@@ -90,20 +90,23 @@ export class AppleAuthService {
 
   async saveAuthorizationCode(userId: string, authorizationCode: string): Promise<void> {
     const refreshToken = await this.oauthClient.exchangeAuthorizationCode(authorizationCode);
-    const encrypted = await encrypt(refreshToken, this.encryptionKey);
+    const encrypted = await encryptAppleRefreshToken(refreshToken, this.encryptionKey);
     await this.repository.saveAppleRefreshToken(userId, encrypted);
   }
 
   async revokeForUser(userId: string): Promise<void> {
     const encrypted = await this.repository.getAppleRefreshToken(userId);
     if (!encrypted) return;
-    const refreshToken = await decrypt(encrypted, this.encryptionKey);
+    const refreshToken = await decryptAppleRefreshToken(encrypted, this.encryptionKey);
     await this.oauthClient.revokeRefreshToken(refreshToken);
     await this.repository.deleteAppleRefreshToken(userId);
   }
 }
 
-async function encrypt(value: string, keyValue: string): Promise<string> {
+export async function encryptAppleRefreshToken(
+  value: string,
+  keyValue: string,
+): Promise<string> {
   const key = await importEncryptionKey(keyValue, ["encrypt"]);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
@@ -114,7 +117,10 @@ async function encrypt(value: string, keyValue: string): Promise<string> {
   return `v1.${base64Url(iv)}.${base64Url(new Uint8Array(ciphertext))}`;
 }
 
-async function decrypt(value: string, keyValue: string): Promise<string> {
+export async function decryptAppleRefreshToken(
+  value: string,
+  keyValue: string,
+): Promise<string> {
   const [version, ivValue, ciphertextValue] = value.split(".");
   if (version !== "v1" || !ivValue || !ciphertextValue) {
     throw new Error("Invalid Apple refresh token ciphertext");

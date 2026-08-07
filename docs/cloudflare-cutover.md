@@ -69,18 +69,28 @@ Any count, ownership, identity-link, or entitlement mismatch blocks cutover.
    private deployment configuration.
 2. Apply both schemas and configure Worker secrets. Use the same
    `AUTH_INTERNAL_SECRET` on the two Workers and unique secrets everywhere
-   else. Preserve the existing `APPLE_TOKEN_ENCRYPTION_KEY` when importing
-   encrypted Apple refresh tokens; otherwise decrypt and re-encrypt them in a
-   separate audited operation before cutover.
+   else. The existing API Worker keeps its source `APPLE_TOKEN_ENCRYPTION_KEY`;
+   the Auth Worker receives a new, independent `APPLE_TOKEN_ENCRYPTION_KEY`.
 3. Announce a write freeze and stop source writes.
 4. Capture a final snapshot, generate a fresh import directory, apply it, and
    reconcile counts and samples again.
-5. Deploy Auth, verify `/health` and `/api/auth/jwks`, then deploy API and verify
-   `/health` through the service binding.
-6. Switch `auth.bellwire.app`, then `api.bellwire.app`, and validate public DNS,
+5. Before deployment, set the same random `APPLE_TOKEN_REWRAP_SECRET` on Auth
+   and API and temporarily configure `LEGACY_SUPABASE_URL` on API. Deploy Auth,
+   verify `/health` and `/api/auth/jwks`, then deploy API. Invoke
+   `POST /internal/migrations/apple-refresh-tokens` once with the rewrap secret.
+   The API reads only the legacy ciphertext rows, decrypts them with the
+   retained source key, passes plaintext only over the Auth service binding,
+   and Auth stores and verifies ciphertext made with its new key. The response
+   count must equal both the source token count and the imported Auth D1 count.
+6. Delete `APPLE_TOKEN_REWRAP_SECRET` from both Workers, remove
+   `LEGACY_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from API, redeploy, and
+   confirm the migration endpoint returns `404`. The source encryption key may
+   be rotated only after the APNs provider-token Durable Object compatibility
+   has been handled separately.
+7. Switch `auth.bellwire.app`, then `api.bellwire.app`, and validate public DNS,
    TLS, issuer, audience, sign-in, refresh, ingest, notification delivery, and
    account deletion.
-7. Release the iOS build configured with `BellwireAuthBaseURL`. Existing local
+8. Release the iOS build configured with `BellwireAuthBaseURL`. Existing local
    Supabase sessions are intentionally cleared and require one fresh Apple
    sign-in.
 

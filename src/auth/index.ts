@@ -4,7 +4,12 @@ import { bearer, jwt } from "better-auth/plugins";
 import { Hono } from "hono";
 
 import { D1AppleRefreshTokenStore } from "./apple-token-store";
-import { AppleAuthService, AppleTokenClient } from "../services/apple-auth-service";
+import {
+  AppleAuthService,
+  AppleTokenClient,
+  decryptAppleRefreshToken,
+  encryptAppleRefreshToken,
+} from "../services/apple-auth-service";
 
 export interface AuthEnv {
   AUTH_DB: D1Database;
@@ -19,6 +24,7 @@ export interface AuthEnv {
   APPLE_APP_BUNDLE_ID: string;
   APPLE_SIGN_IN_PRIVATE_KEY: string;
   APPLE_TOKEN_ENCRYPTION_KEY: string;
+  APPLE_TOKEN_REWRAP_SECRET?: string;
 }
 
 interface NativeSignInBody {
@@ -164,6 +170,58 @@ app.delete("/internal/users/:userId", async (context) => {
   }
   await context.env.AUTH_DB.prepare('DELETE FROM "user" WHERE "id" = ?').bind(userId).run();
   return context.body(null, 204);
+});
+
+app.post("/internal/migrations/apple-refresh-tokens", async (context) => {
+  const migrationSecret = context.env.APPLE_TOKEN_REWRAP_SECRET?.trim();
+  if (!migrationSecret) return context.notFound();
+  if (!await secretsMatch(
+    readBearer(context.req.header("authorization")) ?? "",
+    migrationSecret,
+  )) {
+    return context.json({ error: "unauthorized" }, 401);
+  }
+
+  const body = await readJson<{ tokens?: unknown }>(context.req.raw);
+  const tokens = parseAppleRefreshTokens(body.tokens);
+  if (!tokens) {
+    return context.json({ error: "invalid apple refresh token migration payload" }, 400);
+  }
+
+  const updatedAt = new Date().toISOString();
+  const encrypted = await Promise.all(tokens.map(async (token) => ({
+    userId: token.userId,
+    refreshToken: token.refreshToken,
+    ciphertext: await encryptAppleRefreshToken(
+      token.refreshToken,
+      context.env.APPLE_TOKEN_ENCRYPTION_KEY,
+    ),
+  })));
+  if (encrypted.length > 0) {
+    await context.env.AUTH_DB.batch(encrypted.map((token) => context.env.AUTH_DB.prepare(`
+      INSERT INTO apple_auth_tokens (user_id, encrypted_refresh_token, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT (user_id) DO UPDATE SET
+        encrypted_refresh_token = excluded.encrypted_refresh_token,
+        updated_at = excluded.updated_at
+    `).bind(token.userId, token.ciphertext, updatedAt)));
+  }
+
+  let verified = 0;
+  for (const token of encrypted) {
+    const row = await context.env.AUTH_DB.prepare(`
+      SELECT encrypted_refresh_token FROM apple_auth_tokens WHERE user_id = ?
+    `).bind(token.userId).first<{ encrypted_refresh_token: string }>();
+    if (!row || await decryptAppleRefreshToken(
+      row.encrypted_refresh_token,
+      context.env.APPLE_TOKEN_ENCRYPTION_KEY,
+    ) !== token.refreshToken) {
+      throw new Error("Apple refresh token migration verification failed");
+    }
+    verified += 1;
+  }
+
+  return context.json({ migrated: encrypted.length, verified });
 });
 
 app.all("/api/auth/*", async (context) => {
@@ -339,6 +397,29 @@ function nonEmptyString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed || undefined;
+}
+
+function parseAppleRefreshTokens(value: unknown): Array<{
+  userId: string;
+  refreshToken: string;
+}> | undefined {
+  if (!Array.isArray(value) || value.length > 100) return undefined;
+  const tokens: Array<{ userId: string; refreshToken: string }> = [];
+  const userIds = new Set<string>();
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== "object") return undefined;
+    const record = candidate as Record<string, unknown>;
+    const userId = nonEmptyString(record.userId);
+    const refreshToken = nonEmptyString(record.refreshToken);
+    if (
+      !userId || userId.length > 256
+      || !refreshToken || refreshToken.length > 16_384
+      || userIds.has(userId)
+    ) return undefined;
+    userIds.add(userId);
+    tokens.push({ userId, refreshToken });
+  }
+  return tokens;
 }
 
 function readBearer(value: string | undefined): string | undefined {
