@@ -1,8 +1,42 @@
 # Bellwire App Store 上架计划
 
-更新时间：2026-07-25
+更新时间：2026-08-08
 
-发布状态：Build 9 已上传、关联 1.0.0 并加入内部 TestFlight；首个 Bellwire Pro 订阅待通过 App Store Connect 网页加入同一草稿后提交。
+发布状态：1.0.0（build 9）已在 App Store；Cloudflare Auth 迁移版 1.0.1（build 13）已归档、生产签名、导出并安装到真机，等待 App Store Connect Issuer ID 或已登录的 Xcode 账户完成上传。
+
+## Cloudflare Auth 迁移版
+
+- Bundle ID：`app.bellwire`
+- 版本：1.0.1（build 13）
+- API：`https://api.bellwire.app`
+- Auth：`https://auth.bellwire.app`
+- IPA SHA-256：`2f2363da2d891c30d2012730da3240ce17aa22f32648b90a96eac8ec43513b46`
+- 私有交付记录：`ios-release-1.0.1-build13/release-manifest.json`
+
+只做本地制品核对，不读取 Apple 凭证：
+
+```bash
+npm run ios:release -- \
+  --ipa "/secure/Bellwire-1.0.1-13.ipa" \
+  --version 1.0.1 \
+  --build 13 \
+  --sha256 2f2363da2d891c30d2012730da3240ce17aa22f32648b90a96eac8ec43513b46 \
+  --local-only
+```
+
+验证并上传。Issuer ID 只通过当前进程环境传入，工具会在 `~/.appstoreconnect/private_keys` 中尝试已有 `AuthKey_*.p8`，不会打印或持久化私钥：
+
+```bash
+APP_STORE_CONNECT_ISSUER_ID="<issuer-id>" \
+npm run ios:release -- \
+  --ipa "/secure/Bellwire-1.0.1-13.ipa" \
+  --version 1.0.1 \
+  --build 13 \
+  --sha256 2f2363da2d891c30d2012730da3240ce17aa22f32648b90a96eac8ec43513b46 \
+  --upload
+```
+
+流程顺序固定为：本地 Bundle/版本/端点/SHA 核对 → App Store Connect API 鉴权 → Apple Validate → Upload → 等待 Apple Processing。没有显式 `--upload` 时绝不会上传。
 
 ## 发布目标
 
@@ -32,6 +66,10 @@
 - [x] 制作并上传 6.7 英寸 iPhone 截图
 - [x] 上传并选择 1.0.0（9）
 - [x] 将 Build 9 加入 Bellwire Internal TestFlight
+- [x] 生成并核对 Cloudflare Auth 迁移版 1.0.1（13）App Store IPA
+- [x] 将 1.0.1（13）安装到配对真机
+- [ ] 使用 App Store Connect Issuer ID 验证并上传 1.0.1（13）
+- [ ] 解锁真机并打开 1.0.1（13），完成新 Auth session 与 production APNs 验收
 - [ ] 将 Bellwire Pro 订阅组、月度和年度订阅加入同一审核草稿
 - [ ] 提交审核
 - [ ] 使用 TestFlight / App Store 构建在真机验证 production APNs
