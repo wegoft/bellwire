@@ -88,11 +88,12 @@ Any count, ownership, identity-link, or entitlement mismatch blocks cutover.
    count must equal both the source token count and the imported Auth D1 count.
 6. After the final delta replay and rewrap verification, set
    `CUTOVER_WRITE_FREEZE=false`, delete `APPLE_TOKEN_REWRAP_SECRET` from both
-   Workers, remove
-   `LEGACY_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from API, redeploy, and
-   confirm the migration endpoint returns `404`. The source encryption key may
-   be rotated only after the APNs provider-token Durable Object compatibility
-   has been handled separately.
+   Workers, remove `LEGACY_SUPABASE_URL`, redeploy, and confirm the migration
+   endpoint returns `404`. Keep the unreadable `SUPABASE_SERVICE_ROLE_KEY`
+   secret dormant until the rollback observation window ends; without the URL
+   or migration secret, the active runtime cannot use it. Revoke it as part of
+   Supabase retirement. The source encryption key may be rotated only after the
+   APNs provider-token Durable Object compatibility has been handled separately.
 7. Switch `auth.bellwire.app`, then `api.bellwire.app`, and validate public DNS,
    TLS, issuer, audience, sign-in, refresh, ingest, notification delivery, and
    account deletion.

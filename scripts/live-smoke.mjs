@@ -28,6 +28,33 @@ try {
   }, 201);
   assert(typeof project.id === "string", "Project creation did not return an ID");
 
+  const binding = await requestJSON(`${apiURL}/v1/device-bindings`, {
+    method: "POST",
+    headers: userHeaders,
+  }, 201);
+  const agent = await requestJSON(`${apiURL}/v1/device-bindings/confirm`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code: binding.code, name: "Live Smoke Agent" }),
+  }, 201);
+  const modeRequest = await requestJSON(
+    `${apiURL}/v1/projects/${project.id}/delivery-mode-requests`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${agent.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ toMode: "hosted" }),
+    },
+    201,
+  );
+  await requestJSON(`${apiURL}/v1/delivery-mode-requests/${modeRequest.id}/approve`, {
+    method: "POST",
+    headers: userHeaders,
+    body: "{}",
+  }, 200);
+
   const schema = await requestJSON(`${apiURL}/v1/projects/${project.id}/event-schemas`, {
     method: "POST",
     headers: userHeaders,
@@ -126,15 +153,6 @@ try {
     headers: userHeaders,
   }, 200);
 
-  const binding = await requestJSON(`${apiURL}/v1/device-bindings`, {
-    method: "POST",
-    headers: userHeaders,
-  }, 201);
-  const agent = await requestJSON(`${apiURL}/v1/device-bindings/confirm`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ code: binding.code, name: "Live Smoke Agent" }),
-  }, 201);
   const agentProjects = await requestJSON(`${apiURL}/v1/projects`, {
     headers: { authorization: `Bearer ${agent.token}` },
   }, 200);
@@ -176,6 +194,7 @@ try {
     ok: true,
     worker: "healthy",
     bellwireAuthJwt: "verified",
+    privateFirstHostedApproval: "verified",
     projectLifecycle: "verified",
     liveSurfaceUpsert: "verified",
     eventIdempotency: "verified",
