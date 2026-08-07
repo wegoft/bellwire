@@ -95,5 +95,81 @@ for elapsed runtime.
 { "type": "timer", "title": "Benchmark", "durationSeconds": 300, "countsDown": true }
 ```
 
+## `status`
+
+Use for a durable semantic state rather than an urgent alert. `state` must be
+`neutral`, `running`, `success`, `warning`, `critical`, or `paused`. The native
+client owns the state color and icon; `label` is an optional short override.
+
+```json
+{
+  "type": "status",
+  "title": "Production API",
+  "subtitle": "All regions are serving traffic",
+  "state": "success",
+  "label": "Operational"
+}
+```
+
+## `checklist`
+
+Use for a read-only Agent workflow with 1-8 stable items. Item states are
+`pending`, `running`, `completed`, `failed`, and `skipped`. Reuse item IDs so
+updates preserve identity and ordering.
+
+```json
+{
+  "type": "checklist",
+  "title": "Production release",
+  "items": [
+    { "id": "build", "title": "Build", "state": "completed" },
+    { "id": "deploy", "title": "Deploy", "detail": "Cloudflare Worker", "state": "running" },
+    { "id": "smoke", "title": "Smoke test", "state": "pending" }
+  ]
+}
+```
+
+## `trend`
+
+Use for one ordered series of 2-30 finite points. Bellwire compares the first
+and last point. `goal` is `up`, `down`, or `neutral`, allowing the client to
+show whether the movement is favorable without guessing the metric's meaning.
+
+```json
+{
+  "type": "trend",
+  "title": "API latency",
+  "points": [
+    { "label": "09:00", "value": 142 },
+    { "label": "10:00", "value": 128 },
+    { "label": "11:00", "value": 119 }
+  ],
+  "goal": "down",
+  "displayValue": "119 ms",
+  "unit": "ms"
+}
+```
+
 Supported colors are `lime`, `green`, `cyan`, `blue`, `purple`, `magenta`,
 `red`, `orange`, `yellow`, and `gray`.
+
+## Agent-requested Live Activities
+
+Add an explicit top-level `liveActivity` directive when the Surface represents
+a bounded running session. Omit it for ordinary cards. Keep `sessionId` stable
+for every update in one run, then publish `state: "ended"` when the run finishes.
+
+```json
+{
+  "type": "status",
+  "title": "Deploying production",
+  "state": "running",
+  "liveActivity": { "sessionId": "deploy-20260807", "state": "active" }
+}
+```
+
+Bellwire starts these only after the user enables Automatic Live Activities.
+Hosted projects use ActivityKit push delivery. Private projects start locally
+while the app is in the foreground and never register their Activity token with
+Bellwire Cloud. Bellwire allows one Agent activity per project, up to three per
+device, and sessions end when the Agent publishes `ended` or after eight hours.

@@ -4,6 +4,7 @@ import path from "node:path";
 
 export const LOCAL_XCCONFIG_PATH = "ios/Bellwire/Configuration/Local.xcconfig";
 export const WRANGLER_SELF_HOST_PATH = "wrangler.self-host.toml";
+export const WRANGLER_AUTH_SELF_HOST_PATH = "wrangler.auth.self-host.toml";
 
 export function parseArguments(argv, booleanOptions = new Set(), allowedOptions) {
   const options = {};
@@ -36,19 +37,20 @@ export function validateBootstrapOptions(options) {
   if (!validBundleId(bundleId)) throw new Error("--bundle-id is not a valid explicit App ID");
 
   const apiURL = httpsOrigin(required(options, "api-url"), "--api-url");
-  const supabaseURL = httpsOrigin(required(options, "supabase-url"), "--supabase-url");
-  const publishableKey = required(options, "supabase-publishable-key");
-  if (publishableKey.startsWith("sb_secret_") || publishableKey.split(".").length === 3) {
-    throw new Error("--supabase-publishable-key must not be a secret or service-role JWT");
-  }
-  if (!/^sb_publishable_[A-Za-z0-9_-]+$/u.test(publishableKey)) {
-    throw new Error("--supabase-publishable-key must use the sb_publishable_ format");
-  }
+  const authURL = httpsOrigin(required(options, "auth-url"), "--auth-url");
 
   const workerName = options["worker-name"] ?? "bellwire-self-host";
+  const authWorkerName = options["auth-worker-name"] ?? `${workerName}-auth`;
   const queuePrefix = options["queue-prefix"] ?? workerName;
   if (!validCloudflareName(workerName)) throw new Error("--worker-name is not valid");
+  if (!validCloudflareName(authWorkerName)) throw new Error("--auth-worker-name is not valid");
   if (!validCloudflareName(queuePrefix)) throw new Error("--queue-prefix is not valid");
+  const businessD1Name = options["business-d1-name"] ?? `${workerName}-db`;
+  const authD1Name = options["auth-d1-name"] ?? `${authWorkerName}-db`;
+  if (!validCloudflareName(businessD1Name)) throw new Error("--business-d1-name is not valid");
+  if (!validCloudflareName(authD1Name)) throw new Error("--auth-d1-name is not valid");
+  const businessD1Id = cloudflareId(required(options, "business-d1-id"), "--business-d1-id");
+  const authD1Id = cloudflareId(required(options, "auth-d1-id"), "--auth-d1-id");
 
   const urlScheme = options["url-scheme"] ?? bundleId.toLowerCase();
   if (!/^[A-Za-z][A-Za-z0-9+.-]*$/u.test(urlScheme)) {
@@ -80,9 +82,13 @@ export function validateBootstrapOptions(options) {
     widgetBundleId,
     appGroup,
     apiURL,
-    supabaseURL,
-    publishableKey,
+    authURL,
     workerName,
+    authWorkerName,
+    businessD1Name,
+    businessD1Id,
+    authD1Name,
+    authD1Id,
     queuePrefix,
     urlScheme,
     apnsEnvironment,
@@ -101,8 +107,7 @@ BELLWIRE_URL_SCHEME = ${configuration.urlScheme}
 
 // The empty $() keeps // from being parsed as an xcconfig comment.
 BELLWIRE_API_BASE_URL = ${urlForXcconfig(configuration.apiURL)}
-BELLWIRE_SUPABASE_URL = ${urlForXcconfig(configuration.supabaseURL)}
-BELLWIRE_SUPABASE_PUBLISHABLE_KEY = ${configuration.publishableKey}
+BELLWIRE_AUTH_BASE_URL = ${urlForXcconfig(configuration.authURL)}
 `;
 }
 
@@ -117,11 +122,22 @@ preview_urls = true
 
 [vars]
 APP_ENV = "production"
-SUPABASE_URL = ${JSON.stringify(configuration.supabaseURL)}
+AUTH_ISSUER = ${JSON.stringify(configuration.authURL)}
+AUTH_AUDIENCE = "bellwire-api"
 APNS_BUNDLE_ID = ${JSON.stringify(configuration.bundleId)}
 APP_URL_SCHEME = ${JSON.stringify(configuration.urlScheme)}
 APNS_ENVIRONMENT = ${JSON.stringify(configuration.apnsEnvironment)}
 ENTITLEMENT_ENFORCEMENT_MODE = "disabled"
+
+[[d1_databases]]
+binding = "DB"
+database_name = ${JSON.stringify(configuration.businessD1Name)}
+database_id = ${JSON.stringify(configuration.businessD1Id)}
+migrations_dir = "d1/business"
+
+[[services]]
+binding = "AUTH_SERVICE"
+service = ${JSON.stringify(configuration.authWorkerName)}
 
 [triggers]
 crons = ["17 * * * *"]
@@ -144,6 +160,29 @@ class_name = "ApnsProviderTokenAuthority"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ApnsProviderTokenAuthority"]
+`;
+}
+
+export function renderAuthWranglerConfiguration(configuration) {
+  return `name = ${JSON.stringify(configuration.authWorkerName)}
+main = "src/auth/index.ts"
+compatibility_date = "2026-08-05"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = true
+
+[vars]
+AUTH_ENVIRONMENT = "production"
+AUTH_ISSUER = ${JSON.stringify(configuration.authURL)}
+AUTH_AUDIENCE = "bellwire-api"
+APPLE_SIGN_IN_CLIENT_ID = ${JSON.stringify(configuration.bundleId)}
+APPLE_APP_BUNDLE_ID = ${JSON.stringify(configuration.bundleId)}
+
+[[d1_databases]]
+binding = "AUTH_DB"
+database_name = ${JSON.stringify(configuration.authD1Name)}
+database_id = ${JSON.stringify(configuration.authD1Id)}
+migrations_dir = "d1/auth"
 `;
 }
 
@@ -198,6 +237,8 @@ export function parseWranglerConfiguration(source) {
     consumer: {},
     durableObject: {},
     migration: {},
+    d1: {},
+    service: {},
   };
   let section = "root";
   for (const rawLine of source.split(/\r?\n/u)) {
@@ -208,6 +249,8 @@ export function parseWranglerConfiguration(source) {
     else if (line === "[[queues.consumers]]") section = "consumer";
     else if (line === "[[durable_objects.bindings]]") section = "durableObject";
     else if (line === "[[migrations]]") section = "migration";
+    else if (line === "[[d1_databases]]") section = "d1";
+    else if (line === "[[services]]") section = "service";
     else if (line.startsWith("[")) section = "other";
     else {
       const match = /^([A-Za-z0-9_]+)\s*=\s*(.+)$/u.exec(line);
@@ -263,6 +306,13 @@ function validBundleId(value) {
 
 function validCloudflareName(value) {
   return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(value);
+}
+
+function cloudflareId(value, label) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)) {
+    throw new Error(`${label} must be a Cloudflare D1 database UUID`);
+  }
+  return value.toLowerCase();
 }
 
 function urlForXcconfig(value) {

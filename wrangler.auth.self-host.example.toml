@@ -1,0 +1,19 @@
+name = "bellwire-self-host-auth"
+main = "src/auth/index.ts"
+compatibility_date = "2026-08-05"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = true
+
+[vars]
+AUTH_ENVIRONMENT = "production"
+AUTH_ISSUER = "https://YOUR_AUTH_WORKER.workers.dev"
+AUTH_AUDIENCE = "bellwire-api"
+APPLE_SIGN_IN_CLIENT_ID = "com.example.bellwire"
+APPLE_APP_BUNDLE_ID = "com.example.bellwire"
+
+[[d1_databases]]
+binding = "AUTH_DB"
+database_name = "bellwire-self-host-auth-db"
+database_id = "YOUR_AUTH_D1_DATABASE_ID"
+migrations_dir = "d1/auth"

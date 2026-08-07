@@ -56,7 +56,7 @@ The existing tab bar exposes only Home and Settings. Projects currently appear a
 ## 4. Existing business-logic reuse points
 
 - `AppModel.bootstrap()` remains the app bootstrap and notification status refresh entry point.
-- `AppModel.completeAppleAuthorization` remains the only Apple login completion path; its nonce, Supabase token exchange, Keychain persistence, dashboard load, and device registration remain unchanged.
+- `AppModel.completeAppleAuthorization` remains the only Apple login completion path; its nonce, Bellwire Auth exchange, Keychain persistence, dashboard load, and device registration remain unchanged.
 - `AppModel.loadDashboard` remains the single dashboard source for projects, live surfaces, inbox events, and devices.
 - `AppModel.loadProject`, `setProjectPaused`, `loadEvent`, and `markRead` remain the project/event operations.
 - `AppModel.createBinding` remains the only source for binding codes.

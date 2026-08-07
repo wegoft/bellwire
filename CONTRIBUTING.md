@@ -54,7 +54,8 @@ Bellwire is a multi-license repository. By contributing, you agree that your
 contribution is licensed under the license assigned to the component and path
 in [LICENSE.md](LICENSE.md):
 
-- `AGPL-3.0-only` for the Worker, Supabase schema, operational tooling, and
+- `AGPL-3.0-only` for the Workers, D1 schema, legacy Supabase schema,
+  operational tooling, and
   their JavaScript/TypeScript tests;
 - `MPL-2.0` for the native iOS app and its Swift checks;
 - `Apache-2.0` for the Agent Skill, CLI, protocol references, examples, and

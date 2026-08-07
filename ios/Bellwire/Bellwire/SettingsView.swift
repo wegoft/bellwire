@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var showsAgentInstructions = false
     @State private var showsSignOutConfirmation = false
     @State private var showsDeleteAccountPage = false
+    @State private var showsAgentLiveActivityConsent = false
     @State private var showsClearPrivateHistoryConfirmation = false
     @State private var showsPaywall = false
     @State private var showsFeedbackMail = false
@@ -21,6 +22,7 @@ struct SettingsView: View {
     @State private var pendingDeviceDeletion: DeviceRecord?
     @AppStorage(AppLanguage.storageKey) private var appLanguage = AppLanguage.system.rawValue
     @AppStorage(AppAppearance.storageKey) private var appAppearance = AppAppearance.system.rawValue
+    @AppStorage("agentLiveActivitiesEnabled") private var agentLiveActivitiesEnabled = false
 
     private var hasPro: Bool {
         model.entitlement?.hasPro ?? purchaseManager.hasPro
@@ -98,6 +100,18 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("No mail account is configured. Copy the feedback email instead?")
+            }
+            .alert(
+                "Allow automatic Live Activities?",
+                isPresented: $showsAgentLiveActivityConsent
+            ) {
+                Button("Allow") {
+                    agentLiveActivitiesEnabled = true
+                    Task { await model.setAgentLiveActivitiesEnabled(true) }
+                }
+                Button("Not now", role: .cancel) {}
+            } message: {
+                Text("Agents can start a Live Activity only when a Surface explicitly requests one. You can turn this off at any time.")
             }
             .alert(
                 "Sign out of Bellwire?",
@@ -681,6 +695,35 @@ struct SettingsView: View {
                     isRequesting: isRequestingNotificationPermission,
                     action: handleNotificationPermissionAction
                 )
+                Divider().overlay(BellwireTheme.separator).padding(.leading, 44)
+                Button {
+                    if !hasPro {
+                        showsPaywall = true
+                    } else if agentLiveActivitiesEnabled {
+                        agentLiveActivitiesEnabled = false
+                        Task { await model.setAgentLiveActivitiesEnabled(false) }
+                    } else {
+                        showsAgentLiveActivityConsent = true
+                    }
+                } label: {
+                    SettingsRowView(
+                        icon: "waveform.path.ecg.rectangle",
+                        title: "Automatic Live Activities",
+                        hint: hasPro
+                            ? "Only for Surfaces that explicitly request one"
+                            : "Included with Bellwire Pro"
+                    ) {
+                        Image(systemName: agentLiveActivitiesEnabled ? "checkmark.circle.fill" : "circle")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(
+                                agentLiveActivitiesEnabled
+                                    ? BellwireTheme.success
+                                    : BellwireTheme.mutedInk
+                            )
+                    }
+                }
+                .buttonStyle(PressableButtonStyle())
+                .accessibilityValue(agentLiveActivitiesEnabled ? "On" : "Off")
                 Divider().overlay(BellwireTheme.separator).padding(.leading, 44)
                 SettingsRowView(
                     icon: "hand.raised.fill",

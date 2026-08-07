@@ -1,7 +1,7 @@
 # Bellwire Private-first quick start
 
 This path uses the official Bellwire API and an already installed official iOS
-build. It does not require a Cloudflare, Supabase, or Apple Developer account.
+build. It does not require a Cloudflare or Apple Developer account.
 
 ## See the complete product loop
 
@@ -78,5 +78,5 @@ Set `BELLWIRE_API_URL` before running the same CLI commands:
 export BELLWIRE_API_URL='https://your-worker.example.workers.dev'
 ```
 
-The App itself must also be compiled against that Worker, Supabase project, and
+The App itself must also be compiled against those Workers, D1 databases, and
 your Apple signing identity. Follow the [self-hosting guide](self-hosting.md).

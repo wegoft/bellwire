@@ -664,6 +664,48 @@ describe("APNs client", () => {
     });
   });
 
+  it("sends ActivityKit start pushes on the Live Activity topic", async () => {
+    let captured: Request | undefined;
+    const client = new ApnsClient({
+      bundleId: "app.bellwire",
+      urlScheme: "bellwire",
+      environment: "sandbox",
+    }, staticProviderTokenSource(), async (input, init) => {
+      captured = new Request(input, init);
+      return new Response(null, { status: 200 });
+    });
+
+    await client.sendLiveActivity("push-to-start-token", {
+      event: "start",
+      timestamp: 1_786_100_000,
+      contentState: { title: "Deploying", type: "status", statusState: "running" },
+      attributes: {
+        surfaceID: "surface-1",
+        projectName: "Bellwire",
+        projectIcon: "bolt.horizontal",
+        projectID: "project-1",
+        surfaceKey: "deploy",
+        sessionID: "deploy-1",
+        origin: "agent",
+      },
+      priority: 10,
+      collapseId: "surface-surface-1",
+    });
+
+    expect(captured?.headers.get("apns-topic")).toBe("app.bellwire.push-type.liveactivity");
+    expect(captured?.headers.get("apns-push-type")).toBe("liveactivity");
+    expect(captured?.headers.get("apns-priority")).toBe("10");
+    expect(await captured?.json()).toMatchObject({
+      aps: {
+        event: "start",
+        timestamp: 1_786_100_000,
+        "attributes-type": "BellwireActivityAttributes",
+        attributes: { sessionID: "deploy-1", origin: "agent" },
+        "content-state": { title: "Deploying", statusState: "running" },
+      },
+    });
+  });
+
   it("sends only a localized generic alert plus an opaque direct reference", async () => {
     let captured: Request | undefined;
     const fetchImpl: typeof fetch = async (input, init) => {

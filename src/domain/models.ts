@@ -205,6 +205,9 @@ export const LIVE_SURFACE_TYPES = [
   "progress",
   "alert",
   "timer",
+  "status",
+  "checklist",
+  "trend",
 ] as const;
 
 export type LiveSurfaceType = (typeof LIVE_SURFACE_TYPES)[number];
@@ -213,6 +216,11 @@ export interface LiveSurfaceAction {
   type: "open_url";
   title: string;
   url: string;
+}
+
+export interface LiveActivityDirective {
+  sessionId: string;
+  state: "active" | "ended";
 }
 
 export interface LiveSurface {
@@ -224,10 +232,46 @@ export interface LiveSurface {
   subtitle?: string;
   content: Record<string, unknown>;
   action?: LiveSurfaceAction;
+  liveActivity?: LiveActivityDirective;
   displayOrder: number;
   version: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DeviceLiveActivityCapability {
+  deviceId: string;
+  userId: string;
+  activitiesEnabled: boolean;
+  autoStartEnabled: boolean;
+  pushToStartToken?: string;
+  osVersion: string;
+  updatedAt: string;
+}
+
+export interface LiveActivityRegistration {
+  id: string;
+  userId: string;
+  deviceId: string;
+  projectId: string;
+  surfaceId: string;
+  sessionId: string;
+  activityId: string;
+  updateToken: string;
+  apnsEnvironment: "sandbox" | "production";
+  origin: "agent" | "manual";
+  lastVersion: number;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LiveActivityStartRequest {
+  deviceId: string;
+  projectId: string;
+  surfaceId: string;
+  sessionId: string;
+  createdAt: string;
 }
 
 export interface IngestToken {

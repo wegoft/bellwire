@@ -20,10 +20,8 @@
     <string>$(MARKETING_VERSION)</string>
     <key>BellwireAPIBaseURL</key>
     <string>$(BELLWIRE_API_BASE_URL)</string>
-    <key>BellwireSupabaseURL</key>
-    <string>$(BELLWIRE_SUPABASE_URL)</string>
-    <key>BellwireSupabasePublishableKey</key>
-    <string>$(BELLWIRE_SUPABASE_PUBLISHABLE_KEY)</string>
+    <key>BellwireAuthBaseURL</key>
+    <string>$(BELLWIRE_AUTH_BASE_URL)</string>
     <key>BellwireKeychainAccessGroup</key>
     <string>$(AppIdentifierPrefix)$(BELLWIRE_APP_BUNDLE_ID).shared</string>
     <key>BellwireAppGroup</key>

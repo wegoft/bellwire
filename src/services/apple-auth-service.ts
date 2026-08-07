@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { SignJWT, importPKCS8 } from "jose";
 
-import type { BellwireRepository } from "../repositories/bellwire-repository";
+export interface AppleRefreshTokenStore {
+  saveAppleRefreshToken(userId: string, encryptedRefreshToken: string): Promise<void>;
+  getAppleRefreshToken(userId: string): Promise<string | undefined>;
+  deleteAppleRefreshToken(userId: string): Promise<void>;
+}
 
 export interface AppleOAuthClient {
   exchangeAuthorizationCode(authorizationCode: string): Promise<string>;
@@ -63,7 +67,7 @@ export class AppleTokenClient implements AppleOAuthClient {
     return response;
   }
 
-  private async createClientSecret(): Promise<string> {
+  async createClientSecret(): Promise<string> {
     const now = Math.floor(Date.now() / 1000);
     const key = await importPKCS8(this.config.privateKey, "ES256");
     return new SignJWT({})
@@ -79,27 +83,30 @@ export class AppleTokenClient implements AppleOAuthClient {
 
 export class AppleAuthService {
   constructor(
-    private readonly repository: BellwireRepository,
+    private readonly repository: AppleRefreshTokenStore,
     private readonly oauthClient: AppleOAuthClient,
     private readonly encryptionKey: string,
   ) {}
 
   async saveAuthorizationCode(userId: string, authorizationCode: string): Promise<void> {
     const refreshToken = await this.oauthClient.exchangeAuthorizationCode(authorizationCode);
-    const encrypted = await encrypt(refreshToken, this.encryptionKey);
+    const encrypted = await encryptAppleRefreshToken(refreshToken, this.encryptionKey);
     await this.repository.saveAppleRefreshToken(userId, encrypted);
   }
 
   async revokeForUser(userId: string): Promise<void> {
     const encrypted = await this.repository.getAppleRefreshToken(userId);
     if (!encrypted) return;
-    const refreshToken = await decrypt(encrypted, this.encryptionKey);
+    const refreshToken = await decryptAppleRefreshToken(encrypted, this.encryptionKey);
     await this.oauthClient.revokeRefreshToken(refreshToken);
     await this.repository.deleteAppleRefreshToken(userId);
   }
 }
 
-async function encrypt(value: string, keyValue: string): Promise<string> {
+export async function encryptAppleRefreshToken(
+  value: string,
+  keyValue: string,
+): Promise<string> {
   const key = await importEncryptionKey(keyValue, ["encrypt"]);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
@@ -110,7 +117,10 @@ async function encrypt(value: string, keyValue: string): Promise<string> {
   return `v1.${base64Url(iv)}.${base64Url(new Uint8Array(ciphertext))}`;
 }
 
-async function decrypt(value: string, keyValue: string): Promise<string> {
+export async function decryptAppleRefreshToken(
+  value: string,
+  keyValue: string,
+): Promise<string> {
   const [version, ivValue, ciphertextValue] = value.split(".");
   if (version !== "v1" || !ivValue || !ciphertextValue) {
     throw new Error("Invalid Apple refresh token ciphertext");

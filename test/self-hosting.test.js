@@ -34,7 +34,9 @@ describe("self-host bootstrap and doctor", () => {
 
     const ios = readFileSync(join(root, "ios/Bellwire/Configuration/Local.xcconfig"), "utf8");
     const worker = readFileSync(join(root, "wrangler.self-host.toml"), "utf8");
+    const authWorker = readFileSync(join(root, "wrangler.auth.self-host.toml"), "utf8");
     expect(ios).toContain("BELLWIRE_API_BASE_URL = https:/$()/bellwire.example.workers.dev");
+    expect(ios).toContain("BELLWIRE_AUTH_BASE_URL = https:/$()/bellwire-auth.example.workers.dev");
     expect(ios).toContain("BELLWIRE_EXTENSION_BUNDLE_ID = com.example.bellwire.NotificationService");
     expect(ios).toContain("BELLWIRE_WIDGET_BUNDLE_ID = com.example.bellwire.Widgets");
     expect(ios).toContain("BELLWIRE_APP_GROUP = group.com.example.bellwire.shared");
@@ -45,7 +47,11 @@ describe("self-host bootstrap and doctor", () => {
     expect(worker).toContain('name = "APNS_PROVIDER_TOKEN_AUTHORITY"');
     expect(worker).toContain('class_name = "ApnsProviderTokenAuthority"');
     expect(worker).toContain('new_sqlite_classes = ["ApnsProviderTokenAuthority"]');
-    expect(`${ios}\n${worker}`).not.toMatch(/sb_secret_|PRIVATE KEY|YOUR_/u);
+    expect(worker).toContain('binding = "DB"');
+    expect(worker).toContain('service = "bellwire-example-auth"');
+    expect(authWorker).toContain('binding = "AUTH_DB"');
+    expect(authWorker).toContain('AUTH_AUDIENCE = "bellwire-api"');
+    expect(`${ios}\n${worker}\n${authWorker}`).not.toMatch(/PRIVATE KEY|YOUR_/u);
 
     const doctor = run(doctorScript, ["--root", root, "--json"]);
     expect(doctor.status).toBe(0);
@@ -80,15 +86,15 @@ describe("self-host bootstrap and doctor", () => {
     );
   });
 
-  it("rejects a Supabase secret key before writing files", () => {
+  it("rejects an invalid D1 database id before writing files", () => {
     const root = temporaryRoot();
     const args = bootstrapArguments(root);
-    const keyIndex = args.indexOf("--supabase-publishable-key") + 1;
-    args[keyIndex] = "sb_secret_not_for_a_mobile_app";
+    const idIndex = args.indexOf("--auth-d1-id") + 1;
+    args[idIndex] = "not-a-cloudflare-id";
 
     const result = run(bootstrapScript, args);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("must not be a secret");
+    expect(result.stderr).toContain("must be a Cloudflare D1 database UUID");
   });
 
   it("rejects unknown options instead of silently ignoring a typo", () => {
@@ -131,7 +137,7 @@ function temporaryRoot() {
 function writeGitignore(root) {
   writeFileSync(
     join(root, ".gitignore"),
-    ".dev.vars\nwrangler.self-host.toml\nios/Bellwire/Configuration/Local.xcconfig\n",
+    ".dev.vars\nwrangler.self-host.toml\nwrangler.auth.self-host.toml\nios/Bellwire/Configuration/Local.xcconfig\n",
   );
 }
 
@@ -143,8 +149,9 @@ function bootstrapArguments(root) {
     "--url-scheme", "bellwire-self-host",
     "--worker-name", "bellwire-example",
     "--api-url", "https://bellwire.example.workers.dev",
-    "--supabase-url", "https://example.supabase.co",
-    "--supabase-publishable-key", "sb_publishable_example_key",
+    "--auth-url", "https://bellwire-auth.example.workers.dev",
+    "--business-d1-id", "11111111-1111-4111-8111-111111111111",
+    "--auth-d1-id", "22222222-2222-4222-8222-222222222222",
   ];
 }
 

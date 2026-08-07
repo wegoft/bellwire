@@ -13,6 +13,21 @@ const templatesRoot = join(repositoryRoot, "examples/templates");
 const cli = join(repositoryRoot, "skills/bellwire/scripts/bellwire.mjs");
 
 describe("public integration examples", () => {
+  it("ships valid typed Surface templates", () => {
+    const surfaceFiles = readdirSync(templatesRoot)
+      .filter((name) => name.endsWith(".surface.json"))
+      .sort();
+    expect(surfaceFiles.length).toBeGreaterThan(0);
+    for (const surfaceFile of surfaceFiles) {
+      const validation = spawnSync(
+        process.execPath,
+        [cli, "validate-surface", "--file", join(templatesRoot, surfaceFile), "--json"],
+        { cwd: repositoryRoot, encoding: "utf8" },
+      );
+      expect(validation.status, validation.stderr).toBe(0);
+    }
+  });
+
   it("ships valid Event Specs with matching synthetic payloads", () => {
     const specFiles = readdirSync(templatesRoot)
       .filter((name) => name.endsWith(".event-spec.json"))

@@ -10,6 +10,7 @@ import type {
   Device,
   DeviceBinding,
   DeviceKey,
+  DeviceLiveActivityCapability,
   DirectConnectionEnvelope,
   DirectConnectionRecoveryRequest,
   EventListOptions,
@@ -17,6 +18,8 @@ import type {
   EventSchema,
   IngestToken,
   LiveSurface,
+  LiveActivityRegistration,
+  LiveActivityStartRequest,
   MeteredEventWrite,
   MeteredLiveSurfaceWrite,
   MeteredPrivateWakeWrite,
@@ -45,9 +48,6 @@ export interface CreateProjectResult {
 
 export interface BellwireRepository {
   deleteAccount(userId: string): Promise<void>;
-  saveAppleRefreshToken(userId: string, encryptedRefreshToken: string): Promise<void>;
-  getAppleRefreshToken(userId: string): Promise<string | undefined>;
-  deleteAppleRefreshToken(userId: string): Promise<void>;
 
   createProject(project: Project): Promise<Project>;
   createProjectIfAbsent(project: Project): Promise<CreateProjectResult>;
@@ -61,6 +61,24 @@ export interface BellwireRepository {
   getDevice(deviceId: string): Promise<Device | undefined>;
   listDevices(userId: string): Promise<Device[]>;
   deleteDevice(deviceId: string): Promise<void>;
+  saveDeviceLiveActivityCapability(
+    capability: DeviceLiveActivityCapability,
+  ): Promise<DeviceLiveActivityCapability>;
+  listDeviceLiveActivityCapabilities(userId: string): Promise<DeviceLiveActivityCapability[]>;
+  saveLiveActivityRegistration(
+    registration: LiveActivityRegistration,
+  ): Promise<LiveActivityRegistration>;
+  listLiveActivityRegistrations(userId: string): Promise<LiveActivityRegistration[]>;
+  deleteLiveActivityRegistration(activityId: string): Promise<void>;
+  createLiveActivityStartRequestIfAbsent(
+    request: LiveActivityStartRequest,
+  ): Promise<boolean>;
+  listLiveActivityStartRequests(deviceId: string): Promise<LiveActivityStartRequest[]>;
+  deleteLiveActivityStartRequest(
+    deviceId: string,
+    projectId: string,
+    sessionId: string,
+  ): Promise<void>;
 
   saveDeviceBinding(binding: DeviceBinding): Promise<DeviceBinding>;
   findDeviceBindingByCodeHash(codeHash: string): Promise<DeviceBinding | undefined>;
@@ -150,6 +168,7 @@ export interface BellwireRepository {
     enforcementMode: "disabled" | "shadow" | "enforce",
   ): Promise<MeteredLiveSurfaceWrite>;
   getLiveSurface(projectId: string, surfaceKey: string): Promise<LiveSurface | undefined>;
+  getLiveSurfaceById(surfaceId: string): Promise<LiveSurface | undefined>;
   listLiveSurfaces(projectId: string): Promise<LiveSurface[]>;
   updateLiveSurfaceDisplayOrder(surfaceId: string, displayOrder: number): Promise<LiveSurface>;
   deleteLiveSurface(surfaceId: string): Promise<void>;

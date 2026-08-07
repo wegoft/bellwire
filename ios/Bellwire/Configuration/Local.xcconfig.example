@@ -10,5 +10,4 @@ BELLWIRE_URL_SCHEME = bellwire-self-host
 
 // Keep the https:/$()/ form so xcconfig does not treat // as a comment.
 BELLWIRE_API_BASE_URL = https:/$()/YOUR_WORKER.workers.dev
-BELLWIRE_SUPABASE_URL = https:/$()/YOUR_PROJECT_REF.supabase.co
-BELLWIRE_SUPABASE_PUBLISHABLE_KEY = YOUR_SUPABASE_PUBLISHABLE_KEY
+BELLWIRE_AUTH_BASE_URL = https:/$()/YOUR_AUTH_WORKER.workers.dev

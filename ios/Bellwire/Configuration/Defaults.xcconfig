@@ -11,7 +11,6 @@ BELLWIRE_URL_SCHEME = bellwire
 
 // The empty $() keeps // from being parsed as an xcconfig comment.
 BELLWIRE_API_BASE_URL = https:/$()/api.bellwire.app
-BELLWIRE_SUPABASE_URL = https:/$()/cvyidqbjjkfzoxykkbea.supabase.co
-BELLWIRE_SUPABASE_PUBLISHABLE_KEY = sb_publishable_i4iVi9h_EXgBdkxsgOU_Rw_MLV2SIdg
+BELLWIRE_AUTH_BASE_URL = https:/$()/auth.bellwire.app
 
 #include? "Local.xcconfig"

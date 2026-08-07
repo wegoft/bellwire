@@ -5,9 +5,11 @@ import path from "node:path";
 
 import {
   LOCAL_XCCONFIG_PATH,
+  WRANGLER_AUTH_SELF_HOST_PATH,
   WRANGLER_SELF_HOST_PATH,
   fileExists,
   parseArguments,
+  renderAuthWranglerConfiguration,
   renderLocalXcconfig,
   renderWranglerConfiguration,
   resolveRoot,
@@ -22,8 +24,9 @@ Usage:
     --team-id ABC123DEFG \\
     --bundle-id com.example.bellwire \\
     --api-url https://bellwire-self-host.example.workers.dev \\
-    --supabase-url https://example.supabase.co \\
-    --supabase-publishable-key sb_publishable_example
+    --auth-url https://bellwire-self-host-auth.example.workers.dev \\
+    --business-d1-id 11111111-1111-4111-8111-111111111111 \\
+    --auth-d1-id 22222222-2222-4222-8222-222222222222
 
 Optional:
   --extension-bundle-id <id>       Defaults to <bundle-id>.NotificationService
@@ -31,6 +34,9 @@ Optional:
   --app-group <id>                 Defaults to group.<bundle-id>.shared
   --url-scheme <scheme>            Defaults to the lowercased bundle ID
   --worker-name <name>             Defaults to bellwire-self-host
+  --auth-worker-name <name>        Defaults to <worker-name>-auth
+  --business-d1-name <name>        Defaults to <worker-name>-db
+  --auth-d1-name <name>            Defaults to <auth-worker-name>-db
   --queue-prefix <name>            Defaults to the Worker name
   --apns-environment sandbox|production (default: sandbox)
   --root <path>                    Repository root (default: current directory)
@@ -46,10 +52,14 @@ const allowedOptions = new Set([
   "app-group",
   "url-scheme",
   "worker-name",
+  "auth-worker-name",
+  "business-d1-name",
+  "business-d1-id",
+  "auth-d1-name",
+  "auth-d1-id",
   "queue-prefix",
   "api-url",
-  "supabase-url",
-  "supabase-publishable-key",
+  "auth-url",
   "apns-environment",
   "root",
   "json",
@@ -67,19 +77,25 @@ try {
   const configuration = validateBootstrapOptions(options);
   const iosPath = path.join(root, LOCAL_XCCONFIG_PATH);
   const workerPath = path.join(root, WRANGLER_SELF_HOST_PATH);
+  const authWorkerPath = path.join(root, WRANGLER_AUTH_SELF_HOST_PATH);
   const existing = [];
   if (await fileExists(iosPath)) existing.push(LOCAL_XCCONFIG_PATH);
   if (await fileExists(workerPath)) existing.push(WRANGLER_SELF_HOST_PATH);
+  if (await fileExists(authWorkerPath)) existing.push(WRANGLER_AUTH_SELF_HOST_PATH);
   if (existing.length > 0) {
     throw new Error(`Refusing to overwrite existing configuration: ${existing.join(", ")}`);
   }
 
   await writeNewFile(iosPath, renderLocalXcconfig(configuration));
   await writeNewFile(workerPath, renderWranglerConfiguration(configuration));
+  await writeNewFile(authWorkerPath, renderAuthWranglerConfiguration(configuration));
 
   const result = {
-    created: [LOCAL_XCCONFIG_PATH, WRANGLER_SELF_HOST_PATH],
+    created: [LOCAL_XCCONFIG_PATH, WRANGLER_SELF_HOST_PATH, WRANGLER_AUTH_SELF_HOST_PATH],
     workerName: configuration.workerName,
+    authWorkerName: configuration.authWorkerName,
+    businessD1: configuration.businessD1Name,
+    authD1: configuration.authD1Name,
     deliveryQueue: `${configuration.queuePrefix}-deliveries`,
     deadLetterQueue: `${configuration.queuePrefix}-deliveries-dlq`,
     apnsEnvironment: configuration.apnsEnvironment,
@@ -89,6 +105,7 @@ try {
   } else {
     process.stdout.write(`Created ${LOCAL_XCCONFIG_PATH}\n`);
     process.stdout.write(`Created ${WRANGLER_SELF_HOST_PATH}\n`);
+    process.stdout.write(`Created ${WRANGLER_AUTH_SELF_HOST_PATH}\n`);
     process.stdout.write("No secrets were written. Add Worker secrets with wrangler, then run npm run self-host:doctor.\n");
   }
 } catch (error) {

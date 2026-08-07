@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 import AuthenticationServices
+import ActivityKit
 import CryptoKit
 import Security
 import SwiftUI
@@ -59,6 +60,10 @@ final class AppModel: ObservableObject {
     private var dashboardLoadTask: Task<Void, Never>?
     private var dashboardLoadID: UUID?
     private var sessionRefreshTask: Task<AuthSession, Error>?
+    private var liveActivityUpdatesTask: Task<Void, Never>?
+    private var pushToStartTokenTask: Task<Void, Never>?
+    private var observedLiveActivityTasks: [String: Task<Void, Never>] = [:]
+    private var pushToStartToken: String?
 
     lazy var api = APIClient { [weak self] in
         guard let self else { throw ClientError.signedOut }
@@ -85,7 +90,12 @@ final class AppModel: ObservableObject {
             return
         }
 #endif
-        session = keychain.read()
+        if let stored = keychain.read(), stored.issuer == AppConfig.authBaseURL.absoluteString {
+            session = stored
+        } else {
+            keychain.delete()
+            session = nil
+        }
     }
 
     var isAuthenticated: Bool { session != nil }
@@ -106,6 +116,7 @@ final class AppModel: ObservableObject {
 #endif
         await refreshNotificationStatus()
         guard isAuthenticated else { return }
+        startLiveActivityObservers()
         if notificationPermission == .authorized, apnsToken == nil {
             UIApplication.shared.registerForRemoteNotifications()
         }
@@ -228,18 +239,16 @@ final class AppModel: ObservableObject {
             let authorizationCode = credential.authorizationCode
                 .flatMap { String(data: $0, encoding: .utf8) }
                 .flatMap { $0.isEmpty ? nil : $0 }
-            let newSession = try await api.exchangeAppleIdentityToken(identityToken, nonce: nonce)
+            let newSession = try await api.exchangeAppleIdentityToken(
+                identityToken,
+                nonce: nonce,
+                authorizationCode: authorizationCode,
+                email: credential.email,
+                fullName: credential.fullName
+            )
             try saveSession(newSession)
-            if let authorizationCode {
-                do {
-                    try await api.saveAppleAuthorizationCode(authorizationCode)
-                } catch {
-#if DEBUG
-                    print("Could not persist Apple authorization code: \(error)")
-#endif
-                }
-            }
             await loadDashboard(showLoading: true)
+            startLiveActivityObservers()
             if let apnsToken {
                 await registerDevice(apnsToken)
             } else if notificationPermission == .authorized {
@@ -940,11 +949,22 @@ final class AppModel: ObservableObject {
     }
 
     func signOut() {
+        if let refreshToken = session?.refreshToken {
+            let client = api
+            Task { try? await client.revokeSession(refreshToken) }
+        }
         dashboardLoadTask?.cancel()
         sessionRefreshTask?.cancel()
+        liveActivityUpdatesTask?.cancel()
+        pushToStartTokenTask?.cancel()
+        observedLiveActivityTasks.values.forEach { $0.cancel() }
         dashboardLoadTask = nil
         dashboardLoadID = nil
         sessionRefreshTask = nil
+        liveActivityUpdatesTask = nil
+        pushToStartTokenTask = nil
+        observedLiveActivityTasks = [:]
+        pushToStartToken = nil
         if let userID = session?.user.id {
             keychain.deleteDirectData(userID: userID)
             try? privateEventStore.clear(accountID: userID)
@@ -990,9 +1010,16 @@ final class AppModel: ObservableObject {
         NativeDisplayManager.shared.isLive(surfaceID: surfaceID)
     }
 
+    func setAgentLiveActivitiesEnabled(_ enabled: Bool) async {
+        await NativeDisplayManager.shared.setAgentLiveActivitiesEnabled(enabled)
+        await publishLiveActivityCapability()
+        await synchronizeNativeDisplays()
+    }
+
     private func synchronizeNativeDisplays() async {
         await NativeDisplayManager.shared.synchronize(
             surfaces: liveSurfaces,
+            projects: projects,
             isPro: entitlement?.hasPro == true
         )
     }
@@ -1031,9 +1058,115 @@ final class AppModel: ObservableObject {
             )
             let response: DevicesResponse = try await api.request("v1/devices")
             devices = response.devices
+            await publishLiveActivityCapability()
         } catch {
             errorMessage = friendlyMessage(error)
         }
+    }
+
+    private func startLiveActivityObservers() {
+        guard liveActivityUpdatesTask == nil else { return }
+        for activity in Activity<BellwireActivityAttributes>.activities {
+            observeLiveActivity(activity)
+        }
+        liveActivityUpdatesTask = Task { @MainActor [weak self] in
+            for await activity in Activity<BellwireActivityAttributes>.activityUpdates {
+                guard !Task.isCancelled else { return }
+                self?.observeLiveActivity(activity)
+            }
+        }
+        if #available(iOS 17.2, *) {
+            pushToStartTokenTask = Task { @MainActor [weak self] in
+                for await token in Activity<BellwireActivityAttributes>.pushToStartTokenUpdates {
+                    guard !Task.isCancelled else { return }
+                    self?.pushToStartToken = token.hexString
+                    await self?.publishLiveActivityCapability()
+                }
+            }
+        }
+    }
+
+    private func observeLiveActivity(_ activity: Activity<BellwireActivityAttributes>) {
+        guard UserDefaults.standard.bool(forKey: "agentLiveActivitiesEnabled") else {
+            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+            return
+        }
+        guard activity.attributes.origin == "agent",
+              activity.attributes.deliveryMode == "hosted",
+              activity.attributes.projectID != nil,
+              activity.attributes.sessionID != nil,
+              observedLiveActivityTasks[activity.id] == nil
+        else { return }
+        observedLiveActivityTasks[activity.id] = Task { @MainActor [weak self] in
+            for await token in activity.pushTokenUpdates {
+                guard !Task.isCancelled else { return }
+                await self?.registerLiveActivity(activity, updateToken: token.hexString)
+            }
+            await self?.removeLiveActivityRegistration(activityID: activity.id)
+            self?.observedLiveActivityTasks.removeValue(forKey: activity.id)
+        }
+    }
+
+    private func publishLiveActivityCapability() async {
+        guard isAuthenticated, let installationId = try? keychain.installationID() else { return }
+        struct Payload: Encodable {
+            let installationId: String
+            let activitiesEnabled: Bool
+            let autoStartEnabled: Bool
+            let pushToStartToken: String?
+            let osVersion: String
+        }
+        let consent = UserDefaults.standard.bool(forKey: "agentLiveActivitiesEnabled")
+        try? await api.requestVoid(
+            "v1/devices/live-activity-capability",
+            method: .put,
+            body: Payload(
+                installationId: installationId,
+                activitiesEnabled: ActivityAuthorizationInfo().areActivitiesEnabled,
+                autoStartEnabled: consent,
+                pushToStartToken: pushToStartToken,
+                osVersion: UIDevice.current.systemVersion
+            )
+        )
+    }
+
+    private func registerLiveActivity(
+        _ activity: Activity<BellwireActivityAttributes>,
+        updateToken: String
+    ) async {
+        guard let projectId = activity.attributes.projectID,
+              let sessionId = activity.attributes.sessionID,
+              let installationId = try? keychain.installationID()
+        else { return }
+        struct Payload: Encodable {
+            let installationId: String
+            let projectId: String
+            let surfaceId: String
+            let sessionId: String
+            let updateToken: String
+            let apnsEnvironment: String
+        }
+#if DEBUG
+        let environment = "sandbox"
+#else
+        let environment = "production"
+#endif
+        try? await api.requestVoid(
+            "v1/live-activities/\(activity.id)",
+            method: .put,
+            body: Payload(
+                installationId: installationId,
+                projectId: projectId,
+                surfaceId: activity.attributes.surfaceID,
+                sessionId: sessionId,
+                updateToken: updateToken,
+                apnsEnvironment: environment
+            )
+        )
+    }
+
+    private func removeLiveActivityRegistration(activityID: String) async {
+        try? await api.requestVoid("v1/live-activities/\(activityID)", method: .delete)
     }
 
     private func validAccessToken() async throws -> String {
@@ -1362,5 +1495,11 @@ private enum ProjectExportError: LocalizedError {
 
     var errorDescription: String? {
         String(localized: "Project export is included with Bellwire Pro.")
+    }
+}
+
+private extension Data {
+    var hexString: String {
+        map { String(format: "%02x", $0) }.joined()
     }
 }

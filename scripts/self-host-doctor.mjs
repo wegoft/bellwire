@@ -5,6 +5,7 @@ import path from "node:path";
 
 import {
   LOCAL_XCCONFIG_PATH,
+  WRANGLER_AUTH_SELF_HOST_PATH,
   WRANGLER_SELF_HOST_PATH,
   containsPlaceholder,
   fileExists,
@@ -23,7 +24,7 @@ Usage:
   npm run self-host:doctor -- --online
 
 Options:
-  --online       Verify the Worker health endpoint and Supabase JWKS endpoint
+  --online       Verify both Worker health endpoints and the Better Auth JWKS endpoint
   --root <path>  Repository root (default: current directory)
   --json         Print machine-readable output
   --help
@@ -49,22 +50,26 @@ try {
   const root = resolveRoot(options.root);
   const iosPath = path.join(root, LOCAL_XCCONFIG_PATH);
   const workerPath = path.join(root, WRANGLER_SELF_HOST_PATH);
+  const authWorkerPath = path.join(root, WRANGLER_AUTH_SELF_HOST_PATH);
   const iosSource = await requiredFile(iosPath, LOCAL_XCCONFIG_PATH);
   const workerSource = await requiredFile(workerPath, WRANGLER_SELF_HOST_PATH);
+  const authWorkerSource = await requiredFile(authWorkerPath, WRANGLER_AUTH_SELF_HOST_PATH);
   const gitignore = await optionalFile(path.join(root, ".gitignore"));
 
-  if (iosSource && workerSource) {
+  if (iosSource && workerSource && authWorkerSource) {
     rejectSecrets(LOCAL_XCCONFIG_PATH, iosSource);
     rejectSecrets(WRANGLER_SELF_HOST_PATH, workerSource);
+    rejectSecrets(WRANGLER_AUTH_SELF_HOST_PATH, authWorkerSource);
     const ios = parseXcconfig(iosSource);
     const worker = parseWranglerConfiguration(workerSource);
-    validateRequiredValues(ios, worker);
-    validateFormats(ios, worker);
-    validateConsistency(ios, worker);
+    const authWorker = parseWranglerConfiguration(authWorkerSource);
+    validateRequiredValues(ios, worker, authWorker);
+    validateFormats(ios, worker, authWorker);
+    validateConsistency(ios, worker, authWorker);
     validateGitignore(gitignore);
 
     if (options.online && errors.length === 0) {
-      await verifyOnline(ios.BELLWIRE_API_BASE_URL, ios.BELLWIRE_SUPABASE_URL);
+      await verifyOnline(ios.BELLWIRE_API_BASE_URL, ios.BELLWIRE_AUTH_BASE_URL);
     }
   }
 
@@ -103,6 +108,9 @@ function rejectSecrets(label, source) {
     /SUPABASE_SERVICE_ROLE_KEY\s*=\s*\S+/u,
     /APNS_PRIVATE_KEY\s*=\s*\S+/u,
     /APPLE_TOKEN_ENCRYPTION_KEY\s*=\s*\S+/u,
+    /BETTER_AUTH_SECRET\s*=\s*\S+/u,
+    /AUTH_INTERNAL_SECRET\s*=\s*\S+/u,
+    /APPLE_SIGN_IN_PRIVATE_KEY\s*=\s*\S+/u,
     /-----BEGIN (?:EC |RSA )?PRIVATE KEY-----/u,
     /bw_(?:agent|live|ingest)_[A-Za-z0-9_-]{12,}/u,
   ];
@@ -113,7 +121,7 @@ function rejectSecrets(label, source) {
   }
 }
 
-function validateRequiredValues(ios, worker) {
+function validateRequiredValues(ios, worker, authWorker) {
   const iosKeys = [
     "BELLWIRE_DEVELOPMENT_TEAM",
     "BELLWIRE_APP_BUNDLE_ID",
@@ -122,12 +130,12 @@ function validateRequiredValues(ios, worker) {
     "BELLWIRE_APP_GROUP",
     "BELLWIRE_URL_SCHEME",
     "BELLWIRE_API_BASE_URL",
-    "BELLWIRE_SUPABASE_URL",
-    "BELLWIRE_SUPABASE_PUBLISHABLE_KEY",
+    "BELLWIRE_AUTH_BASE_URL",
   ];
   const workerKeys = [
     "APP_ENV",
-    "SUPABASE_URL",
+    "AUTH_ISSUER",
+    "AUTH_AUDIENCE",
     "APNS_BUNDLE_ID",
     "APP_URL_SCHEME",
     "APNS_ENVIRONMENT",
@@ -135,6 +143,13 @@ function validateRequiredValues(ios, worker) {
   ];
   for (const key of iosKeys) validateValue(`iOS ${key}`, ios[key]);
   for (const key of workerKeys) validateValue(`Worker ${key}`, worker.vars[key]);
+  for (const key of [
+    "AUTH_ENVIRONMENT",
+    "AUTH_ISSUER",
+    "AUTH_AUDIENCE",
+    "APPLE_SIGN_IN_CLIENT_ID",
+    "APPLE_APP_BUNDLE_ID",
+  ]) validateValue(`Auth Worker ${key}`, authWorker.vars[key]);
   validateValue("Worker name", worker.root.name);
   validateValue("Worker compatibility flags", worker.root.compatibility_flags);
   validateValue("delivery Queue", worker.producer.queue);
@@ -144,6 +159,15 @@ function validateRequiredValues(ios, worker) {
   validateValue("APNs token authority class", worker.durableObject.class_name);
   validateValue("Durable Object migration tag", worker.migration.tag);
   validateValue("Durable Object migration class", worker.migration.new_sqlite_classes);
+  validateValue("business D1 binding", worker.d1.binding);
+  validateValue("business D1 name", worker.d1.database_name);
+  validateValue("business D1 id", worker.d1.database_id);
+  validateValue("Auth service binding", worker.service.binding);
+  validateValue("Auth service name", worker.service.service);
+  validateValue("Auth Worker name", authWorker.root.name);
+  validateValue("Auth D1 binding", authWorker.d1.binding);
+  validateValue("Auth D1 name", authWorker.d1.database_name);
+  validateValue("Auth D1 id", authWorker.d1.database_id);
   if (errors.length === 0) checks.push("all required configuration values are resolved");
 }
 
@@ -152,7 +176,7 @@ function validateValue(label, value) {
   else if (containsPlaceholder(value)) errors.push(`${label} still contains an example placeholder`);
 }
 
-function validateFormats(ios, worker) {
+function validateFormats(ios, worker, authWorker) {
   const errorCount = errors.length;
   if (errorCount > 0) return;
   try {
@@ -166,8 +190,12 @@ function validateFormats(ios, worker) {
       "worker-name": worker.root.name,
       "queue-prefix": worker.root.name,
       "api-url": ios.BELLWIRE_API_BASE_URL,
-      "supabase-url": ios.BELLWIRE_SUPABASE_URL,
-      "supabase-publishable-key": ios.BELLWIRE_SUPABASE_PUBLISHABLE_KEY,
+      "auth-url": ios.BELLWIRE_AUTH_BASE_URL,
+      "auth-worker-name": authWorker.root.name,
+      "business-d1-name": worker.d1.database_name,
+      "business-d1-id": worker.d1.database_id,
+      "auth-d1-name": authWorker.d1.database_name,
+      "auth-d1-id": authWorker.d1.database_id,
       "apns-environment": worker.vars.APNS_ENVIRONMENT,
     });
     checks.push("configuration values use valid formats");
@@ -176,10 +204,14 @@ function validateFormats(ios, worker) {
   }
 }
 
-function validateConsistency(ios, worker) {
+function validateConsistency(ios, worker, authWorker) {
   compare("Bundle ID", ios.BELLWIRE_APP_BUNDLE_ID, worker.vars.APNS_BUNDLE_ID);
   compare("URL scheme", ios.BELLWIRE_URL_SCHEME, worker.vars.APP_URL_SCHEME);
-  compare("Supabase URL", normalizeURL(ios.BELLWIRE_SUPABASE_URL), normalizeURL(worker.vars.SUPABASE_URL));
+  compare("Auth URL", normalizeURL(ios.BELLWIRE_AUTH_BASE_URL), normalizeURL(worker.vars.AUTH_ISSUER));
+  compare("Auth Worker issuer", normalizeURL(ios.BELLWIRE_AUTH_BASE_URL), normalizeURL(authWorker.vars.AUTH_ISSUER));
+  compare("Auth audience", worker.vars.AUTH_AUDIENCE, authWorker.vars.AUTH_AUDIENCE);
+  compare("Auth service", worker.service.service, authWorker.root.name);
+  compare("Auth Apple Bundle ID", ios.BELLWIRE_APP_BUNDLE_ID, authWorker.vars.APPLE_APP_BUNDLE_ID);
   compare("producer and consumer Queue", worker.producer.queue, worker.consumer.queue);
   if (
     worker.durableObject.name !== "APNS_PROVIDER_TOKEN_AUTHORITY" ||
@@ -217,7 +249,14 @@ function validateConsistency(ios, worker) {
   } else {
     checks.push("App Group matches the main App ID");
   }
+  if (worker.d1.binding !== "DB") errors.push("Worker business D1 binding must be DB");
+  else checks.push("business D1 binding is configured");
+  if (authWorker.d1.binding !== "AUTH_DB") errors.push("Auth Worker D1 binding must be AUTH_DB");
+  else checks.push("Auth D1 binding is configured");
+  if (worker.service.binding !== "AUTH_SERVICE") errors.push("Worker Auth service binding must be AUTH_SERVICE");
+  else checks.push("Auth service binding is configured");
   if (worker.vars.APP_ENV !== "production") errors.push("Worker APP_ENV must be production for durable self-hosting");
+  if (authWorker.vars.AUTH_ENVIRONMENT !== "production") errors.push("Auth Worker AUTH_ENVIRONMENT must be production for durable self-hosting");
   if (worker.vars.ENTITLEMENT_ENFORCEMENT_MODE !== "disabled") {
     errors.push("Self-hosted Worker ENTITLEMENT_ENFORCEMENT_MODE must be disabled");
   } else {
@@ -235,13 +274,18 @@ function compare(label, left, right) {
 
 function validateGitignore(source) {
   const ignored = new Set(source.split(/\r?\n/u).map((line) => line.trim()));
-  for (const expected of [LOCAL_XCCONFIG_PATH, WRANGLER_SELF_HOST_PATH, ".dev.vars"]) {
+  for (const expected of [
+    LOCAL_XCCONFIG_PATH,
+    WRANGLER_SELF_HOST_PATH,
+    WRANGLER_AUTH_SELF_HOST_PATH,
+    ".dev.vars",
+  ]) {
     if (ignored.has(expected)) checks.push(`${expected} is ignored by Git`);
     else errors.push(`${expected} is not explicitly ignored by Git`);
   }
 }
 
-async function verifyOnline(apiBaseURL, supabaseURL) {
+async function verifyOnline(apiBaseURL, authBaseURL) {
   const health = await fetchJSON(new URL("health", `${normalizeURL(apiBaseURL)}/`), "Worker health");
   if (health?.status !== "ok" || health?.service !== "bellwire-api") {
     errors.push("Worker health endpoint returned an unexpected payload");
@@ -257,12 +301,20 @@ async function verifyOnline(apiBaseURL, supabaseURL) {
     );
   }
 
-  const jwks = await fetchJSON(
-    new URL("auth/v1/.well-known/jwks.json", `${normalizeURL(supabaseURL)}/`),
-    "Supabase JWKS",
+  const authHealth = await fetchJSON(
+    new URL("health", `${normalizeURL(authBaseURL)}/`),
+    "Auth Worker health",
   );
-  if (!Array.isArray(jwks?.keys)) errors.push("Supabase JWKS endpoint returned an unexpected payload");
-  else checks.push("Supabase JWKS endpoint is reachable");
+  if (authHealth?.ok !== true || authHealth?.service !== "bellwire-auth") {
+    errors.push("Auth Worker health endpoint returned an unexpected payload");
+  } else checks.push("Auth Worker is reachable");
+
+  const jwks = await fetchJSON(
+    new URL("api/auth/jwks", `${normalizeURL(authBaseURL)}/`),
+    "Better Auth JWKS",
+  );
+  if (!Array.isArray(jwks?.keys)) errors.push("Better Auth JWKS endpoint returned an unexpected payload");
+  else checks.push("Better Auth JWKS endpoint is reachable");
 }
 
 async function fetchJSON(url, label) {

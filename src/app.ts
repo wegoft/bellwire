@@ -136,6 +136,36 @@ export function createApp(dependencies: {
     return context.json(await dependencies.service.listDevices(principal));
   });
 
+  app.put("/v1/devices/live-activity-capability", async (context) => {
+    const principal = await authenticate(context, dependencies.authenticator);
+    return context.json(
+      await dependencies.service.registerDeviceLiveActivityCapability(
+        principal,
+        await readLimitedJson(context.req.raw, 4_096),
+      ),
+    );
+  });
+
+  app.put("/v1/live-activities/:activityId", async (context) => {
+    const principal = await authenticate(context, dependencies.authenticator);
+    return context.json(
+      await dependencies.service.registerLiveActivity(
+        principal,
+        context.req.param("activityId"),
+        await readLimitedJson(context.req.raw, 4_096),
+      ),
+    );
+  });
+
+  app.delete("/v1/live-activities/:activityId", async (context) => {
+    const principal = await authenticate(context, dependencies.authenticator);
+    await dependencies.service.deleteLiveActivityRegistration(
+      principal,
+      context.req.param("activityId"),
+    );
+    return context.body(null, 204);
+  });
+
   app.get("/v1/account/entitlement", async (context) => {
     const principal = await authenticate(context, dependencies.authenticator);
     return context.json(await dependencies.service.getAccountEntitlement(principal));
@@ -188,12 +218,6 @@ export function createApp(dependencies: {
   app.delete("/v1/account", async (context) => {
     const principal = await authenticate(context, dependencies.authenticator);
     await dependencies.service.deleteAccount(principal);
-    return context.body(null, 204);
-  });
-
-  app.post("/v1/auth/apple/authorization", async (context) => {
-    const principal = await authenticate(context, dependencies.authenticator);
-    await dependencies.service.saveAppleAuthorization(principal, await readJson(context.req.raw));
     return context.body(null, 204);
   });
 

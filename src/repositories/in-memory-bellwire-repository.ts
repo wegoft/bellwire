@@ -10,6 +10,7 @@ import type {
   Device,
   DeviceBinding,
   DeviceKey,
+  DeviceLiveActivityCapability,
   DirectConnectionEnvelope,
   DirectConnectionRecoveryRequest,
   EventListOptions,
@@ -17,6 +18,8 @@ import type {
   EventSchema,
   IngestToken,
   LiveSurface,
+  LiveActivityRegistration,
+  LiveActivityStartRequest,
   MeteredEventWrite,
   MeteredLiveSurfaceWrite,
   MeteredPrivateWakeWrite,
@@ -41,6 +44,9 @@ function copy<T>(value: T): T {
 export class InMemoryBellwireRepository implements BellwireRepository {
   private readonly projects = new Map<string, Project>();
   private readonly devices = new Map<string, Device>();
+  private readonly deviceLiveActivityCapabilities = new Map<string, DeviceLiveActivityCapability>();
+  private readonly liveActivityRegistrations = new Map<string, LiveActivityRegistration>();
+  private readonly liveActivityStartRequests = new Map<string, LiveActivityStartRequest>();
   private readonly deviceBindings = new Map<string, DeviceBinding>();
   private readonly deviceKeys = new Map<string, DeviceKey>();
   private readonly directConnectionEnvelopes = new Map<string, DirectConnectionEnvelope>();
@@ -244,6 +250,13 @@ export class InMemoryBellwireRepository implements BellwireRepository {
     const device = this.devices.get(deviceId);
     this.devices.delete(deviceId);
     if (!device) return;
+    this.deviceLiveActivityCapabilities.delete(deviceId);
+    for (const [activityId, registration] of this.liveActivityRegistrations) {
+      if (registration.deviceId === deviceId) this.liveActivityRegistrations.delete(activityId);
+    }
+    for (const key of this.liveActivityStartRequests.keys()) {
+      if (key.startsWith(`${deviceId}:`)) this.liveActivityStartRequests.delete(key);
+    }
     const deletedKeyIds = new Set<string>();
     for (const [keyId, key] of this.deviceKeys) {
       if (key.userId === device.userId && key.installationId === device.installationId) {
@@ -264,6 +277,65 @@ export class InMemoryBellwireRepository implements BellwireRepository {
         this.directConnectionRecoveryRequests.delete(requestKey);
       }
     }
+  }
+
+  async saveDeviceLiveActivityCapability(
+    capability: DeviceLiveActivityCapability,
+  ): Promise<DeviceLiveActivityCapability> {
+    this.deviceLiveActivityCapabilities.set(capability.deviceId, copy(capability));
+    return copy(capability);
+  }
+
+  async listDeviceLiveActivityCapabilities(
+    userId: string,
+  ): Promise<DeviceLiveActivityCapability[]> {
+    return [...this.deviceLiveActivityCapabilities.values()]
+      .filter((capability) => capability.userId === userId)
+      .map(copy);
+  }
+
+  async saveLiveActivityRegistration(
+    registration: LiveActivityRegistration,
+  ): Promise<LiveActivityRegistration> {
+    const existing = this.liveActivityRegistrations.get(registration.activityId);
+    const saved = existing
+      ? { ...registration, id: existing.id, createdAt: existing.createdAt }
+      : registration;
+    this.liveActivityRegistrations.set(saved.activityId, copy(saved));
+    return copy(saved);
+  }
+
+  async listLiveActivityRegistrations(userId: string): Promise<LiveActivityRegistration[]> {
+    return [...this.liveActivityRegistrations.values()]
+      .filter((registration) => registration.userId === userId)
+      .map(copy);
+  }
+
+  async deleteLiveActivityRegistration(activityId: string): Promise<void> {
+    this.liveActivityRegistrations.delete(activityId);
+  }
+
+  async createLiveActivityStartRequestIfAbsent(
+    request: LiveActivityStartRequest,
+  ): Promise<boolean> {
+    const key = `${request.deviceId}:${request.projectId}:${request.sessionId}`;
+    if (this.liveActivityStartRequests.has(key)) return false;
+    this.liveActivityStartRequests.set(key, copy(request));
+    return true;
+  }
+
+  async listLiveActivityStartRequests(deviceId: string): Promise<LiveActivityStartRequest[]> {
+    return [...this.liveActivityStartRequests.values()]
+      .filter((request) => request.deviceId === deviceId)
+      .map(copy);
+  }
+
+  async deleteLiveActivityStartRequest(
+    deviceId: string,
+    projectId: string,
+    sessionId: string,
+  ): Promise<void> {
+    this.liveActivityStartRequests.delete(`${deviceId}:${projectId}:${sessionId}`);
   }
 
   async saveDeviceBinding(binding: DeviceBinding): Promise<DeviceBinding> {
@@ -666,6 +738,11 @@ export class InMemoryBellwireRepository implements BellwireRepository {
 
   async getLiveSurface(projectId: string, surfaceKey: string): Promise<LiveSurface | undefined> {
     return this.cloneFrom(this.liveSurfaces, this.projectTypeKey(projectId, surfaceKey));
+  }
+
+  async getLiveSurfaceById(surfaceId: string): Promise<LiveSurface | undefined> {
+    const surface = [...this.liveSurfaces.values()].find((candidate) => candidate.id === surfaceId);
+    return surface ? copy(surface) : undefined;
   }
 
   async listLiveSurfaces(projectId: string): Promise<LiveSurface[]> {
@@ -1179,7 +1256,13 @@ export class InMemoryBellwireRepository implements BellwireRepository {
   }
 
   async runMaintenance(now: string): Promise<unknown> {
-    void now;
+    const cutoff = new Date(new Date(now).getTime() - 8 * 60 * 60 * 1_000).toISOString();
+    for (const [key, request] of this.liveActivityStartRequests) {
+      if (request.createdAt < cutoff) this.liveActivityStartRequests.delete(key);
+    }
+    for (const [activityId, registration] of this.liveActivityRegistrations) {
+      if (registration.expiresAt <= now) this.liveActivityRegistrations.delete(activityId);
+    }
     return {};
   }
 
@@ -1234,7 +1317,8 @@ function sameSurface(left: LiveSurface, right: LiveSurface): boolean {
     && left.title === right.title
     && left.subtitle === right.subtitle
     && stableJson(left.content) === stableJson(right.content)
-    && stableJson(left.action) === stableJson(right.action);
+    && stableJson(left.action) === stableJson(right.action)
+    && stableJson(left.liveActivity) === stableJson(right.liveActivity);
 }
 
 function stableJson(value: unknown): string {

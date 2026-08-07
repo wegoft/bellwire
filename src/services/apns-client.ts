@@ -41,6 +41,16 @@ export interface ApnsResult {
   providerMessageId?: string;
 }
 
+export interface ApnsLiveActivityNotification {
+  event: "start" | "update" | "end";
+  timestamp: number;
+  contentState: Record<string, unknown>;
+  attributes?: Record<string, unknown>;
+  priority: 5 | 10;
+  collapseId: string;
+  dismissalDate?: number;
+}
+
 export class ApnsError extends Error {
   constructor(
     readonly status: number,
@@ -122,6 +132,55 @@ export class ApnsClient {
               deepLink: `${this.config.urlScheme}://private/${notification.projectId}/${notification.reference}`,
             }
           : {}),
+      }),
+    });
+    if (!response.ok) {
+      const error: { reason?: string } = await response
+        .json<{ reason?: string }>()
+        .catch(() => ({}));
+      const reason = error.reason ?? "UnknownApnsError";
+      if (reason === "ExpiredProviderToken" || reason === "InvalidProviderToken") {
+        await this.providerTokens.invalidateProviderToken(providerToken.generation)
+          .catch(() => undefined);
+      }
+      throw new ApnsError(response.status, reason, isRetryable(response.status, reason));
+    }
+    return { providerMessageId: response.headers.get("apns-id") ?? undefined };
+  }
+
+  async sendLiveActivity(
+    token: string,
+    notification: ApnsLiveActivityNotification,
+  ): Promise<ApnsResult> {
+    const host = this.config.environment === "production"
+      ? "https://api.push.apple.com"
+      : "https://api.sandbox.push.apple.com";
+    const providerToken = await this.providerTokens.getProviderToken();
+    const response = await this.fetchImpl(`${host}/3/device/${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: {
+        authorization: `bearer ${providerToken.value}`,
+        "apns-topic": `${this.config.bundleId}.push-type.liveactivity`,
+        "apns-push-type": "liveactivity",
+        "apns-priority": String(notification.priority),
+        "apns-collapse-id": notification.collapseId,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        aps: {
+          timestamp: notification.timestamp,
+          event: notification.event,
+          "content-state": notification.contentState,
+          ...(notification.event === "start"
+            ? {
+                "attributes-type": "BellwireActivityAttributes",
+                attributes: notification.attributes,
+              }
+            : {}),
+          ...(notification.dismissalDate === undefined
+            ? {}
+            : { "dismissal-date": notification.dismissalDate }),
+        },
       }),
     });
     if (!response.ok) {

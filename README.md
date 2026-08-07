@@ -31,7 +31,7 @@ Product requirements and internal planning documents are intentionally kept
 out of this public repository.
 
 > [!IMPORTANT]
-> Bellwire is multi-licensed: the Worker and Supabase stack use AGPL-3.0-only,
+> Bellwire is multi-licensed: the Workers and Cloudflare D1 stack use AGPL-3.0-only,
 > the iOS app uses MPL-2.0, and the Skill, CLI, protocol references, examples,
 > and public docs use Apache-2.0. The Bellwire brand is reserved. See
 > [LICENSE.md](LICENSE.md) for the exact path boundaries.
@@ -54,7 +54,7 @@ Start with the [Private-first quick start](docs/quickstart.md), browse the
 | --- | --- | --- |
 | iOS build | Official signed build | Compile and sign your own fork |
 | API and Queue | Operated by Bellwire | Your Cloudflare account |
-| Auth and database | Operated by Bellwire | Your Supabase project |
+| Auth and database | Better Auth + Cloudflare D1 | Your two Cloudflare D1 databases |
 | Push credentials | Bellwire App ID and APNs key | Your App ID and APNs key |
 | Source code edits | None | None; use ignored local configuration |
 | Private data path | Content-free wake; phone reads your service directly | Same protocol on your infrastructure |
@@ -89,11 +89,15 @@ Bellwire Skill for the current repository. See the
 
 ## What is implemented
 
-- Supabase-backed projects, devices, schemas, notification surfaces, tokens,
+- D1-backed projects, devices, schemas, notification surfaces, tokens,
   events, delivery attempts, and per-token rate limits.
 - Mutable live Surfaces keyed by project and stable name, with native `stats`,
-  `metrics`, `progress`, `segmented_progress`, `alert`, and `timer` renderers.
-- Supabase JWT authentication for users and one-time six-digit binding codes
+  `metrics`, `progress`, `segmented_progress`, `alert`, `timer`, `status`,
+  `checklist`, and `trend` renderers.
+- Explicit, consent-gated Agent Live Activities with Hosted APNs delivery and
+  foreground-only Private delivery. Hosted automation is staged behind
+  `LIVE_ACTIVITY_AUTOMATION_ENABLED=true`.
+- Better Auth Apple authentication with short-lived ES256 JWTs and one-time six-digit binding codes
   for scoped Agent tokens.
 - Typed event validation, sensitive-field protection, idempotent ingestion,
   project pause controls, and retry-aware delivery health.
@@ -122,7 +126,7 @@ User service ── opaque wake ──► Bellwire Queue/APNs ──► iPhone
       └──────── signed notification/Inbox/Surface fetch ────┘
 
 Hosted (user approved)
-Project / Agent ── Event or Surface ──► Bellwire/Supabase
+Project / Agent ── Event or Surface ──► Bellwire/D1
                                              │
                                              └──► Queue/APNs ──► iPhone
 ```
@@ -154,9 +158,9 @@ npm run build
 npm run ios:build
 ```
 
-The Worker uses in-memory storage only when `APP_ENV=development` and no
-Supabase URL is configured. Staging and production fail closed unless both
-Supabase settings are present.
+The API Worker uses in-memory storage only when `APP_ENV=development` and no
+`DB` binding is present. Staging and production fail closed without D1. Run the
+Auth Worker separately with `npm run dev:auth`.
 
 ## Cloud configuration
 
@@ -164,19 +168,23 @@ Non-secret Worker values live in [`wrangler.toml`](wrangler.toml). Configure
 these encrypted secrets before APNs delivery:
 
 ```bash
-wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 wrangler secret put APNS_KEY_ID
 wrangler secret put APNS_TEAM_ID
 wrangler secret put APNS_PRIVATE_KEY
-wrangler secret put APPLE_TOKEN_ENCRYPTION_KEY
+wrangler secret put AUTH_INTERNAL_SECRET
+wrangler secret put AUTH_INTERNAL_SECRET -c wrangler.auth.toml
+wrangler secret put BETTER_AUTH_SECRET -c wrangler.auth.toml
+wrangler secret put APPLE_SIGN_IN_KEY_ID -c wrangler.auth.toml
+wrangler secret put APPLE_SIGN_IN_TEAM_ID -c wrangler.auth.toml
+wrangler secret put APPLE_SIGN_IN_PRIVATE_KEY -c wrangler.auth.toml
+wrangler secret put APPLE_TOKEN_ENCRYPTION_KEY -c wrangler.auth.toml
 ```
 
 `APNS_PRIVATE_KEY` is the complete `.p8` content. Use `sandbox` while running a
 development-signed app and switch both the Worker environment and device build
 to production together. `APPLE_TOKEN_ENCRYPTION_KEY` must be a random,
-base64-encoded 32-byte value; the Worker uses it to encrypt the shared APNs
-provider token in its Durable Object. Never commit service-role, Agent, Ingest,
-APNs, or encryption keys.
+base64url-encoded 32-byte value; the Auth Worker uses it to encrypt Apple's
+refresh token. Never commit Auth, Agent, Ingest, APNs, or encryption keys.
 
 Verify an APNs key locally without persisting or printing it. Add `-- --online`
 to let APNs validate the provider token, bundle topic, and environment with a
@@ -190,10 +198,14 @@ APNS_ENVIRONMENT=sandbox \
   npm run self-host:apns-preflight < /secure/path/AuthKey_ABC123DEFG.p8
 ```
 
-Apply database migrations from [`supabase/migrations`](supabase/migrations) to
-the configured project. The hosted project already has native Apple auth
-enabled for bundle ID `app.bellwire`; a web OAuth secret is not needed
-for the app's native ID-token flow.
+Apply [`d1/business`](d1/business) to the business D1 database and
+[`d1/auth`](d1/auth) to the Auth D1 database before deployment. The historical
+[`supabase/migrations`](supabase/migrations) directory is retained only as the
+source schema for migration and is not used by either Worker at runtime.
+For an existing hosted installation, follow the
+[Cloudflare cutover runbook](docs/cloudflare-cutover.md); it keeps snapshot,
+reconciliation, traffic switch, rollback, and Supabase retirement as separate
+gates.
 
 ## iOS app
 
@@ -212,14 +224,14 @@ device build additionally requires an Apple Developer account in Xcode, an App
 ID/provisioning profile for the bundle ID, and the matching APNs key configured
 on the Worker.
 
-For a complete deployment using your own Apple, Supabase, and Cloudflare
+For a complete deployment using your own Apple and Cloudflare
 accounts, follow the [self-hosting guide](docs/self-hosting.md). Self-hosted iOS
 settings are supplied through an ignored `Local.xcconfig`; no Swift source edit
 is required.
 
 ## API surface
 
-All management routes require a Supabase user JWT or scoped Agent token.
+All management routes require a Bellwire Auth ES256 user JWT or scoped Agent token.
 Private runtime uses a project-scoped wake token; Hosted ingestion uses a
 project-scoped Ingest token.
 
@@ -289,19 +301,20 @@ title, body, Event data, project name, Logo URL, or service hostname. See the
 
 ## Live smoke test
 
-[`scripts/live-smoke.mjs`](scripts/live-smoke.mjs) verifies real Supabase Auth,
-the hosted Worker, project/schema/token creation, idempotent event ingestion,
-inbox/detail reads, and Agent binding. It creates a temporary confirmed user
-and deletes that user plus cascaded data in `finally`.
-
-Pipe the Supabase secret key through stdin so it is neither persisted nor
-printed:
+[`scripts/live-smoke.mjs`](scripts/live-smoke.mjs) verifies the hosted Worker,
+project/schema/token creation, idempotent event ingestion, inbox/detail reads,
+and Agent binding using an explicitly supplied disposable Bellwire Auth token.
 
 ```bash
-pbpaste | npm run test:live
+BELLWIRE_TEST_ACCESS_TOKEN=... \
+BELLWIRE_TEST_ALLOW_ACCOUNT_DELETION=DELETE_DISPOSABLE_ACCOUNT \
+  npm run test:live
 ```
 
-For self-hosted deployments, override `BELLWIRE_API_URL`, `SUPABASE_URL`, and
-`SUPABASE_PUBLISHABLE_KEY`. The [self-hosting guide](docs/self-hosting.md) also
+The smoke test deletes that disposable account in `finally`; never pass a
+personal or production account token.
+
+For self-hosted deployments, override `BELLWIRE_API_URL`. The
+[self-hosting guide](docs/self-hosting.md) also
 covers configuration diagnosis, APNs credential preflight, and the physical
 device acceptance checklist.

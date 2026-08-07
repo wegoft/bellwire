@@ -2,5 +2,5 @@
 export const compatibility = {
   appVersion: "1.0.1",
   apiVersion: "v1",
-  schemaMigration: "202608040001",
+  schemaMigration: "d1-business-0001",
 } as const;
