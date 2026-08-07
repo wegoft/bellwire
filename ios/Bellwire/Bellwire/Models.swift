@@ -7,6 +7,21 @@ struct AuthSession: Codable, Equatable {
     let refreshToken: String
     let expiresAt: Date
     let user: AuthUser
+    let issuer: String?
+
+    init(
+        accessToken: String,
+        refreshToken: String,
+        expiresAt: Date,
+        user: AuthUser,
+        issuer: String? = nil
+    ) {
+        self.accessToken = accessToken
+        self.refreshToken = refreshToken
+        self.expiresAt = expiresAt
+        self.user = user
+        self.issuer = issuer
+    }
 
     var needsRefresh: Bool {
         expiresAt.timeIntervalSinceNow < 120
@@ -18,18 +33,19 @@ struct AuthUser: Codable, Equatable {
     let email: String?
 }
 
-struct SupabaseTokenResponse: Decodable {
+struct AuthTokenResponse: Decodable {
     let accessToken: String
     let refreshToken: String
     let expiresIn: TimeInterval
     let user: AuthUser
 
-    func session(now: Date = .now) -> AuthSession {
+    func session(now: Date = .now, issuer: String? = nil) -> AuthSession {
         AuthSession(
             accessToken: accessToken,
             refreshToken: refreshToken,
             expiresAt: now.addingTimeInterval(expiresIn),
-            user: user
+            user: user,
+            issuer: issuer
         )
     }
 }

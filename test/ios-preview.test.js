@@ -221,7 +221,8 @@ describe("iOS Inbox preview", () => {
     expect(signIn).toContain(
       "let authorizationCode = credential.authorizationCode",
     );
-    expect(signIn).toContain("if let authorizationCode");
+    expect(signIn).toContain("authorizationCode: authorizationCode");
+    expect(signIn).not.toContain("guard let authorizationCode");
     expect(signIn).not.toContain("let codeData = credential.authorizationCode");
     expect(signIn).not.toContain("signOut()");
   });

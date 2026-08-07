@@ -8,13 +8,24 @@ preview_urls = false
 
 [vars]
 APP_ENV = "production"
-SUPABASE_URL = "https://cvyidqbjjkfzoxykkbea.supabase.co"
+AUTH_ISSUER = "https://auth.bellwire.app"
+AUTH_AUDIENCE = "bellwire-api"
 APNS_BUNDLE_ID = "app.bellwire"
 APP_URL_SCHEME = "bellwire"
 APNS_ENVIRONMENT = "production"
 ENTITLEMENT_ENFORCEMENT_MODE = "enforce"
 LIVE_ACTIVITY_AUTOMATION_ENABLED = "false"
 POSTHOG_HOST = "https://us.i.posthog.com"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bellwire-production"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "d1/business"
+
+[[services]]
+binding = "AUTH_SERVICE"
+service = "bellwire-auth"
 
 [[queues.producers]]
 binding = "DELIVERY_QUEUE"

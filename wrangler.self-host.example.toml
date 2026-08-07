@@ -1,17 +1,28 @@
 name = "bellwire-self-host"
 main = "src/index.ts"
-compatibility_date = "2026-07-20"
+compatibility_date = "2026-08-05"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 preview_urls = true
 
 [vars]
 APP_ENV = "production"
-SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co"
+AUTH_ISSUER = "https://YOUR_AUTH_WORKER.workers.dev"
+AUTH_AUDIENCE = "bellwire-api"
 APNS_BUNDLE_ID = "com.example.bellwire"
 APP_URL_SCHEME = "bellwire-self-host"
 APNS_ENVIRONMENT = "production"
 ENTITLEMENT_ENFORCEMENT_MODE = "disabled"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bellwire-self-host-db"
+database_id = "YOUR_BUSINESS_D1_DATABASE_ID"
+migrations_dir = "d1/business"
+
+[[services]]
+binding = "AUTH_SERVICE"
+service = "bellwire-self-host-auth"
 
 [triggers]
 crons = ["17 * * * *"]

@@ -2,6 +2,7 @@
 node_modules/
 .next/
 dist/
+dist-auth/
 build/
 coverage/
 
@@ -11,6 +12,10 @@ coverage/
 !.env.example
 .dev.vars
 wrangler.self-host.toml
+wrangler.auth.self-host.toml
+wrangler.*.local.toml
+.wrangler/
+supabase/.temp/
 ios/Bellwire/Configuration/Local.xcconfig
 *.local
 *.p8
@@ -26,9 +31,6 @@ DerivedData/
 # Logs
 *.log
 *.tsbuildinfo
-
-# Local Supabase CLI state
-supabase/.temp/
 
 # Private product documents (never commit)
 docs/private/

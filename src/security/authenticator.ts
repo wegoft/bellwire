@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
 
 import { AGENT_SCOPES, type Principal } from "../domain/models";
 import type { BellwireRepository } from "../repositories/bellwire-repository";
 import { hashSecret, readBearerToken } from "./tokens";
+
+const remoteJwksByIssuer = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
 export class AuthenticationError extends Error {
   constructor(
@@ -26,17 +28,23 @@ export class PrincipalAuthenticator implements Authenticator {
 
   constructor(
     private readonly repository: BellwireRepository,
-    options: { supabaseUrl?: string; allowDevelopmentTokens?: boolean },
+    options: {
+      issuer?: string;
+      audience?: string;
+      allowDevelopmentTokens?: boolean;
+      authService?: Fetcher;
+    },
   ) {
     this.allowDevelopmentTokens = options.allowDevelopmentTokens === true;
-    if (options.supabaseUrl) {
-      const baseUrl = options.supabaseUrl.replace(/\/$/u, "");
-      this.issuer = `${baseUrl}/auth/v1`;
-      this.jwks = createRemoteJWKSet(new URL(`${this.issuer}/.well-known/jwks.json`));
+    this.audience = options.audience;
+    if (options.issuer) {
+      this.issuer = options.issuer.replace(/\/$/u, "");
+      this.jwks = remoteJwksForIssuer(this.issuer, options.authService);
     }
   }
 
   private readonly allowDevelopmentTokens: boolean;
+  private readonly audience?: string;
 
   async authenticate(authorization: string | undefined): Promise<Principal> {
     const token = readBearerToken(authorization);
@@ -64,7 +72,7 @@ export class PrincipalAuthenticator implements Authenticator {
     try {
       const verified = await jwtVerify(token, this.jwks, {
         issuer: this.issuer,
-        audience: "authenticated",
+        audience: this.audience,
       });
       const userId = verified.payload.sub;
       if (!userId) throw unauthorized();
@@ -74,6 +82,23 @@ export class PrincipalAuthenticator implements Authenticator {
       throw unauthorized();
     }
   }
+}
+
+function remoteJwksForIssuer(
+  issuer: string,
+  authService?: Fetcher,
+): ReturnType<typeof createRemoteJWKSet> {
+  const cacheKey = `${issuer}:${authService ? "service" : "public"}`;
+  const existing = remoteJwksByIssuer.get(cacheKey);
+  if (existing) return existing;
+  const created = createRemoteJWKSet(
+    new URL(`${issuer}/api/auth/jwks`),
+    authService ? {
+      [customFetch]: (url, options) => authService.fetch(new Request(url, options)),
+    } : undefined,
+  );
+  remoteJwksByIssuer.set(cacheKey, created);
+  return created;
 }
 
 export class StaticAuthenticator implements Authenticator {

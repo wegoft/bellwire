@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createApp } from "./app";
 import type { BellwireRepository } from "./repositories/bellwire-repository";
+import { D1BellwireRepository } from "./repositories/d1-bellwire-repository";
 import { InMemoryBellwireRepository } from "./repositories/in-memory-bellwire-repository";
-import { SupabaseBellwireRepository } from "./repositories/supabase-bellwire-repository";
 import { PrincipalAuthenticator } from "./security/authenticator";
 import { BellwireService } from "./services/bellwire-service";
-import { AppleAuthService, AppleTokenClient } from "./services/apple-auth-service";
+import { AuthAdminClient } from "./services/auth-admin-client";
 import {
   AppleBillingService,
   OfficialAppleBillingVerifier,
@@ -27,13 +27,11 @@ import {
 
 export interface Env {
   APP_ENV: "development" | "staging" | "production";
-  SUPABASE_URL?: string;
-  SUPABASE_SERVICE_ROLE_KEY?: string;
-  APPLE_SIGN_IN_KEY_ID?: string;
-  APPLE_SIGN_IN_TEAM_ID?: string;
-  APPLE_SIGN_IN_CLIENT_ID?: string;
-  APPLE_SIGN_IN_PRIVATE_KEY?: string;
-  APPLE_TOKEN_ENCRYPTION_KEY?: string;
+  DB?: D1Database;
+  AUTH_ISSUER?: string;
+  AUTH_AUDIENCE?: string;
+  AUTH_INTERNAL_SECRET?: string;
+  AUTH_SERVICE?: Fetcher;
   APPLE_ROOT_CERTIFICATES_BASE64?: string;
   APPLE_APP_ID?: string;
   APNS_KEY_ID?: string;
@@ -58,22 +56,31 @@ export { ApnsProviderTokenAuthority } from "./services/apns-provider-token-autho
 
 export default {
   async fetch(request: Request, env: Env, executionContext: ExecutionContext): Promise<Response> {
+    if (env.DB && request.method === "GET" && new URL(request.url).pathname === "/health") {
+      const health = await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
+      if (health?.ok !== 1) throw new Error("D1 health check failed");
+    }
     const repository = repositoryForEnv(env);
+    const authAudience = env.AUTH_ISSUER
+      ? requiredEnv(env.AUTH_AUDIENCE, "AUTH_AUDIENCE")
+      : undefined;
     const authenticator = new PrincipalAuthenticator(repository, {
-      supabaseUrl: env.SUPABASE_URL,
-      allowDevelopmentTokens: env.APP_ENV === "development" && !env.SUPABASE_URL,
+      issuer: env.AUTH_ISSUER,
+      audience: authAudience,
+      allowDevelopmentTokens: env.APP_ENV === "development" && !env.AUTH_ISSUER,
+      authService: env.AUTH_SERVICE,
     });
     const dispatcher = env.DELIVERY_QUEUE
       ? new QueueDeliveryDispatcher(env.DELIVERY_QUEUE)
       : undefined;
     const analytics = createProductAnalytics(env);
-    const appleAuthService = createAppleAuthService(env, repository);
+    const accountIdentityService = createAccountIdentityService(env);
     const appleBillingService = createAppleBillingService(env, repository, analytics);
     const app = createApp({
       service: new BellwireService(
         repository,
         dispatcher,
-        appleAuthService,
+        accountIdentityService,
         env.ENTITLEMENT_ENFORCEMENT_MODE ?? "shadow",
         analytics,
         env.LIVE_ACTIVITY_AUTOMATION_ENABLED === "true",
@@ -128,11 +135,9 @@ export default {
 };
 
 function repositoryForEnv(env: Env): BellwireRepository {
-  if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
-    return new SupabaseBellwireRepository(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-  }
+  if (env.DB) return new D1BellwireRepository(env.DB);
   if (env.APP_ENV !== "development") {
-    throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
+    throw new Error("DB is required outside development");
   }
   return developmentRepository;
 }
@@ -153,29 +158,12 @@ function providerTokenSourceForEnv(env: Env): DurableObjectApnsProviderTokenSour
   return apnsProviderTokens;
 }
 
-function createAppleAuthService(
-  env: Env,
-  repository: BellwireRepository,
-): AppleAuthService | undefined {
-  const values = [
-    env.APPLE_SIGN_IN_KEY_ID,
-    env.APPLE_SIGN_IN_TEAM_ID,
-    env.APPLE_SIGN_IN_CLIENT_ID,
-    env.APPLE_SIGN_IN_PRIVATE_KEY,
-  ];
-  if (values.every((value) => !value)) return undefined;
-  const keyId = requiredEnv(env.APPLE_SIGN_IN_KEY_ID, "APPLE_SIGN_IN_KEY_ID");
-  const teamId = requiredEnv(env.APPLE_SIGN_IN_TEAM_ID, "APPLE_SIGN_IN_TEAM_ID");
-  const clientId = requiredEnv(env.APPLE_SIGN_IN_CLIENT_ID, "APPLE_SIGN_IN_CLIENT_ID");
-  const privateKey = requiredEnv(env.APPLE_SIGN_IN_PRIVATE_KEY, "APPLE_SIGN_IN_PRIVATE_KEY");
-  const encryptionKey = requiredEnv(
-    env.APPLE_TOKEN_ENCRYPTION_KEY,
-    "APPLE_TOKEN_ENCRYPTION_KEY",
-  );
-  return new AppleAuthService(
-    repository,
-    new AppleTokenClient({ keyId, teamId, clientId, privateKey }),
-    encryptionKey,
+function createAccountIdentityService(env: Env): AuthAdminClient | undefined {
+  if (!env.AUTH_ISSUER && !env.AUTH_INTERNAL_SECRET && !env.AUTH_SERVICE) return undefined;
+  return new AuthAdminClient(
+    requiredEnv(env.AUTH_ISSUER, "AUTH_ISSUER"),
+    requiredEnv(env.AUTH_INTERNAL_SECRET, "AUTH_INTERNAL_SECRET"),
+    env.AUTH_SERVICE,
   );
 }
 

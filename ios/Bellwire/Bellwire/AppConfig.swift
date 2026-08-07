@@ -3,8 +3,7 @@ import Foundation
 
 enum AppConfig {
     static let apiBaseURL = requiredURL(for: "BellwireAPIBaseURL")
-    static let supabaseURL = requiredURL(for: "BellwireSupabaseURL")
-    static let supabasePublishableKey = requiredValue(for: "BellwireSupabasePublishableKey")
+    static let authBaseURL = requiredURL(for: "BellwireAuthBaseURL")
     static let keychainService = "\(Bundle.main.bundleIdentifier ?? "app.bellwire").session"
     static let sharedDirectKeychainService = "app.bellwire.direct-shared"
     static let keychainAccessGroup = requiredValue(for: "BellwireKeychainAccessGroup")

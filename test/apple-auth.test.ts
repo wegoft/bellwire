@@ -2,20 +2,13 @@
 import { exportPKCS8, generateKeyPair } from "jose";
 import { describe, expect, it } from "vitest";
 
-import type { Principal } from "../src/domain/models";
 import { InMemoryBellwireRepository } from "../src/repositories/in-memory-bellwire-repository";
 import {
   AppleAuthService,
   AppleTokenClient,
   type AppleOAuthClient,
 } from "../src/services/apple-auth-service";
-import { BellwireService } from "../src/services/bellwire-service";
-
-const userPrincipal: Principal = {
-  kind: "user",
-  userId: "user-one",
-  scopes: [],
-};
+const userId = "user-one";
 
 class CapturingAppleClient implements AppleOAuthClient {
   readonly authorizationCodes: string[] = [];
@@ -37,19 +30,18 @@ describe("Apple authentication lifecycle", () => {
     const appleClient = new CapturingAppleClient();
     const encryptionKey = base64Url(crypto.getRandomValues(new Uint8Array(32)));
     const appleAuth = new AppleAuthService(repository, appleClient, encryptionKey);
-    const service = new BellwireService(repository, undefined, appleAuth);
-
-    await service.saveAppleAuthorization(userPrincipal, { authorizationCode: "one-time-code" });
+    await appleAuth.saveAuthorizationCode(userId, "one-time-code");
 
     expect(appleClient.authorizationCodes).toEqual(["one-time-code"]);
-    const stored = await repository.getAppleRefreshToken(userPrincipal.userId);
+    const stored = await repository.getAppleRefreshToken(userId);
     expect(stored).toMatch(/^v1\./u);
     expect(stored).not.toContain("apple-refresh-token");
 
-    await service.deleteAccount(userPrincipal);
+    await appleAuth.revokeForUser(userId);
+    await repository.deleteAccount(userId);
 
     expect(appleClient.revokedTokens).toEqual(["apple-refresh-token"]);
-    expect(await repository.getAppleRefreshToken(userPrincipal.userId)).toBeUndefined();
+    expect(await repository.getAppleRefreshToken(userId)).toBeUndefined();
   });
 
   it("uses Apple's token and revocation endpoints with a signed client secret", async () => {

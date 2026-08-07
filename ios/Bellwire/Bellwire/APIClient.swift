@@ -15,7 +15,6 @@ struct APIClient {
     private let session: URLSession
     private let decoder: JSONDecoder
     private let apiEncoder: JSONEncoder
-    private let supabaseEncoder: JSONEncoder
 
     init(
         session: URLSession = .shared,
@@ -27,9 +26,6 @@ struct APIClient {
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         self.decoder = decoder
         self.apiEncoder = JSONEncoder()
-        let supabaseEncoder = JSONEncoder()
-        supabaseEncoder.keyEncodingStrategy = .convertToSnakeCase
-        self.supabaseEncoder = supabaseEncoder
     }
 
     func request<Response: Decodable>(
@@ -86,57 +82,75 @@ struct APIClient {
         return data
     }
 
-    func exchangeAppleIdentityToken(_ identityToken: String, nonce: String) async throws -> AuthSession {
+    func exchangeAppleIdentityToken(
+        _ identityToken: String,
+        nonce: String,
+        authorizationCode: String?,
+        email: String?,
+        fullName: PersonNameComponents?
+    ) async throws -> AuthSession {
         struct Payload: Encodable {
-            let provider = "apple"
-            let idToken: String
+            let identityToken: String
             let nonce: String
+            let authorizationCode: String?
+            let email: String?
+            let firstName: String?
+            let lastName: String?
         }
-        var components = URLComponents(
-            url: AppConfig.supabaseURL.appending(path: "auth/v1/token"),
-            resolvingAgainstBaseURL: false
-        )!
-        components.queryItems = [URLQueryItem(name: "grant_type", value: "id_token")]
-        var request = URLRequest(url: components.url!)
-        request.httpMethod = HTTPMethod.post.rawValue
-        request.setValue(AppConfig.supabasePublishableKey, forHTTPHeaderField: "apikey")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try supabaseEncoder.encode(Payload(idToken: identityToken, nonce: nonce))
-        return try await performSupabaseTokenRequest(request)
-    }
-
-    func saveAppleAuthorizationCode(_ authorizationCode: String) async throws {
-        struct Payload: Encodable { let authorizationCode: String }
-        try await requestVoid(
-            "v1/auth/apple/authorization",
-            method: .post,
-            body: Payload(authorizationCode: authorizationCode)
+        return try await performAuthTokenRequest(
+            "v1/native/apple/sign-in",
+            body: Payload(
+                identityToken: identityToken,
+                nonce: nonce,
+                authorizationCode: authorizationCode,
+                email: email,
+                firstName: fullName?.givenName,
+                lastName: fullName?.familyName
+            )
         )
     }
 
     func refreshSession(_ refreshToken: String) async throws -> AuthSession {
         struct Payload: Encodable { let refreshToken: String }
-        var components = URLComponents(
-            url: AppConfig.supabaseURL.appending(path: "auth/v1/token"),
-            resolvingAgainstBaseURL: false
-        )!
-        components.queryItems = [URLQueryItem(name: "grant_type", value: "refresh_token")]
-        var request = URLRequest(url: components.url!)
-        request.httpMethod = HTTPMethod.post.rawValue
-        request.setValue(AppConfig.supabasePublishableKey, forHTTPHeaderField: "apikey")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try supabaseEncoder.encode(Payload(refreshToken: refreshToken))
-        return try await performSupabaseTokenRequest(request)
+        return try await performAuthTokenRequest(
+            "v1/native/session/refresh",
+            body: Payload(refreshToken: refreshToken)
+        )
     }
 
-    private func performSupabaseTokenRequest(_ request: URLRequest) async throws -> AuthSession {
+    func revokeSession(_ refreshToken: String) async throws {
+        let url = AppConfig.authBaseURL.appending(path: "v1/native/session/revoke")
+        var request = URLRequest(url: url)
+        request.httpMethod = HTTPMethod.post.rawValue
+        request.setValue("Bearer \(refreshToken)", forHTTPHeaderField: "Authorization")
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ClientError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) || http.statusCode == 401 else {
+            throw ClientError.httpStatus(http.statusCode)
+        }
+    }
+
+    private func performAuthTokenRequest<Body: Encodable>(
+        _ path: String,
+        body: Body
+    ) async throws -> AuthSession {
+        let url = AppConfig.authBaseURL.appending(path: path)
+        var request = URLRequest(url: url)
+        request.httpMethod = HTTPMethod.post.rawValue
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try apiEncoder.encode(body)
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ClientError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
-            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["msg"] as? String
-            throw ClientError.api(code: "AUTH_FAILED", message: message ?? "Sign in failed. Please try again.")
+            if let envelope = try? decoder.decode(APIErrorEnvelope.self, from: data) {
+                throw ClientError.api(code: envelope.error.code, message: envelope.error.message)
+            }
+            throw ClientError.api(code: "AUTH_FAILED", message: "Sign in failed. Please try again.")
         }
-        return try decoder.decode(SupabaseTokenResponse.self, from: data).session()
+        return try decoder.decode(AuthTokenResponse.self, from: data).session(
+            issuer: AppConfig.authBaseURL.absoluteString
+        )
     }
 }
 

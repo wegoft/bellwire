@@ -15,7 +15,7 @@ describe("published compatibility metadata", () => {
     );
     const appVersions = [...project.matchAll(/MARKETING_VERSION = ([^;]+);/gu)]
       .map((match) => match[1]);
-    const latestMigration = readdirSync(join(repositoryRoot, "supabase/migrations"))
+    const latestMigration = readdirSync(join(repositoryRoot, "d1/business"))
       .filter((name) => name.endsWith(".sql"))
       .sort()
       .at(-1)
@@ -24,10 +24,10 @@ describe("published compatibility metadata", () => {
     expect(appVersions.length).toBeGreaterThan(0);
     expect(new Set(appVersions).size).toBe(1);
     expect(compatibility).toContain(`appVersion: "${appVersions[0]}"`);
-    expect(compatibility).toContain(`schemaMigration: "${latestMigration}"`);
+    expect(compatibility).toContain(`schemaMigration: "d1-business-${latestMigration}"`);
   });
 
-  it("preserves prior device keys when one installation rotates its current identity", () => {
+  it("retains the legacy migration rule used while normalizing Supabase exports", () => {
     const migration = readFileSync(
       join(repositoryRoot, "supabase/migrations/202608030001_private_manifest_recovery.sql"),
       "utf8",
@@ -41,7 +41,7 @@ describe("published compatibility metadata", () => {
     );
   });
 
-  it("publishes the Free and Pro capacity policy in the database migration", () => {
+  it("retains the legacy capacity policy used to reconcile migration exports", () => {
     const migration = readFileSync(
       join(repositoryRoot, "supabase/migrations/202608040001_plan_capacity_update.sql"),
       "utf8",

@@ -48,9 +48,6 @@ export interface CreateProjectResult {
 
 export interface BellwireRepository {
   deleteAccount(userId: string): Promise<void>;
-  saveAppleRefreshToken(userId: string, encryptedRefreshToken: string): Promise<void>;
-  getAppleRefreshToken(userId: string): Promise<string | undefined>;
-  deleteAppleRefreshToken(userId: string): Promise<void>;
 
   createProject(project: Project): Promise<Project>;
   createProjectIfAbsent(project: Project): Promise<CreateProjectResult>;

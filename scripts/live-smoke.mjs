@@ -1,50 +1,25 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: AGPL-3.0-only
 
-const supabaseURL = process.env.SUPABASE_URL ?? "https://cvyidqbjjkfzoxykkbea.supabase.co";
-const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY
-  ?? "sb_publishable_i4iVi9h_EXgBdkxsgOU_Rw_MLV2SIdg";
 const apiURL = process.env.BELLWIRE_API_URL ?? "https://api.bellwire.app";
-
-const serviceRoleKey = (await readStdin()).trim();
-if (!(serviceRoleKey.startsWith("sb_secret_") || serviceRoleKey.startsWith("eyJ"))) {
-  throw new Error("Pipe the Supabase secret key to stdin; it is never persisted or printed.");
+const accessToken = process.env.BELLWIRE_TEST_ACCESS_TOKEN?.trim();
+if (!accessToken) {
+  throw new Error("BELLWIRE_TEST_ACCESS_TOKEN must contain a disposable Bellwire Auth access token.");
 }
-
-const suffix = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-const email = `bellwire.smoke+${suffix}@example.com`;
-const password = `Ap-${randomHex(24)}!`;
-let userId;
-let quotaKey;
+if (process.env.BELLWIRE_TEST_ALLOW_ACCOUNT_DELETION !== "DELETE_DISPOSABLE_ACCOUNT") {
+  throw new Error(
+    "Set BELLWIRE_TEST_ALLOW_ACCOUNT_DELETION=DELETE_DISPOSABLE_ACCOUNT only for a disposable test account.",
+  );
+}
+const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const userHeaders = {
+  authorization: `Bearer ${accessToken}`,
+  "content-type": "application/json",
+};
 
 try {
   const health = await requestJSON(`${apiURL}/health`, {}, 200);
   assert(health.status === "ok", "Worker health check did not report ok");
-
-  const adminHeaders = {
-    apikey: serviceRoleKey,
-    authorization: `Bearer ${serviceRoleKey}`,
-    "content-type": "application/json",
-  };
-  const user = await requestJSON(`${supabaseURL}/auth/v1/admin/users`, {
-    method: "POST",
-    headers: adminHeaders,
-    body: JSON.stringify({ email, password, email_confirm: true }),
-  }, 200);
-  userId = user.id;
-  assert(typeof userId === "string", "Supabase did not return a temporary user ID");
-
-  const auth = await requestJSON(`${supabaseURL}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: { apikey: supabasePublishableKey, "content-type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  }, 200);
-  const accessToken = auth.access_token;
-  assert(typeof accessToken === "string", "Supabase did not return an access token");
-  const userHeaders = {
-    authorization: `Bearer ${accessToken}`,
-    "content-type": "application/json",
-  };
 
   const project = await requestJSON(`${apiURL}/v1/projects`, {
     method: "POST",
@@ -114,7 +89,6 @@ try {
     body: JSON.stringify({ name: "smoke" }),
   }, 201);
   assert(typeof ingest.token === "string" && ingest.token.startsWith("bw_live_"), "Ingest token was not issued");
-  quotaKey = `${project.id}:${ingest.id}`;
 
   const idempotencyKey = `smoke-${suffix}`;
   const eventPayload = JSON.stringify({
@@ -201,7 +175,7 @@ try {
   console.log(JSON.stringify({
     ok: true,
     worker: "healthy",
-    supabaseAuth: "verified",
+    bellwireAuthJwt: "verified",
     projectLifecycle: "verified",
     liveSurfaceUpsert: "verified",
     eventIdempotency: "verified",
@@ -211,22 +185,7 @@ try {
     deliveryWithoutDevice: "idle",
   }, null, 2));
 } finally {
-  const cleanupHeaders = {
-    apikey: serviceRoleKey,
-    authorization: `Bearer ${serviceRoleKey}`,
-  };
-  if (quotaKey) {
-    await fetch(
-      `${supabaseURL}/rest/v1/ingest_rate_limits?key=eq.${encodeURIComponent(quotaKey)}`,
-      { method: "DELETE", headers: cleanupHeaders },
-    );
-  }
-  if (userId) {
-    await fetch(`${supabaseURL}/auth/v1/admin/users/${userId}`, {
-      method: "DELETE",
-      headers: cleanupHeaders,
-    });
-  }
+  await fetch(`${apiURL}/v1/account`, { method: "DELETE", headers: userHeaders });
 }
 
 async function requestJSON(url, init, expectedStatus) {
@@ -251,15 +210,4 @@ function safeError(body) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
-}
-
-function randomHex(length) {
-  const bytes = crypto.getRandomValues(new Uint8Array(Math.ceil(length / 2)));
-  return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("").slice(0, length);
-}
-
-async function readStdin() {
-  let value = "";
-  for await (const chunk of process.stdin) value += chunk;
-  return value;
 }

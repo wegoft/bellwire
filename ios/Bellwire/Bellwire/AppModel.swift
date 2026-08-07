@@ -90,7 +90,12 @@ final class AppModel: ObservableObject {
             return
         }
 #endif
-        session = keychain.read()
+        if let stored = keychain.read(), stored.issuer == AppConfig.authBaseURL.absoluteString {
+            session = stored
+        } else {
+            keychain.delete()
+            session = nil
+        }
     }
 
     var isAuthenticated: Bool { session != nil }
@@ -234,17 +239,14 @@ final class AppModel: ObservableObject {
             let authorizationCode = credential.authorizationCode
                 .flatMap { String(data: $0, encoding: .utf8) }
                 .flatMap { $0.isEmpty ? nil : $0 }
-            let newSession = try await api.exchangeAppleIdentityToken(identityToken, nonce: nonce)
+            let newSession = try await api.exchangeAppleIdentityToken(
+                identityToken,
+                nonce: nonce,
+                authorizationCode: authorizationCode,
+                email: credential.email,
+                fullName: credential.fullName
+            )
             try saveSession(newSession)
-            if let authorizationCode {
-                do {
-                    try await api.saveAppleAuthorizationCode(authorizationCode)
-                } catch {
-#if DEBUG
-                    print("Could not persist Apple authorization code: \(error)")
-#endif
-                }
-            }
             await loadDashboard(showLoading: true)
             startLiveActivityObservers()
             if let apnsToken {
@@ -947,6 +949,10 @@ final class AppModel: ObservableObject {
     }
 
     func signOut() {
+        if let refreshToken = session?.refreshToken {
+            let client = api
+            Task { try? await client.revokeSession(refreshToken) }
+        }
         dashboardLoadTask?.cancel()
         sessionRefreshTask?.cancel()
         liveActivityUpdatesTask?.cancel()

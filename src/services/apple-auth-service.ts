@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { SignJWT, importPKCS8 } from "jose";
 
-import type { BellwireRepository } from "../repositories/bellwire-repository";
+export interface AppleRefreshTokenStore {
+  saveAppleRefreshToken(userId: string, encryptedRefreshToken: string): Promise<void>;
+  getAppleRefreshToken(userId: string): Promise<string | undefined>;
+  deleteAppleRefreshToken(userId: string): Promise<void>;
+}
 
 export interface AppleOAuthClient {
   exchangeAuthorizationCode(authorizationCode: string): Promise<string>;
@@ -63,7 +67,7 @@ export class AppleTokenClient implements AppleOAuthClient {
     return response;
   }
 
-  private async createClientSecret(): Promise<string> {
+  async createClientSecret(): Promise<string> {
     const now = Math.floor(Date.now() / 1000);
     const key = await importPKCS8(this.config.privateKey, "ES256");
     return new SignJWT({})
@@ -79,7 +83,7 @@ export class AppleTokenClient implements AppleOAuthClient {
 
 export class AppleAuthService {
   constructor(
-    private readonly repository: BellwireRepository,
+    private readonly repository: AppleRefreshTokenStore,
     private readonly oauthClient: AppleOAuthClient,
     private readonly encryptionKey: string,
   ) {}

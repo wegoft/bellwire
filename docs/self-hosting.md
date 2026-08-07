@@ -1,70 +1,49 @@
 # Self-hosting Bellwire
 
-Bellwire can run end to end on infrastructure you control. A self-hosted build
-does not use Bellwire Cloud, its Apple signing identity, or its APNs credentials.
+Bellwire can run end to end in your Apple Developer and Cloudflare accounts.
+The self-hosted stack uses two Workers and two D1 databases: one isolated Auth
+Worker and one business API Worker.
 
 ## What you need
 
 - An Apple Developer Program team with Push Notifications and Sign in with
-  Apple enabled for your own explicit App ID.
-- Two extension App IDs: one for the notification service and one for Widgets
-  and Live Activities.
-- An App Group shared by the main app and Widget extension.
-- An APNs token signing key (`.p8`), Key ID, and Team ID.
-- A Supabase project for authentication and PostgreSQL storage.
-- A Cloudflare account with Workers and Queues.
-- Node.js 22 or newer, Wrangler, Supabase CLI, and Xcode.
-
-Cloudflare alone is not sufficient. The current server stores durable state and
-authenticates users through Supabase, while APNs only accepts notifications
-signed by the Apple Developer team that owns the app's Bundle ID.
+  Apple enabled for your explicit App ID.
+- App IDs for the main app, notification extension, and Widget/Live Activity
+  extension, plus a shared App Group.
+- An APNs `.p8` key, Key ID, and Team ID.
+- A Cloudflare account with Workers, D1, Queues, and Durable Objects.
+- Node.js 22 or newer, Wrangler, and Xcode.
 
 ## 1. Prepare Apple Developer
 
-In Certificates, Identifiers & Profiles:
+Register the three explicit App IDs, enable Push Notifications and Sign in with
+Apple on the main App ID, create the App Group, and attach it to the main app
+and Widget extension. Create an APNs authentication key and store its one-time
+download outside the repository.
 
-1. [Register an explicit App ID](https://developer.apple.com/help/account/identifiers/register-an-app-id)
-   for the main app, for example `com.example.bellwire`.
-2. Enable Push Notifications and Sign in with Apple on that main App ID. For a
-   new independent app, configure it as the primary Sign in with Apple App ID.
-3. Register a second explicit App ID for the notification extension, for
-   example `com.example.bellwire.NotificationService`.
-4. Register a third explicit App ID for the Widget and Live Activity extension,
-   for example `com.example.bellwire.Widgets`.
-5. Register an App Group such as `group.com.example.bellwire.shared`, then
-   enable it for the main App ID and Widget extension App ID.
-6. [Create an APNs authentication key](https://developer.apple.com/help/account/keys/create-a-private-key),
-   record its Key ID, and download its `.p8` file. Apple only offers the private
-   key download once, so store it securely and never add it to Git.
+The same Apple private key is used by the Auth Worker to create the Apple client
+secret and by the API Worker for APNs when the key has both capabilities. Keep
+the values in Worker secrets, never in TOML or xcconfig files.
 
-The repository already declares the app-side Push Notifications, Sign in with
-Apple, Widget, Live Activity, and App Group entitlements. Xcode will still need
-permission to create matching provisioning profiles for all three identifiers.
+## 2. Create Cloudflare resources
 
-## 2. Prepare Supabase
-
-Create a fresh project, link it from this repository, and apply every migration
-in `supabase/migrations`:
+Create two D1 databases and record their UUIDs:
 
 ```bash
-supabase login
-supabase link --project-ref YOUR_PROJECT_REF
-supabase db push
+npx wrangler d1 create bellwire-self-host-db
+npx wrangler d1 create bellwire-self-host-auth-db
 ```
 
-In Authentication > Providers > Apple, enable the provider and add the main
-App ID as a Client ID for native ID-token login. Supabase's
-[Apple provider guide](https://supabase.com/docs/guides/auth/social-login/auth-apple)
-describes additional Services ID and secret setup if you later add web OAuth.
+Create the delivery queues:
 
-Copy the project URL and a publishable key for the bootstrap command below.
-Keep the secret/service-role key server-side only; the iOS build receives only
-the publishable key. Supabase documents the intended split in its
-[API key guide](https://supabase.com/docs/guides/getting-started/api-keys).
+```bash
+npx wrangler queues create bellwire-self-host-deliveries
+npx wrangler queues create bellwire-self-host-deliveries-dlq
+```
 
 ## 3. Generate local configuration
 
-Generate both ignored local configuration files with one command:
+Use the D1 UUIDs printed by Wrangler:
 
 ```bash
 npm run self-host:bootstrap -- \
@@ -73,92 +52,68 @@ npm run self-host:bootstrap -- \
   --url-scheme bellwire-self-host \
   --worker-name bellwire-self-host \
   --api-url https://bellwire-self-host.example.workers.dev \
-  --supabase-url https://YOUR_PROJECT_REF.supabase.co \
-  --supabase-publishable-key sb_publishable_YOUR_KEY
+  --auth-url https://bellwire-self-host-auth.example.workers.dev \
+  --business-d1-id 11111111-1111-4111-8111-111111111111 \
+  --auth-d1-id 22222222-2222-4222-8222-222222222222
 ```
 
-The bootstrap command creates `ios/Bellwire/Configuration/Local.xcconfig` and
-`wrangler.self-host.toml`, refuses to overwrite either file, and never asks for
-or writes server-side secrets. Run it with `--help` to see optional Bundle ID,
-Queue prefix, URL scheme, and APNs environment settings.
+The command creates three ignored files and refuses to overwrite any of them:
 
-The generated iOS configuration contains:
+- `ios/Bellwire/Configuration/Local.xcconfig`
+- `wrangler.self-host.toml`
+- `wrangler.auth.self-host.toml`
 
-- `BELLWIRE_DEVELOPMENT_TEAM`: your Apple Team ID.
-- `BELLWIRE_APP_BUNDLE_ID`: your explicit main App ID.
-- `BELLWIRE_EXTENSION_BUNDLE_ID`: the notification service extension App ID.
-- `BELLWIRE_WIDGET_BUNDLE_ID`: the Widget and Live Activity extension App ID.
-- `BELLWIRE_APP_GROUP`: the App Group shared by the main app and Widget.
-- `BELLWIRE_URL_SCHEME`: a URL scheme unique to your build.
-- `BELLWIRE_API_BASE_URL`: your deployed Worker URL.
-- `BELLWIRE_SUPABASE_URL`: your Supabase project URL.
-- `BELLWIRE_SUPABASE_PUBLISHABLE_KEY`: your Supabase publishable key.
+The iOS file contains only public Worker origins and Apple identifiers. The two
+Wrangler files contain resource bindings but no secrets.
 
-If you prefer manual setup, copy `Local.xcconfig.example` to
-`Local.xcconfig` and `wrangler.self-host.example.toml` to
-`wrangler.self-host.toml`, then replace every example value. Keep iOS URL
-values in the `https:/$()/host` form shown in the example. The empty
-build-setting expression prevents xcconfig from parsing `//` as a comment.
-
-Open `ios/Bellwire/Bellwire.xcodeproj` after configuring the identifiers. Xcode
-must be able to create provisioning profiles for all targets. A Simulator
-build verifies compilation, but a signed physical-device build is required to
-obtain a real APNs device token.
-
-## 4. Configure Cloudflare
-
-Review the generated `wrangler.self-host.toml`. Create the delivery Queue and
-dead-letter Queue named in that file, then store the required secrets:
+## 4. Apply both D1 schemas
 
 ```bash
-npx wrangler queues create bellwire-self-host-deliveries
-npx wrangler queues create bellwire-self-host-deliveries-dlq
-npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY -c wrangler.self-host.toml
+npx wrangler d1 migrations apply DB --remote -c wrangler.self-host.toml
+npx wrangler d1 migrations apply AUTH_DB --remote -c wrangler.auth.self-host.toml
+```
+
+The business schema is in `d1/business`; the Better Auth schema is in
+`d1/auth`. The `supabase/migrations` directory is a legacy migration reference
+only and is not used by a deployed Worker.
+
+## 5. Configure secrets
+
+Generate two different random secrets with at least 32 characters: one Better
+Auth secret and one internal secret. Set the same internal secret on both
+Workers.
+
+```bash
+npx wrangler secret put AUTH_INTERNAL_SECRET -c wrangler.self-host.toml
 npx wrangler secret put APNS_KEY_ID -c wrangler.self-host.toml
 npx wrangler secret put APNS_TEAM_ID -c wrangler.self-host.toml
 npx wrangler secret put APNS_PRIVATE_KEY -c wrangler.self-host.toml
-npx wrangler secret put APPLE_TOKEN_ENCRYPTION_KEY -c wrangler.self-host.toml
+
+npx wrangler secret put AUTH_INTERNAL_SECRET -c wrangler.auth.self-host.toml
+npx wrangler secret put BETTER_AUTH_SECRET -c wrangler.auth.self-host.toml
+npx wrangler secret put APPLE_SIGN_IN_KEY_ID -c wrangler.auth.self-host.toml
+npx wrangler secret put APPLE_SIGN_IN_TEAM_ID -c wrangler.auth.self-host.toml
+npx wrangler secret put APPLE_SIGN_IN_PRIVATE_KEY -c wrangler.auth.self-host.toml
+npx wrangler secret put APPLE_TOKEN_ENCRYPTION_KEY -c wrangler.auth.self-host.toml
 ```
 
-Wrangler prompts for each value and stores it as an encrypted Worker secret;
-do not paste these values into the TOML file. Generate
-`APPLE_TOKEN_ENCRYPTION_KEY` as a random base64-encoded 32-byte value. The
-generated Wrangler configuration provisions the global APNs provider-token
-Durable Object on first deploy. See Cloudflare's official guides
-for [Queue creation](https://developers.cloudflare.com/queues/get-started/) and
-[Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/).
+`APPLE_TOKEN_ENCRYPTION_KEY` is a random base64url-encoded 32-byte value. It
+encrypts the Apple refresh token retained for account revocation.
 
-Deploy with the local configuration:
+## 6. Deploy and diagnose
+
+Deploy Auth first so the API service binding resolves:
 
 ```bash
+npx wrangler deploy -c wrangler.auth.self-host.toml
 npx wrangler deploy -c wrangler.self-host.toml
-```
-
-The `APNS_BUNDLE_ID` and `APP_URL_SCHEME` values in the Worker configuration
-must exactly match the iOS build. Use `APNS_ENVIRONMENT = "sandbox"` for a
-development-signed device build and `"production"` for an App Store,
-TestFlight, or production-signed build.
-
-## 5. Verify the complete path
-
-Check local configuration consistency before provisioning or deploying:
-
-```bash
-npm run self-host:doctor
-```
-
-After deployment, include reachability checks for the Worker and Supabase:
-
-```bash
 npm run self-host:doctor -- --online
 ```
 
-The online result includes the Worker-reported App, API, and latest required
-database migration versions. It verifies service reachability, not whether the
-database migrations were actually applied.
+The doctor checks both Worker configs, both D1 bindings, the service binding,
+iOS origins and identifiers, API health, Auth health, and the ES256 JWKS.
 
-Validate that the APNs private key can produce a provider token without saving
-or printing the key:
+Validate the APNs key locally without persisting or printing it:
 
 ```bash
 APNS_KEY_ID=ABC123DEFG \
@@ -168,38 +123,16 @@ APNS_ENVIRONMENT=sandbox \
   npm run self-host:apns-preflight < /secure/path/AuthKey_ABC123DEFG.p8
 ```
 
-Add `-- --online` to let APNs validate the provider token and topic with a dummy
-device token. The probe cannot deliver a notification. Match the environment to
-the signing type described above.
-
-Run the destructive-but-self-cleaning API smoke test against the self-hosted
-deployment. It creates a temporary confirmed Supabase user and deletes that
-user plus its cascaded Bellwire data in `finally`:
-
-```bash
-BELLWIRE_API_URL=https://bellwire-self-host.example.workers.dev \
-SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co \
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY \
-  npm run test:live < /secure/path/supabase-secret-key.txt
-```
-
-Finally, verify the physical-device path:
+## 7. Physical-device acceptance
 
 1. Build and install the app on a physical device.
 2. Sign in with Apple and allow notifications.
 3. Confirm the device appears in Settings.
-4. Generate a binding code and bind the Bellwire Skill.
-5. Create a Private project and complete a Direct v2 connection, then send a
-   content-free test wake and verify on-device enrichment.
-6. Create an explicitly approved Hosted project, schema, notification Surface,
-   and ingest token.
-7. Send a test Hosted Event and inspect its Delivery status.
-8. On Pro, add the Bellwire Widget and start a Surface Live Activity from the
-   project detail screen.
-9. Treat `accepted_by_apns` as provider acceptance; separately confirm that the
-   notification appeared on the device.
+4. Bind the Bellwire Skill with a one-time code.
+5. Exercise a Private Direct v2 wake and verify on-device enrichment.
+6. Exercise an approved Hosted project, schema, Surface, Ingest token, and Event.
+7. Inspect delivery health and separately confirm device presentation.
+8. Delete the test account and confirm both Auth and business D1 rows are gone.
 
-The configuration generator and doctor remove the need to edit Swift or
-TypeScript source code. Cloud resource creation and Apple Developer setup are
-still explicit steps because they affect billable resources, signing identity,
-and external account state.
+Cloud resource creation, domain routing, production deployment, and account
+deletion are intentionally explicit because they affect external state.

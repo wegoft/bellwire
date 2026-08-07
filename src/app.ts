@@ -221,12 +221,6 @@ export function createApp(dependencies: {
     return context.body(null, 204);
   });
 
-  app.post("/v1/auth/apple/authorization", async (context) => {
-    const principal = await authenticate(context, dependencies.authenticator);
-    await dependencies.service.saveAppleAuthorization(principal, await readJson(context.req.raw));
-    return context.body(null, 204);
-  });
-
   app.post("/v1/demo", async (context) => {
     const principal = await authenticate(context, dependencies.authenticator);
     const result = await dependencies.service.createDemoExperience(principal);
