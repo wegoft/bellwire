@@ -37,6 +37,7 @@ export interface Env {
   SUPABASE_SERVICE_ROLE_KEY?: string;
   APPLE_TOKEN_ENCRYPTION_KEY?: string;
   APPLE_TOKEN_REWRAP_SECRET?: string;
+  CUTOVER_WRITE_FREEZE?: "true" | "false";
   APPLE_ROOT_CERTIFICATES_BASE64?: string;
   APPLE_APP_ID?: string;
   APNS_KEY_ID?: string;
@@ -67,6 +68,9 @@ export default {
       && url.pathname === "/internal/migrations/apple-refresh-tokens"
     ) {
       return migrateLegacyAppleRefreshTokens(request, env);
+    }
+    if (env.CUTOVER_WRITE_FREEZE === "true" && url.pathname !== "/health") {
+      return cutoverWriteFreezeResponse();
     }
     if (env.DB && request.method === "GET" && url.pathname === "/health") {
       const health = await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
@@ -104,6 +108,10 @@ export default {
   },
 
   async queue(batch: MessageBatch<DeliveryQueueMessage>, env: Env): Promise<void> {
+    if (env.CUTOVER_WRITE_FREEZE === "true") {
+      for (const message of batch.messages) message.retry({ delaySeconds: 300 });
+      return;
+    }
     const repository = repositoryForEnv(env);
     const providerTokens = providerTokenSourceForEnv(env);
     const apnsForEnvironment = (environment: "sandbox" | "production") => apnsClients.get({
@@ -142,9 +150,22 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    if (env.CUTOVER_WRITE_FREEZE === "true") return;
     await repositoryForEnv(env).runMaintenance(new Date().toISOString());
   },
 };
+
+function cutoverWriteFreezeResponse(): Response {
+  return Response.json({
+    error: {
+      code: "CUTOVER_WRITE_FREEZE",
+      message: "Bellwire is completing a scheduled storage migration. Please retry shortly.",
+    },
+  }, {
+    status: 503,
+    headers: { "cache-control": "no-store", "retry-after": "120" },
+  });
+}
 
 interface LegacyAppleRefreshTokenRow {
   user_id?: unknown;

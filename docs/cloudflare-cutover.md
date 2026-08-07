@@ -74,15 +74,18 @@ Any count, ownership, identity-link, or entitlement mismatch blocks cutover.
 3. Announce a write freeze and stop source writes.
 4. Capture a final snapshot, generate a fresh import directory, apply it, and
    reconcile counts and samples again.
-5. Before deployment, set the same random `APPLE_TOKEN_REWRAP_SECRET` on Auth
-   and API and temporarily configure `LEGACY_SUPABASE_URL` on API. Deploy Auth,
+5. Before deployment, set `CUTOVER_WRITE_FREEZE=true` on both Workers, set the
+   same random `APPLE_TOKEN_REWRAP_SECRET` on Auth and API, and temporarily
+   configure `LEGACY_SUPABASE_URL` on API. Deploy Auth,
    verify `/health` and `/api/auth/jwks`, then deploy API. Invoke
    `POST /internal/migrations/apple-refresh-tokens` once with the rewrap secret.
    The API reads only the legacy ciphertext rows, decrypts them with the
    retained source key, passes plaintext only over the Auth service binding,
    and Auth stores and verifies ciphertext made with its new key. The response
    count must equal both the source token count and the imported Auth D1 count.
-6. Delete `APPLE_TOKEN_REWRAP_SECRET` from both Workers, remove
+6. After the final delta replay and rewrap verification, set
+   `CUTOVER_WRITE_FREEZE=false`, delete `APPLE_TOKEN_REWRAP_SECRET` from both
+   Workers, remove
    `LEGACY_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from API, redeploy, and
    confirm the migration endpoint returns `404`. The source encryption key may
    be rotated only after the APNs provider-token Durable Object compatibility

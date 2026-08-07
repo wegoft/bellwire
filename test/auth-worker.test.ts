@@ -62,6 +62,29 @@ describe("Bellwire Auth Worker", () => {
     });
   });
 
+  it("keeps health and JWKS available while blocking sign-in during cutover", async () => {
+    const env = { ...authEnv(), CUTOVER_WRITE_FREEZE: "true" as const };
+    const health = await authWorker.fetch(
+      new Request("https://auth.bellwire.app/health"),
+      env,
+      executionContext(),
+    );
+    expect(health.status).toBe(200);
+    const jwks = await authWorker.fetch(
+      new Request("https://auth.bellwire.app/api/auth/jwks"),
+      env,
+      executionContext(),
+    );
+    expect(jwks.status).toBe(200);
+    const blocked = await authWorker.fetch(
+      new Request("https://auth.bellwire.app/v1/native/apple/sign-in", { method: "POST" }),
+      env,
+      executionContext(),
+    );
+    expect(blocked.status).toBe(503);
+    expect(blocked.headers.get("retry-after")).toBe("120");
+  });
+
   it("protects internal deletion and cascades Better Auth sessions", async () => {
     const now = "2026-08-07T10:00:00.000Z";
     await database.batch([

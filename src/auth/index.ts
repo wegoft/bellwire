@@ -25,6 +25,7 @@ export interface AuthEnv {
   APPLE_SIGN_IN_PRIVATE_KEY: string;
   APPLE_TOKEN_ENCRYPTION_KEY: string;
   APPLE_TOKEN_REWRAP_SECRET?: string;
+  CUTOVER_WRITE_FREEZE?: "true" | "false";
 }
 
 interface NativeSignInBody {
@@ -473,7 +474,24 @@ function jsonError(status: number, code: string, message: string): Response {
 
 export default {
   async fetch(request: Request, env: AuthEnv, executionContext: ExecutionContext): Promise<Response> {
-    const response = await app.fetch(request, env, executionContext);
+    const url = new URL(request.url);
+    const freezeAllowed = request.method === "GET" && (
+      url.pathname === "/health" || url.pathname === "/api/auth/jwks"
+    ) || (
+      request.method === "POST"
+      && url.pathname === "/internal/migrations/apple-refresh-tokens"
+    );
+    const response = env.CUTOVER_WRITE_FREEZE === "true" && !freezeAllowed
+      ? Response.json({
+        error: {
+          code: "CUTOVER_WRITE_FREEZE",
+          message: "Bellwire authentication is completing a scheduled storage migration.",
+        },
+      }, {
+        status: 503,
+        headers: { "retry-after": "120" },
+      })
+      : await app.fetch(request, env, executionContext);
     const headers = new Headers(response.headers);
     headers.set("cache-control", "no-store");
     headers.set("x-content-type-options", "nosniff");

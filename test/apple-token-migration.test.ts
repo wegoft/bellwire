@@ -9,6 +9,34 @@ afterEach(() => {
 });
 
 describe("legacy Apple refresh token migration", () => {
+  it("serves health but blocks application requests during the cutover freeze", async () => {
+    const env = {
+      APP_ENV: "production",
+      CUTOVER_WRITE_FREEZE: "true",
+      DB: {
+        prepare: () => ({ first: async () => ({ ok: 1 }) }),
+      } as unknown as D1Database,
+    } as Env;
+
+    const health = await worker.fetch(
+      new Request("https://api.bellwire.app/health"),
+      env,
+      executionContext(),
+    );
+    expect(health.status).toBe(200);
+
+    const blocked = await worker.fetch(
+      new Request("https://api.bellwire.app/v1/projects"),
+      env,
+      executionContext(),
+    );
+    expect(blocked.status).toBe(503);
+    expect(blocked.headers.get("retry-after")).toBe("120");
+    await expect(blocked.json()).resolves.toMatchObject({
+      error: { code: "CUTOVER_WRITE_FREEZE" },
+    });
+  });
+
   it("is unavailable without the one-time secret and rejects a wrong secret", async () => {
     const sourceFetch = vi.fn();
     vi.stubGlobal("fetch", sourceFetch);
