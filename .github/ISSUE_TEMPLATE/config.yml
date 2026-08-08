@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security report
-    url: https://github.com/xwchris/bellwire/blob/main/SECURITY.md
+    url: https://github.com/wegoft/bellwire/blob/main/SECURITY.md
     about: Report vulnerabilities and leaked credentials privately.
   - name: Self-hosting guide
-    url: https://github.com/xwchris/bellwire/blob/main/docs/self-hosting.md
+    url: https://github.com/wegoft/bellwire/blob/main/docs/self-hosting.md
     about: Review the deployment requirements and diagnostic commands first.
