@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { randomBytes } from "node:crypto";
 
-import { verifyBellwireDirectRequest } from "../../skills/bellwire/scripts/verify-direct-request.mjs";
+import { verifyBellwireDirectRequest } from "../../../scripts/verify-direct-request.mjs";
 
 /**
  * Framework-neutral Node 22 reference. Adapt Request/Response at the framework

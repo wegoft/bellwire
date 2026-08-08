@@ -84,8 +84,7 @@ ln -s "$(pwd)/bellwire/skills/bellwire" "$HOME/.codex/skills/bellwire"
 Restart Codex, create a binding code in the iOS app, and ask Codex to use the
 Bellwire Skill for the current repository. See the
 [ClawHub listing](https://clawhub.ai/xwchris/skills/bellwire),
-[Skill installation guide](skills/bellwire/README.md), and
-[Private-first quick start](docs/quickstart.md) for the complete flow.
+and [Private-first quick start](docs/quickstart.md) for the complete flow.
 
 ## What is implemented
 

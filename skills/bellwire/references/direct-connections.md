@@ -1,5 +1,12 @@
 # Bellwire Private and Direct v2
 
+- [Establish a device connection](#establish-a-device-connection)
+- [Manifest v2](#manifest-v2)
+- [Signed request](#signed-request)
+- [Private outbox and wake](#private-outbox-and-wake)
+- [Direct endpoint responses](#direct-endpoint-responses)
+- [Conformance](#conformance)
+
 Private is the default project mode. Bellwire stores only control-plane metadata
 and an opaque wake reference; notification, Inbox, and Surface content travels
 directly from the user's HTTPS service to the iPhone.
@@ -12,7 +19,8 @@ directly from the user's HTTPS service to the iPhone.
    and revocation state in the user's database. One row per device is required.
 3. Implement all three signed HTTPS endpoints described below. If the source verifier pins one device in secrets or environment variables instead of using a trusted-key table, update `deviceKey.id` and `deviceKey.signingPublicKey` together with an atomic/bulk secret operation before publishing the manifest. A newly paired key cannot inherit the old key's verifier configuration.
 4. Create a manifest v2 from
-   `examples/templates/direct-connection.manifest.json`. It contains only public
+   [direct-connection.manifest.json](../assets/templates/direct-connection.manifest.json).
+   It contains only public
    display identity and endpoint paths—never a bearer token, cookie, password,
    provider secret, or embedded URL credential.
 5. Encrypt and publish it:
@@ -172,7 +180,8 @@ node <skill-dir>/scripts/conformance-direct.mjs \
   --reference "$BELLWIRE_TEST_REFERENCE"
 ```
 
-Conformance validates signed access, response size, shape, reference equality,
-Inbox page size, all declared capabilities, replayed nonce, stale timestamp,
-unknown key, and tampered query behavior. Every authentication failure must
-return the same `401` response.
+Conformance validates signed access, response size, Event and typed Surface
+shape, project ownership, reference equality, Inbox page size, all declared
+capabilities, replayed nonce, stale timestamp, a well-formed unknown key, and
+tampered query behavior. Every authentication failure must return the same
+`401` status, content type, and body.

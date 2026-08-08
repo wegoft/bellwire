@@ -7,8 +7,18 @@ All notable changes to Bellwire are documented here. The project follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-08
+
 ### Changed
 
+- Make the published Agent Skill self-contained with bundled Direct v2
+  templates, Node and Cloudflare reference adapters, D1 schemas, and the full
+  Apache 2.0 license.
+- Require secret-returning CLI commands to write one-time Tokens to a new
+  `0600` file instead of stdout, and document the non-printing import flow.
+- Share protocol validation between the CLI and Direct conformance checker,
+  validate typed Private Surfaces and uniform authentication failures, and add
+  release-contract and negative-parity tests.
 - Replace the Supabase runtime with an isolated Better Auth Worker, Auth D1,
   business D1 repository, service binding, and ES256 access tokens.
 - Remove the retired provider schema and one-time cutover tooling after the
@@ -60,5 +70,6 @@ All notable changes to Bellwire are documented here. The project follows
 - Bellwire name, app icon, and official service identifiers reserved under the
   trademark policy.
 
-[Unreleased]: https://github.com/wegoft/bellwire/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/wegoft/bellwire/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/wegoft/bellwire/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/wegoft/bellwire/releases/tag/v0.1.0

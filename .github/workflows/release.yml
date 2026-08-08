@@ -72,8 +72,9 @@ jobs:
       - name: Package Agent Skill
         run: |
           cd skills
-          zip -r "../bellwire-skill-${GITHUB_REF_NAME}.zip" bellwire
+          zip -r -X "../bellwire-skill-${GITHUB_REF_NAME}.zip" bellwire
           cd ..
+          unzip -t "bellwire-skill-${GITHUB_REF_NAME}.zip"
           sha256sum "bellwire-skill-${GITHUB_REF_NAME}.zip" > "bellwire-skill-${GITHUB_REF_NAME}.zip.sha256"
       - name: Create release
         env:

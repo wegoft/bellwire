@@ -1,11 +1,21 @@
 # Integration adapters
 
+- [Choose a delivery mode](#choose-a-delivery-mode)
+- [Private wake after commit](#private-wake-after-commit)
+- [Hosted Node.js](#hosted-nodejs)
+- [Hosted Cloudflare Worker](#hosted-cloudflare-worker)
+- [Hosted Shell](#hosted-shell)
+- [GitHub Actions](#github-actions)
+
+## Choose a delivery mode
+
 Choose the runtime path from the project's delivery mode:
 
 - Private uses `BELLWIRE_WAKE_TOKEN`, an opaque-reference outbox, and signed
   Direct v2 endpoints. Start from
-  `examples/node/private-direct.mjs` or
-  `examples/cloudflare-worker/bellwire-direct.ts`.
+  [private-direct.mjs](../assets/examples/node/private-direct.mjs) or
+  [bellwire-direct.ts](../assets/examples/cloudflare-worker/bellwire-direct.ts).
+  For D1, also copy the adjacent nonce and outbox SQL assets.
 - Hosted uses `BELLWIRE_INGEST_TOKEN` and the Event/Surface adapters below.
 
 Never send Private content through the Hosted snippets as a fallback.

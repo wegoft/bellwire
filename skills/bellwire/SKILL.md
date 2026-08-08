@@ -1,6 +1,6 @@
 ---
 name: bellwire
-description: Add, update, test, diagnose, or maintain Private-first Bellwire live cards, inbox events, and phone notifications in Node.js, Cloudflare Worker, and shell projects. Use for Bellwire binding, signed Direct v2 endpoints, opaque references and outboxes, wake tokens, Hosted Events and Surfaces, mode-change approval, provider webhooks, delivery checks, conformance, or notification troubleshooting.
+description: Add, update, test, diagnose, or maintain Private-first Bellwire live cards, inbox events, and phone notifications in application backends, Node.js, Cloudflare Workers, CI/CD workflows, and shell automation. Use for Bellwire binding, signed Direct v2 endpoints, opaque references and outboxes, wake tokens, Hosted Events and Surfaces, mode-change approval, provider webhooks, delivery checks, conformance, or notification troubleshooting.
 ---
 
 # Bellwire
@@ -14,11 +14,17 @@ Connect repository state and events to the user's Bellwire cards, inbox, and iPh
 3. Ensure `BELLWIRE_AGENT_TOKEN` is available outside tracked files. If it is missing, ask the user for the six-digit code shown in the iOS app and run:
 
    ```bash
-   node <skill-dir>/scripts/bellwire.mjs bind --code 123456 --name "Codex on Mac"
+   bellwire_secret_dir="$(mktemp -d)"
+   node <skill-dir>/scripts/bellwire.mjs bind \
+     --code 123456 \
+     --name "Codex on Mac" \
+     --secret-output "$bellwire_secret_dir/agent-token"
    ```
 
-   Store the returned Agent token in the user's approved secret store. Never commit it.
-4. Create or reuse the Bellwire project. Search existing configuration before creating another project. Never create a second project just to change delivery mode.
+   The CLI creates the file with mode `0600` and never prints the Token. Import it
+   into the user's approved secret store without displaying it, then remove the
+   temporary file. Never commit it.
+4. Run `list-projects`, then create or reuse the Bellwire project. Search existing configuration before creating another project. Never create a second project just to change delivery mode.
 5. Keep the project Private unless the user explicitly wants Bellwire Cloud to store Event, Inbox, and Surface content:
    - Private: implement signed Direct v2 notification, inbox, and surfaces endpoints; persist device keys, one-time nonces, an opaque-reference outbox, and the 24-hour reference expiry in the user's real database. Read [direct-connections.md](references/direct-connections.md).
    - Hosted: request the change with `request-mode-change`; stop until the signed-in user approves it in Bellwire. Then create Hosted schemas, Surfaces, and Ingest Tokens.
@@ -50,8 +56,10 @@ Never describe `send-test`, a manually upserted Surface, or secret creation as a
 Use [scripts/bellwire.mjs](scripts/bellwire.mjs) for API operations. It defaults to the official hosted API and accepts `BELLWIRE_API_URL` for self-hosted installations.
 
 ```bash
+bellwire_secret_dir="$(mktemp -d)"
+node <skill-dir>/scripts/bellwire.mjs list-projects
 node <skill-dir>/scripts/bellwire.mjs create-project --name "VideoSays" --logo-url "https://videosays.com/logo.png"
-node <skill-dir>/scripts/bellwire.mjs create-wake-token --project <id> --name production
+node <skill-dir>/scripts/bellwire.mjs create-wake-token --project <id> --name production --secret-output "$bellwire_secret_dir/wake-token"
 node <skill-dir>/scripts/bellwire.mjs generate-reference
 node <skill-dir>/scripts/bellwire.mjs send-wake --project <id> --reference <opaque-ref> --idempotency-key <stable-key>
 node <skill-dir>/scripts/bellwire.mjs request-mode-change --project <id> --to hosted
@@ -59,7 +67,7 @@ node <skill-dir>/scripts/bellwire.mjs update-project --project <id> --logo-url "
 node <skill-dir>/scripts/bellwire.mjs set-project-order --project <id> --order 10
 node <skill-dir>/scripts/bellwire.mjs delete-project --project <id>
 node <skill-dir>/scripts/bellwire.mjs create-schema --project <id> --file event-spec.json
-node <skill-dir>/scripts/bellwire.mjs create-token --project <id> --name production
+node <skill-dir>/scripts/bellwire.mjs create-token --project <id> --name production --secret-output "$bellwire_secret_dir/ingest-token"
 node <skill-dir>/scripts/bellwire.mjs upsert-surface --project <id> --key prod-api --file surface.json
 node <skill-dir>/scripts/bellwire.mjs list-surfaces --project <id>
 node <skill-dir>/scripts/bellwire.mjs list-direct-recoveries
@@ -77,11 +85,15 @@ node <skill-dir>/scripts/conformance-direct.mjs \
   --reference <known-test-reference>
 ```
 
+Run `node <skill-dir>/scripts/bellwire.mjs --help` for validation, revocation,
+deletion, and encryption commands. Secret-returning commands require
+`--secret-output`; never read their Token into chat or command output.
+
 `delete-project` is permanent and cascades through the project's schemas, tokens, events,
 deliveries, and live Surfaces. Resolve the exact project ID and require explicit user intent
 before running it.
 
-Use `--json` for machine-readable output. Read [api.md](references/api.md) when adding another operation or diagnosing an error response.
+Use `--json` for machine-readable non-secret output. Read [api.md](references/api.md) when adding another operation or diagnosing an error response.
 
 ## Adapter routing
 

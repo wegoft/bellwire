@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { verifyBellwireDirectRequest } from "../../skills/bellwire/scripts/verify-direct-request.mjs";
+import { verifyBellwireDirectRequest } from "../../../scripts/verify-direct-request.mjs";
 
 interface Env {
   BELLWIRE_CONNECTION_ID: string;

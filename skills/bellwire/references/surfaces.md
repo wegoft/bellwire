@@ -1,5 +1,19 @@
 # Bellwire live Surfaces
 
+- [Rules and command](#rules-and-command)
+- [`stats`](#stats)
+- [`metrics`](#metrics)
+- [`progress`](#progress)
+- [`segmented_progress`](#segmented_progress)
+- [`alert`](#alert)
+- [`timer`](#timer)
+- [`status`](#status)
+- [`checklist`](#checklist)
+- [`trend`](#trend)
+- [Agent-requested Live Activities](#agent-requested-live-activities)
+
+## Rules and command
+
 Live Surfaces are mutable, agent-defined cards. Use a stable lowercase key so
 later calls update the same card instead of creating duplicates.
 
