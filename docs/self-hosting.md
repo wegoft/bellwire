@@ -74,8 +74,7 @@ npx wrangler d1 migrations apply AUTH_DB --remote -c wrangler.auth.self-host.tom
 ```
 
 The business schema is in `d1/business`; the Better Auth schema is in
-`d1/auth`. The `supabase/migrations` directory is a legacy migration reference
-only and is not used by a deployed Worker.
+`d1/auth`.
 
 ## 5. Configure secrets
 

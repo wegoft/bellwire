@@ -58,18 +58,11 @@ export async function verifyApiProduction(options = {}) {
   );
 
   await expectStatus(`${settings.apiBaseURL}/v1/projects`, 401, {}, settings);
-  await expectStatus(
-    `${settings.apiBaseURL}/internal/migrations/apple-refresh-tokens`,
-    404,
-    { method: "POST" },
-    settings,
-  );
 
   return {
     health: "ok",
     compatibility: health.compatibility,
     unauthenticatedProjectsStatus: 401,
-    legacyMigrationStatus: 404,
   };
 }
 

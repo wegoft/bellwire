@@ -11,9 +11,8 @@ All notable changes to Bellwire are documented here. The project follows
 
 - Replace the Supabase runtime with an isolated Better Auth Worker, Auth D1,
   business D1 repository, service binding, and ES256 access tokens.
-- Add replay-safe Supabase snapshot conversion, migration ledgers,
-  reconciliation gates, two-Worker self-hosting configuration, and a staged
-  production cutover runbook.
+- Remove the retired provider schema and one-time cutover tooling after the
+  production migration completed.
 - Move the iOS sign-in, refresh, revoke, and stale-session recovery flow to the
   Bellwire Auth Worker.
 - Present Bellwire Pro as an adaptive large purchase sheet with a clearer

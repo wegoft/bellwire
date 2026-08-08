@@ -1,6 +1,5 @@
 * @xwchris
 
 /.github/ @xwchris
-/supabase/migrations/ @xwchris
 /src/security/ @xwchris
 /src/services/apns-client.ts @xwchris

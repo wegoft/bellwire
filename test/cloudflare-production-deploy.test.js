@@ -13,7 +13,7 @@ import {
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
 describe("Cloudflare production verification", () => {
-  it("accepts the expected Auth, JWKS, API, authorization, and migration boundaries", async () => {
+  it("accepts the expected Auth, JWKS, API, and authorization boundaries", async () => {
     const fetchImplementation = routeFetch({
       "GET https://auth.example/health": json(200, {
         ok: true,
@@ -33,9 +33,6 @@ describe("Cloudflare production verification", () => {
         },
       }),
       "GET https://api.example/v1/projects": json(401, { error: "unauthorized" }),
-      "POST https://api.example/internal/migrations/apple-refresh-tokens": json(404, {
-        error: "not found",
-      }),
     });
 
     await expect(verifyProduction(settings(fetchImplementation))).resolves.toMatchObject({
@@ -44,7 +41,6 @@ describe("Cloudflare production verification", () => {
       api: {
         health: "ok",
         unauthenticatedProjectsStatus: 401,
-        legacyMigrationStatus: 404,
       },
     });
   });
@@ -79,7 +75,7 @@ describe("Cloudflare production verification", () => {
     );
   });
 
-  it("keeps the production workflow ordered and free of Supabase runtime dependencies", () => {
+  it("keeps the production workflow ordered and Cloudflare-only", () => {
     const workflow = read(".github/workflows/deploy-production.yml");
     const authConfig = read("wrangler.auth.production.toml");
     const apiConfig = read("wrangler.production.toml");
@@ -97,7 +93,7 @@ describe("Cloudflare production verification", () => {
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
     expect(workflow).toContain("environment: production");
     expect(workflow).toContain("Roll back deployed Worker versions after failure");
-    expect(`${authConfig}\n${apiConfig}`).not.toMatch(/SUPABASE|LEGACY_SUPABASE|REWRAP/u);
+    expect(`${authConfig}\n${apiConfig}`).not.toMatch(/SUPABASE|LEGACY_SUPABASE|REWRAP|CUTOVER/u);
   });
 });
 

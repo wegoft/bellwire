@@ -26,29 +26,4 @@ describe("published compatibility metadata", () => {
     expect(compatibility).toContain(`appVersion: "${appVersions[0]}"`);
     expect(compatibility).toContain(`schemaMigration: "d1-business-${latestMigration}"`);
   });
-
-  it("retains the legacy migration rule used while normalizing Supabase exports", () => {
-    const migration = readFileSync(
-      join(repositoryRoot, "supabase/migrations/202608030001_private_manifest_recovery.sql"),
-      "utf8",
-    );
-
-    expect(migration).toContain(
-      "drop constraint if exists device_keys_user_id_installation_id_key",
-    );
-    expect(migration).not.toContain(
-      "create unique index if not exists device_keys_user_id_installation_unique",
-    );
-  });
-
-  it("retains the legacy capacity policy used to reconcile migration exports", () => {
-    const migration = readFileSync(
-      join(repositoryRoot, "supabase/migrations/202608040001_plan_capacity_update.sql"),
-      "utf8",
-    );
-
-    expect(migration).toContain("case when resolved_plan = 'pro' then 20 else 1 end");
-    expect(migration).toContain("case when resolved_plan = 'pro' then null::integer else 3 end");
-    expect(migration).toContain("and resolved_surface_limit is not null");
-  });
 });

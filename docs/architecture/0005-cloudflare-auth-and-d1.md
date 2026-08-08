@@ -20,8 +20,8 @@ and a self-hosting path that does not require a second cloud provider.
 - Present 15-minute ES256 access tokens with an exact issuer and
   `bellwire-api` audience to the business API. Agent and Ingest credentials
   keep the narrower scopes established by ADR-0002.
-- Retain `supabase/migrations` only as historical source schema and migration
-  evidence after a reconciled, reversible cutover.
+- Remove the legacy provider schema and one-time migration surface after the
+  reconciled cutover is complete.
 
 This supersedes the Supabase deployment detail in ADR-0001 and the Supabase
 user-authentication detail in ADR-0002. Their protocol, deployment-mode, and
@@ -34,7 +34,7 @@ credential-separation decisions remain in force.
 - Auth and business data cannot be joined directly; destructive account work
   crosses an authenticated internal service boundary.
 - iOS receives public API/Auth origins but no provider key or server secret.
-- Source snapshots, stable identity mapping, row-count reconciliation, traffic
-  switching, rollback, and Supabase retirement remain explicit operator gates.
+- Future storage migrations must again use explicit snapshot, reconciliation,
+  traffic-switching, rollback, and retirement gates.
 - Legacy local Supabase sessions require one fresh Apple sign-in after the app
   switches issuer.
