@@ -1,0 +1,67 @@
+name = "bellwire-api"
+main = "src/index.ts"
+compatibility_date = "2026-07-20"
+compatibility_flags = ["nodejs_compat"]
+routes = [{ pattern = "api.bellwire.app", custom_domain = true }]
+workers_dev = false
+preview_urls = false
+
+[vars]
+APP_ENV = "production"
+AUTH_ISSUER = "https://auth.bellwire.app"
+AUTH_AUDIENCE = "bellwire-api"
+APNS_BUNDLE_ID = "app.bellwire"
+APP_URL_SCHEME = "bellwire"
+APNS_ENVIRONMENT = "production"
+ENTITLEMENT_ENFORCEMENT_MODE = "enforce"
+LIVE_ACTIVITY_AUTOMATION_ENABLED = "false"
+POSTHOG_HOST = "https://us.i.posthog.com"
+CUTOVER_WRITE_FREEZE = "false"
+
+[secrets]
+required = [
+  "APNS_KEY_ID",
+  "APNS_PRIVATE_KEY",
+  "APNS_TEAM_ID",
+  "APPLE_APP_ID",
+  "APPLE_ROOT_CERTIFICATES_BASE64",
+  "APPLE_SIGN_IN_CLIENT_ID",
+  "APPLE_SIGN_IN_KEY_ID",
+  "APPLE_SIGN_IN_PRIVATE_KEY",
+  "APPLE_SIGN_IN_TEAM_ID",
+  "APPLE_TOKEN_ENCRYPTION_KEY",
+  "AUTH_INTERNAL_SECRET",
+  "POSTHOG_PROJECT_KEY",
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bellwire-production"
+database_id = "4c798b4a-011b-489f-adb3-7e0dc3744d3d"
+migrations_dir = "d1/business"
+
+[[services]]
+binding = "AUTH_SERVICE"
+service = "bellwire-auth"
+
+[[queues.producers]]
+binding = "DELIVERY_QUEUE"
+queue = "bellwire-deliveries"
+
+[[queues.consumers]]
+queue = "bellwire-deliveries"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "bellwire-deliveries-dlq"
+
+[[durable_objects.bindings]]
+name = "APNS_PROVIDER_TOKEN_AUTHORITY"
+class_name = "ApnsProviderTokenAuthority"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ApnsProviderTokenAuthority"]
+
+[triggers]
+crons = ["17 * * * *"]

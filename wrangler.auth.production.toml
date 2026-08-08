@@ -1,0 +1,32 @@
+name = "bellwire-auth"
+main = "src/auth/index.ts"
+compatibility_date = "2026-08-05"
+compatibility_flags = ["nodejs_compat"]
+routes = [{ pattern = "auth.bellwire.app", custom_domain = true }]
+workers_dev = false
+preview_urls = false
+
+[vars]
+AUTH_ENVIRONMENT = "production"
+AUTH_ISSUER = "https://auth.bellwire.app"
+AUTH_AUDIENCE = "bellwire-api"
+APPLE_SIGN_IN_CLIENT_ID = "app.bellwire"
+APPLE_APP_BUNDLE_ID = "app.bellwire"
+CUTOVER_WRITE_FREEZE = "false"
+
+[secrets]
+required = [
+  "APPLE_TOKEN_ENCRYPTION_KEY",
+  "AUTH_INTERNAL_SECRET",
+  "BETTER_AUTH_SECRET",
+]
+
+[[d1_databases]]
+binding = "AUTH_DB"
+database_name = "auth-bellwire"
+database_id = "9642a4b1-3298-4ef3-8b66-aa515fd804c4"
+migrations_dir = "d1/auth"
+
+[[services]]
+binding = "APPLE_AUTH_SERVICE"
+service = "bellwire-api"

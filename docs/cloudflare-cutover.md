@@ -128,3 +128,32 @@ has passed an agreed observation window:
 
 The checked-in `supabase/migrations` directory remains as historical source
 schema and migration evidence; it is not a deployed runtime dependency.
+
+## 7. Continuous production deployment
+
+After the production cutover, `.github/workflows/deploy-production.yml` owns
+routine Cloudflare releases. A push to `main` that changes Worker, D1, test, or
+production configuration paths runs the Worker gates and then deploys through
+the GitHub `production` environment. Operators can also invoke the workflow
+manually from the default branch.
+
+The workflow applies and verifies changes in this order:
+
+1. lint, typecheck, Worker tests, and production Wrangler dry-runs;
+2. Auth D1 migrations;
+3. Auth Worker deployment and public Auth/JWKS verification;
+4. business D1 migrations;
+5. API Worker deployment and complete public verification.
+
+`wrangler.auth.production.toml` and `wrangler.production.toml` are the
+non-secret production source of truth. The only GitHub environment secrets are
+the least-privilege Cloudflare account ID and API token used by Wrangler.
+Application secrets remain unreadable Cloudflare Worker secrets and are listed
+only by required binding name in the production configuration.
+
+Before deploying, the workflow records the active Auth and API Worker version
+IDs. If a Worker deployment or health gate fails, it restores any Worker that
+was already changed, in API-then-Auth order. D1 migrations are transactional
+and captured by Cloudflare backups, but they are not automatically reversed by
+a Worker rollback; production migrations must remain backward-compatible with
+the prior Worker version.
