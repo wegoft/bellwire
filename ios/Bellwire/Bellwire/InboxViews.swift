@@ -13,7 +13,7 @@ struct ProjectsView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            BellwireRefreshScrollView(action: refresh) {
                 LazyVStack(alignment: .leading, spacing: BellwireSpacing.roomy) {
                     projectsHeader
 
@@ -99,7 +99,6 @@ struct ProjectsView: View {
             }
             .bellwirePageBackground()
             .toolbar(.hidden, for: .navigationBar)
-            .refreshable { await model.loadDashboard() }
             .navigationDestination(for: AppRoute.self) { route in
                 switch route {
                 case .project(let id): ProjectDetailView(projectID: id)
@@ -149,6 +148,10 @@ struct ProjectsView: View {
             await model.createBinding()
             isGeneratingBinding = false
         }
+    }
+
+    private func refresh() async {
+        await model.loadDashboard()
     }
 
     private var filteredProjects: [ProjectSummary] {
@@ -285,7 +288,7 @@ struct EventsView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            BellwireRefreshScrollView(action: refresh) {
                 LazyVStack(alignment: .leading, spacing: BellwireSpacing.roomy) {
                     VStack(alignment: .leading, spacing: BellwireSpacing.standard) {
                         HStack(alignment: .firstTextBaseline, spacing: BellwireSpacing.standard) {
@@ -362,7 +365,6 @@ struct EventsView: View {
             }
             .bellwirePageBackground()
             .toolbar(.hidden, for: .navigationBar)
-            .refreshable { await model.loadDashboard() }
             .navigationDestination(for: AppRoute.self) { route in
                 switch route {
                 case .project(let id): ProjectDetailView(projectID: id)
@@ -380,6 +382,10 @@ struct EventsView: View {
             case .failed: return event.status == "failed"
             }
         }
+    }
+
+    private func refresh() async {
+        await model.loadDashboard()
     }
 
     private var emptyEventsMessage: String {
@@ -565,7 +571,7 @@ struct InboxView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            ScrollView {
+            BellwireRefreshScrollView(action: refresh) {
                 LazyVStack(alignment: .leading, spacing: BellwireSpacing.section) {
                     if model.isPreparingInitialDashboard {
                         homeHeader
@@ -603,7 +609,6 @@ struct InboxView: View {
             }
             .bellwirePageBackground()
             .toolbar(.hidden, for: .navigationBar)
-            .refreshable { await model.loadDashboard() }
             .navigationDestination(for: AppRoute.self) { route in
                 switch route {
                 case .event(let id): EventDetailView(eventID: id)
@@ -787,6 +792,10 @@ struct InboxView: View {
             await model.createBinding()
             isGeneratingBinding = false
         }
+    }
+
+    private func refresh() async {
+        await model.loadDashboard()
     }
 
     private func createHostedDemo() {

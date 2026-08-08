@@ -28,9 +28,14 @@ struct SettingsView: View {
         model.entitlement?.hasPro ?? purchaseManager.hasPro
     }
 
+    private func refresh() async {
+        await model.refreshNotificationStatus()
+        await model.loadDashboard()
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
+            BellwireRefreshScrollView(action: refresh) {
                 LazyVStack(alignment: .leading, spacing: BellwireSpacing.section) {
                     Text("Settings")
                         .font(BellwireTypography.pageTitle)
@@ -63,10 +68,6 @@ struct SettingsView: View {
             }
             .bellwirePageBackground()
             .toolbar(.hidden, for: .navigationBar)
-            .refreshable {
-                await model.refreshNotificationStatus()
-                await model.loadDashboard()
-            }
             .task {
                 await model.refreshPendingModeRequests()
             }

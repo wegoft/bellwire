@@ -71,6 +71,9 @@
 "Connect a project first. Its Signals will appear here." = "Connect a project first. Its Signals will appear here.";
 "A project is connected. Ask your Agent to send the first Signal; it will appear here." = "A project is connected. Ask your Agent to send the first Signal; it will appear here.";
 "Loading Bellwire…" = "Loading Bellwire…";
+"Refresh" = "Refresh";
+"Refreshing Bellwire" = "Refreshing Bellwire";
+"Refresh complete" = "Refresh complete";
 "Loading live cards…" = "Loading live cards…";
 "Refreshing live cards" = "Refreshing live cards";
 "Syncing Hosted and Private sources." = "Syncing Hosted and Private sources.";
