@@ -28,7 +28,7 @@ SHA-256 checksum. Download and extract the archive into the skills directory
 used by your Agent:
 
 ```bash
-gh release download --repo xwchris/bellwire --pattern 'bellwire-skill-*.zip*'
+gh release download --repo wegoft/bellwire --pattern 'bellwire-skill-*.zip*'
 ```
 
 ## Codex
@@ -37,7 +37,7 @@ Clone the repository and link the Skill into the personal Codex skills
 directory:
 
 ```bash
-git clone https://github.com/xwchris/bellwire.git
+git clone https://github.com/wegoft/bellwire.git
 mkdir -p "$HOME/.codex/skills"
 ln -s "$(pwd)/bellwire/skills/bellwire" "$HOME/.codex/skills/bellwire"
 ```

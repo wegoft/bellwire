@@ -61,5 +61,5 @@ All notable changes to Bellwire are documented here. The project follows
 - Bellwire name, app icon, and official service identifiers reserved under the
   trademark policy.
 
-[Unreleased]: https://github.com/xwchris/bellwire/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/xwchris/bellwire/releases/tag/v0.1.0
+[Unreleased]: https://github.com/wegoft/bellwire/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/wegoft/bellwire/releases/tag/v0.1.0
