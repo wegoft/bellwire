@@ -1,0 +1,134 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Deploy production
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deploy-production.yml"
+      - "d1/**"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/verify-cloudflare-production.mjs"
+      - "src/**"
+      - "tsconfig.json"
+      - "eslint.config.js"
+      - "wrangler.production.toml"
+      - "wrangler.auth.production.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: bellwire-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test Worker and deployment checks
+        run: npm run test:worker
+      - name: Build production Workers without uploading
+        run: npm run build:production
+
+  deploy:
+    name: Deploy Auth then API
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      CI: "true"
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Require Cloudflare deployment credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_ACCOUNT_ID:?}"
+          test -n "${CLOUDFLARE_API_TOKEN:?}"
+      - name: Capture rollback versions
+        id: rollback_versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_version="$(npx wrangler deployments list --json -c wrangler.auth.production.toml | jq -r '.[-1].versions[] | select(.percentage == 100) | .version_id')"
+          api_version="$(npx wrangler deployments list --json -c wrangler.production.toml | jq -r '.[-1].versions[] | select(.percentage == 100) | .version_id')"
+          uuid_pattern='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          [[ "$auth_version" =~ $uuid_pattern ]]
+          [[ "$api_version" =~ $uuid_pattern ]]
+          echo "auth_version=$auth_version" >> "$GITHUB_OUTPUT"
+          echo "api_version=$api_version" >> "$GITHUB_OUTPUT"
+      - name: Apply Auth D1 migrations
+        run: npm run d1:migrate:auth:production
+      - name: Deploy Auth Worker
+        id: deploy_auth
+        run: >-
+          npm run deploy:auth:production --
+          --message "GitHub ${GITHUB_SHA}: deploy Bellwire Auth"
+      - name: Verify Auth production boundary
+        run: npm run verify:auth:production
+      - name: Apply business D1 migrations
+        run: npm run d1:migrate:api:production
+      - name: Deploy API Worker
+        id: deploy_api
+        run: >-
+          npm run deploy:api:production --
+          --message "GitHub ${GITHUB_SHA}: deploy Bellwire API"
+      - name: Verify complete production boundary
+        run: npm run verify:production
+      - name: Write deployment summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "## Bellwire production deployed"
+            echo
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Auth: https://auth.bellwire.app/health"
+            echo "- API: https://api.bellwire.app/health"
+            echo "- Order: Auth D1 → Auth Worker → Auth verification → Business D1 → API Worker → full verification"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Roll back deployed Worker versions after failure
+        if: ${{ failure() && (steps.deploy_auth.outcome == 'success' || steps.deploy_api.outcome == 'success') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rollback_failed=0
+          if [[ "${{ steps.deploy_api.outcome }}" == "success" ]]; then
+            npx wrangler rollback "${{ steps.rollback_versions.outputs.api_version }}" -c wrangler.production.toml --yes --message "Rollback failed GitHub deployment ${GITHUB_SHA}" || rollback_failed=1
+          fi
+          if [[ "${{ steps.deploy_auth.outcome }}" == "success" ]]; then
+            npx wrangler rollback "${{ steps.rollback_versions.outputs.auth_version }}" -c wrangler.auth.production.toml --yes --message "Rollback failed GitHub deployment ${GITHUB_SHA}" || rollback_failed=1
+          fi
+          npm run verify:production || rollback_failed=1
+          exit "$rollback_failed"
