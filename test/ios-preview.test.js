@@ -112,6 +112,42 @@ describe("iOS Inbox preview", () => {
     30_000,
   );
 
+  it(
+    "uses Direct live surfaces for Private project details and Cloud surfaces for Hosted projects",
+    () => {
+      const temporaryDirectory = mkdtempSync(
+        join(tmpdir(), "bellwire-ios-project-surfaces-"),
+      );
+      const executable = join(temporaryDirectory, "ProjectOverviewSurfaceCheck");
+      try {
+        execFileSync(
+          "xcrun",
+          [
+            "swiftc",
+            "ios/Bellwire/Bellwire/Models.swift",
+            "test/ProjectOverviewSurfaceCheck.swift",
+            "-o",
+            executable,
+          ],
+          { stdio: "pipe" },
+        );
+        expect(() => execFileSync(executable, { stdio: "pipe" })).not.toThrow();
+      } finally {
+        rmSync(temporaryDirectory, { recursive: true, force: true });
+      }
+
+      const model = readFileSync("ios/Bellwire/Bellwire/AppModel.swift", "utf8");
+      const loadProject = model.slice(
+        model.indexOf("func loadProject(id:"),
+        model.indexOf("func exportProject("),
+      );
+      expect(loadProject).toContain(
+        "cloudOverview.resolvingDetailLiveSurfaces(from: liveSurfaces)",
+      );
+    },
+    30_000,
+  );
+
   it("refreshes current data from lifecycle and notification signals", () => {
     const app = readFileSync("ios/Bellwire/Bellwire/BellwireApp.swift", "utf8");
     const model = readFileSync("ios/Bellwire/Bellwire/AppModel.swift", "utf8");
@@ -233,7 +269,7 @@ describe("iOS Inbox preview", () => {
     const buildNumbers = [...project.matchAll(/CURRENT_PROJECT_VERSION = ([^;]+);/gu)]
       .map((match) => match[1]);
     expect(buildNumbers.length).toBeGreaterThan(0);
-    expect(new Set(buildNumbers)).toEqual(new Set(["13"]));
+    expect(new Set(buildNumbers)).toEqual(new Set(["14"]));
 
     const marketingVersions = [...project.matchAll(/MARKETING_VERSION = ([^;]+);/gu)]
       .map((match) => match[1]);
