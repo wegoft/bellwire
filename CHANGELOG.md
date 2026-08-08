@@ -7,6 +7,13 @@ All notable changes to Bellwire are documented here. The project follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-08
+
+### Fixed
+
+- Declare the Agent Skill's Apache-2.0 license in its frontmatter so public
+  registries display the same license shipped in the Skill package.
+
 ## [0.1.1] - 2026-08-08
 
 ### Changed
