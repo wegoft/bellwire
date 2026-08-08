@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 import AuthenticationServices
 import ActivityKit
+import Combine
 import CryptoKit
 import Security
 import SwiftUI
@@ -32,6 +33,15 @@ final class AppModel: ObservableObject {
     @Published private(set) var devices: [DeviceRecord] = []
     @Published private(set) var agentConnections: [AgentConnectionRecord] = []
     @Published private(set) var entitlement: AccountEntitlement?
+
+    var canExportProjects: Bool {
+        entitlement?.canExportProjects ?? !AppConfig.billingEnabled
+    }
+
+    var canUseLiveActivities: Bool {
+        entitlement?.canUseLiveActivities ?? !AppConfig.billingEnabled
+    }
+
     @Published private(set) var pendingModeRequests: [DeliveryModeChangeRequest] = []
     @Published private(set) var resolvingModeRequestID: String?
     @Published private(set) var modeRequestErrors: [String: String] = [:]
@@ -485,7 +495,7 @@ final class AppModel: ObservableObject {
     }
 
     func exportProject(_ project: ProjectOverview) async throws -> URL {
-        guard entitlement?.hasPro == true else {
+        guard canExportProjects else {
             throw ProjectExportError.proRequired
         }
         let data: Data
@@ -997,7 +1007,7 @@ final class AppModel: ObservableObject {
     }
 
     func startLiveActivity(for surface: LiveSurfaceRecord) async throws {
-        guard entitlement?.hasPro == true else {
+        guard canUseLiveActivities else {
             throw ProjectExportError.proRequired
         }
         try await NativeDisplayManager.shared.startLiveActivity(for: surface)
@@ -1021,7 +1031,7 @@ final class AppModel: ObservableObject {
         await NativeDisplayManager.shared.synchronize(
             surfaces: liveSurfaces,
             projects: projects,
-            isPro: entitlement?.hasPro == true
+            isPro: canUseLiveActivities
         )
     }
 
@@ -1495,7 +1505,7 @@ private enum ProjectExportError: LocalizedError {
     case proRequired
 
     var errorDescription: String? {
-        String(localized: "Project export is included with Bellwire Pro.")
+        AppConfig.branded("Project export is included with Bellwire Pro.")
     }
 }
 

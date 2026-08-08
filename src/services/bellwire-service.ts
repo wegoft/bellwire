@@ -516,7 +516,36 @@ export class BellwireService {
 
   async getAccountEntitlement(principal: Principal): Promise<AccountEntitlement> {
     this.requireSignedInUser(principal);
-    return this.repository.getAccountEntitlement(principal.userId, new Date().toISOString());
+    const entitlement = await this.repository.getAccountEntitlement(
+      principal.userId,
+      new Date().toISOString(),
+    );
+    const activePro = entitlement.plan === "pro"
+      && (entitlement.status === "active" || entitlement.status === "grace");
+    if (this.enforcementMode === "disabled") {
+      return {
+        ...entitlement,
+        plan: "pro",
+        status: "active",
+        deployment: "self_hosted",
+        capabilities: {
+          billing: "disabled",
+          commercialLimitsEnforced: false,
+          projectExport: true,
+          liveActivities: true,
+        },
+      };
+    }
+    return {
+      ...entitlement,
+      deployment: "hosted",
+      capabilities: {
+        billing: "app_store",
+        commercialLimitsEnforced: this.enforcementMode === "enforce",
+        projectExport: activePro,
+        liveActivities: activePro,
+      },
+    };
   }
 
   async getProjectOverview(principal: Principal, projectId: string) {
@@ -1681,7 +1710,11 @@ export class BellwireService {
       principal.userId,
       new Date().toISOString(),
     );
-    if (entitlement.plan !== "pro") {
+    if (
+      this.enforcementMode === "enforce"
+      && (entitlement.plan !== "pro"
+        || (entitlement.status !== "active" && entitlement.status !== "grace"))
+    ) {
       throw planLimitReached("project export", entitlement);
     }
 

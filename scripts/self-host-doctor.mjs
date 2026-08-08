@@ -5,6 +5,7 @@ import path from "node:path";
 
 import {
   LOCAL_XCCONFIG_PATH,
+  SELF_HOSTED_APP_ICON_PATH,
   WRANGLER_AUTH_SELF_HOST_PATH,
   WRANGLER_SELF_HOST_PATH,
   containsPlaceholder,
@@ -12,6 +13,7 @@ import {
   parseArguments,
   parseWranglerConfiguration,
   parseXcconfig,
+  readSelfHostedAppIcon,
   readText,
   resolveRoot,
   validateBootstrapOptions,
@@ -51,12 +53,28 @@ try {
   const iosPath = path.join(root, LOCAL_XCCONFIG_PATH);
   const workerPath = path.join(root, WRANGLER_SELF_HOST_PATH);
   const authWorkerPath = path.join(root, WRANGLER_AUTH_SELF_HOST_PATH);
+  const appIconPath = path.join(root, SELF_HOSTED_APP_ICON_PATH, "AppIcon.png");
+  const appIconContentsPath = path.join(root, SELF_HOSTED_APP_ICON_PATH, "Contents.json");
   const iosSource = await requiredFile(iosPath, LOCAL_XCCONFIG_PATH);
   const workerSource = await requiredFile(workerPath, WRANGLER_SELF_HOST_PATH);
   const authWorkerSource = await requiredFile(authWorkerPath, WRANGLER_AUTH_SELF_HOST_PATH);
+  const appIconContents = await requiredFile(
+    appIconContentsPath,
+    `${SELF_HOSTED_APP_ICON_PATH}/Contents.json`,
+  );
+  try {
+    await readSelfHostedAppIcon(appIconPath);
+    checks.push("custom app icon is a regular 1024x1024 PNG");
+  } catch (error) {
+    errors.push(
+      `${SELF_HOSTED_APP_ICON_PATH}/AppIcon.png is invalid: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`,
+    );
+  }
   const gitignore = await optionalFile(path.join(root, ".gitignore"));
 
-  if (iosSource && workerSource && authWorkerSource) {
+  if (iosSource && workerSource && authWorkerSource && appIconContents) {
     rejectSecrets(LOCAL_XCCONFIG_PATH, iosSource);
     rejectSecrets(WRANGLER_SELF_HOST_PATH, workerSource);
     rejectSecrets(WRANGLER_AUTH_SELF_HOST_PATH, authWorkerSource);
@@ -129,6 +147,15 @@ function validateRequiredValues(ios, worker, authWorker) {
     "BELLWIRE_URL_SCHEME",
     "BELLWIRE_API_BASE_URL",
     "BELLWIRE_AUTH_BASE_URL",
+    "BELLWIRE_APP_DISPLAY_NAME",
+    "BELLWIRE_APP_ICON_NAME",
+    "BELLWIRE_BILLING_MODE",
+    "BELLWIRE_PRO_MONTHLY_PRODUCT_ID",
+    "BELLWIRE_PRO_YEARLY_PRODUCT_ID",
+    "BELLWIRE_SUPPORT_EMAIL",
+    "BELLWIRE_PRIVACY_URL",
+    "BELLWIRE_TERMS_URL",
+    "BELLWIRE_SUPPORT_URL",
   ];
   const workerKeys = [
     "APP_ENV",
@@ -136,6 +163,7 @@ function validateRequiredValues(ios, worker, authWorker) {
     "AUTH_AUDIENCE",
     "APNS_BUNDLE_ID",
     "APP_URL_SCHEME",
+    "APP_DISPLAY_NAME",
     "APNS_ENVIRONMENT",
     "ENTITLEMENT_ENFORCEMENT_MODE",
   ];
@@ -195,6 +223,12 @@ function validateFormats(ios, worker, authWorker) {
       "auth-d1-name": authWorker.d1.database_name,
       "auth-d1-id": authWorker.d1.database_id,
       "apns-environment": worker.vars.APNS_ENVIRONMENT,
+      "app-name": ios.BELLWIRE_APP_DISPLAY_NAME,
+      "app-icon": path.join(SELF_HOSTED_APP_ICON_PATH, "AppIcon.png"),
+      "support-email": ios.BELLWIRE_SUPPORT_EMAIL,
+      "privacy-url": ios.BELLWIRE_PRIVACY_URL,
+      "terms-url": ios.BELLWIRE_TERMS_URL,
+      "support-url": ios.BELLWIRE_SUPPORT_URL,
     });
     checks.push("configuration values use valid formats");
   } catch (error) {
@@ -203,8 +237,18 @@ function validateFormats(ios, worker, authWorker) {
 }
 
 function validateConsistency(ios, worker, authWorker) {
+  if (ios.BELLWIRE_APP_DISPLAY_NAME.toLowerCase() === "bellwire") {
+    errors.push("self-hosted app name must not use the Bellwire trademark");
+  } else checks.push("self-hosted app uses a custom display name");
+  if (ios.BELLWIRE_APP_ICON_NAME !== "SelfHostedAppIcon") {
+    errors.push("self-hosted app must use the generated SelfHostedAppIcon asset");
+  } else checks.push("self-hosted app uses a custom icon asset");
+  if (ios.BELLWIRE_BILLING_MODE !== "disabled") {
+    errors.push("self-hosted App Store billing must be disabled");
+  } else checks.push("self-hosted App Store billing is disabled");
   compare("Bundle ID", ios.BELLWIRE_APP_BUNDLE_ID, worker.vars.APNS_BUNDLE_ID);
   compare("URL scheme", ios.BELLWIRE_URL_SCHEME, worker.vars.APP_URL_SCHEME);
+  compare("App display name", ios.BELLWIRE_APP_DISPLAY_NAME, worker.vars.APP_DISPLAY_NAME);
   compare("Auth URL", normalizeURL(ios.BELLWIRE_AUTH_BASE_URL), normalizeURL(worker.vars.AUTH_ISSUER));
   compare("Auth Worker issuer", normalizeURL(ios.BELLWIRE_AUTH_BASE_URL), normalizeURL(authWorker.vars.AUTH_ISSUER));
   compare("Auth audience", worker.vars.AUTH_AUDIENCE, authWorker.vars.AUTH_AUDIENCE);
@@ -276,6 +320,7 @@ function validateGitignore(source) {
     LOCAL_XCCONFIG_PATH,
     WRANGLER_SELF_HOST_PATH,
     WRANGLER_AUTH_SELF_HOST_PATH,
+    `${SELF_HOSTED_APP_ICON_PATH}/`,
     ".dev.vars",
   ]) {
     if (ignored.has(expected)) checks.push(`${expected} is ignored by Git`);

@@ -16,10 +16,14 @@ Copyright © 2026 Bellwire contributors.
 | Native iOS app | `ios/**` and `test/*.swift` | `MPL-2.0` |
 | Agent Skill, its CLI, and bundled protocol references/examples | `skills/**` | `MIT-0` |
 | Standalone integration examples and public documentation | `examples/**`, public `docs/**`, `.github/**`, and the root community/documentation files listed below | `Apache-2.0` |
-| Bellwire app icon artwork and other Bellwire brand assets | `ios/Bellwire/Bellwire/Assets.xcassets/AppIcon.appiconset/BellwireIcon.png`, `ios/Bellwire/Design/AppIcon.svg`, and assets identified in `TRADEMARK.md` | No open-source trademark or artwork license |
+| Bundled SwiftUI review skill | `.agents/skills/swiftui-pro/**` | `MIT` |
+| Bellwire app icon artwork and other Bellwire brand assets | `ios/Bellwire/Bellwire/Assets.xcassets/AppIcon.appiconset/**`, `ios/Bellwire/Bellwire/Assets.xcassets/BellwireLogo.imageset/**`, `ios/Bellwire/Bellwire/Assets.xcassets/Mascot*.imageset/**`, `ios/Bellwire/Design/AppIcon.svg`, and `docs/brand/assets/**` | No open-source trademark or artwork license |
 
 The Apache-2.0 root files are `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`,
 `SECURITY.md`, `CODE_OF_CONDUCT.md`, `TRADEMARK.md`, and this license map.
+`GOVERNANCE.md`, `MAINTAINERS.md`, and `THIRD_PARTY_NOTICES.md` are also
+licensed under Apache-2.0.
+
 Files inside the ignored `docs/private/**` directory are not part of the public
 distribution and are not licensed by this repository.
 
@@ -35,6 +39,7 @@ not covered by an explicit exception, the repository default is
 - [Mozilla Public License 2.0](LICENSES/MPL-2.0.txt)
 - [MIT No Attribution](LICENSES/MIT-0.txt)
 - [Apache License 2.0](LICENSES/Apache-2.0.txt)
+- [MIT license for the bundled SwiftUI review skill](.agents/skills/swiftui-pro/LICENSE)
 
 ## Contributions
 
@@ -51,4 +56,4 @@ files remain brand assets and are excluded from the open-source license grants.
 
 Third-party dependencies and bundled third-party material remain subject to
 their own license terms. No license in this repository grants rights that the
-copyright holders do not have.
+copyright holders do not have. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

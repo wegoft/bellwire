@@ -16,9 +16,13 @@ disclosure after a fix is available. This is a target, not an SLA.
 ## Supported versions
 
 Until the first tagged stable release, security fixes are applied only to the
-latest commit on the default branch and the current Bellwire Cloud deployment.
+latest `0.x` release, the default branch, and the current Bellwire Cloud deployment.
 Forks and self-hosted deployments are responsible for applying updates and
 rotating their own Apple, Cloudflare, Better Auth, Agent, and Ingest credentials.
+
+The [security model and operations guide](docs/security-model.md) documents
+trust boundaries, backup/restore expectations, incident response, and the
+forward-only D1 migration policy.
 
 ## Secret handling
 

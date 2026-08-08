@@ -38,7 +38,9 @@ out of this public repository.
 
 Start with the [Private-first quick start](docs/quickstart.md), browse the
 [integration examples](examples/README.md), or deploy the full stack with the
-[self-hosting guide](docs/self-hosting.md).
+[self-hosting guide](docs/self-hosting.md). The repository also publishes an
+[OpenAPI 3.1 description](docs/openapi.yaml), [upgrade guide](docs/upgrading.md),
+[telemetry contract](docs/telemetry.md), and [security model](docs/security-model.md).
 
 ## See Bellwire in action
 
@@ -56,7 +58,7 @@ Start with the [Private-first quick start](docs/quickstart.md), browse the
 | API and Queue | Operated by Bellwire | Your Cloudflare account |
 | Auth and database | Better Auth + Cloudflare D1 | Your two Cloudflare D1 databases |
 | Push credentials | Bellwire App ID and APNs key | Your App ID and APNs key |
-| Source code edits | None | None; use ignored local configuration |
+| Source code edits | None | None for a private deployment; redistributed visual forks must replace reserved Bellwire artwork |
 | Private data path | Content-free wake; phone reads your service directly | Same protocol on your infrastructure |
 | Commercial limits | Free or Pro plan | None |
 | Operations | Managed service | You own upgrades, cost, security, and uptime |
@@ -102,9 +104,9 @@ and [Private-first quick start](docs/quickstart.md) for the complete flow.
   project pause controls, and retry-aware delivery health.
 - Project-level Private/Hosted isolation, signed Direct v2 endpoints, encrypted
   one-time manifests, opaque wake references, and device readiness.
-- Server-authoritative Free/Pro entitlements, atomic monthly Signal metering,
-  StoreKit 2 transaction verification, App Store Server Notifications V2, and
-  entitlement-based retention.
+- Explicit deployment capabilities: hosted Free/Pro entitlements with atomic
+  monthly Signal metering and StoreKit 2 verification, while self-hosted builds
+  disable billing and commercial limits without losing export or Live Activities.
 - Cloudflare Queue dispatch and APNs HTTP/2 provider-token authentication.
 - Optional public HTTPS project logos in native project avatars and rich APNs
   notification attachments, with monogram fallback when an image is absent or fails.
@@ -135,7 +137,8 @@ Private references are cleared after delivery settles and expire within 24
 hours; content-free wake metadata expires after seven days.
 
 Architecture decisions are recorded in [`docs/architecture`](docs/architecture).
-Release history is recorded in [`CHANGELOG.md`](CHANGELOG.md).
+Release history is recorded in [`CHANGELOG.md`](CHANGELOG.md); contribution and
+decision authority are documented in [`GOVERNANCE.md`](GOVERNANCE.md).
 
 ## Local development
 
@@ -143,8 +146,7 @@ Requires Node.js 22 or newer.
 
 ```bash
 npm install
-cp .env.example .dev.vars
-npm run dev
+npm run dev:stack
 ```
 
 Run all local checks:
@@ -157,9 +159,11 @@ npm run build
 npm run ios:build
 ```
 
-The API Worker uses in-memory storage only when `APP_ENV=development` and no
-`DB` binding is present. Staging and production fail closed without D1. Run the
-Auth Worker separately with `npm run dev:auth`.
+The command applies both local D1 schemas, starts the API on port 8787 and Auth
+on port 8788, then waits for both health checks. It uses dedicated development
+configuration and never loads production routes or credentials. Use
+`npm run dev` or `npm run dev:auth` when only one Worker is needed, and
+`npm run dev:smoke` for a start-migrate-health-stop verification.
 
 ## Cloud configuration
 
@@ -248,7 +252,7 @@ project-scoped Ingest token.
 | `POST` | `/v1/projects/:projectId/notification-surfaces` | Create a notification Surface |
 | `GET` | `/v1/surfaces` | List current live Surfaces across projects |
 | `GET` | `/v1/projects/:projectId/surfaces` | List current project Surfaces |
-| `GET` | `/v1/projects/:projectId/export` | Export Hosted Event and delivery history (Pro) |
+| `GET` | `/v1/projects/:projectId/export` | Export Hosted Event and delivery history (hosted Pro; enabled for self-hosted deployments) |
 | `PUT, DELETE` | `/v1/projects/:projectId/surfaces/:surfaceKey` | Update or end a stable live Surface |
 | `POST` | `/v1/projects/:projectId/ingest-tokens` | Issue an Ingest token |
 | `DELETE` | `/v1/projects/:projectId/ingest-tokens/:tokenId` | Revoke an Ingest token |
@@ -291,7 +295,8 @@ with the original Event ID and `"deduplicated": true`.
 Private wake ingestion accepts only a 22–200 character random URL-safe
 `reference` and optional `priority`. It rejects unknown fields and never accepts
 title, body, Event data, project name, Logo URL, or service hostname. See the
-[Direct v2 protocol](skills/bellwire/references/direct-connections.md).
+[Direct v2 protocol](skills/bellwire/references/direct-connections.md). The full
+machine-readable route inventory is in [`docs/openapi.yaml`](docs/openapi.yaml).
 
 ## Live smoke test
 

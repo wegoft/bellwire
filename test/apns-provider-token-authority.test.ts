@@ -331,6 +331,7 @@ function apnsConfig(environment: "sandbox" | "production") {
   return {
     bundleId: "app.bellwire",
     urlScheme: "bellwire",
+    appName: "Bellwire",
     environment,
   };
 }

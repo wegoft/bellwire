@@ -7,6 +7,31 @@ All notable changes to Bellwire are documented here. The project follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-08
+
+### Added
+
+- Add an explicit hosted/self-hosted entitlement contract so self-hosted
+  deployments keep export and Live Activity features without App Store billing.
+- Add required self-hosted app-name, app-icon, support, and legal configuration,
+  with bootstrap and doctor validation that keeps Bellwire brand assets out of
+  redistributed forks.
+- Add a one-command local API/Auth development stack, real iOS entitlement unit
+  tests, machine-readable OpenAPI, telemetry, upgrade, and security operations
+  documentation.
+- Add DCO enforcement, migration safety checks, release metadata validation,
+  third-party notices, and a CycloneDX npm SBOM release artifact.
+
+### Changed
+
+- Pin GitHub Actions to full commit SHAs and scope Cloudflare deployment
+  credentials to only the steps that require them.
+- Make D1 rollback policy explicitly forward-only and keep Worker code rollback
+  separate from schema migration recovery.
+- Move compact iOS text tokens to semantic Dynamic Type styles and make support,
+  legal, product, display-name, and keychain identifiers deployment-aware.
+- Generate six-digit pairing codes with rejection sampling to avoid modulo bias.
+
 ## [0.1.3] - 2026-08-08
 
 ### Fixed
@@ -85,7 +110,8 @@ All notable changes to Bellwire are documented here. The project follows
 - Bellwire name, app icon, and official service identifiers reserved under the
   trademark policy.
 
-[Unreleased]: https://github.com/wegoft/bellwire/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/wegoft/bellwire/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/wegoft/bellwire/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/wegoft/bellwire/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/wegoft/bellwire/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/wegoft/bellwire/compare/v0.1.0...v0.1.1

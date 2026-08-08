@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>Bellwire</string>
+    <string>$(BELLWIRE_APP_DISPLAY_NAME)</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -22,6 +22,20 @@
     <string>$(BELLWIRE_API_BASE_URL)</string>
     <key>BellwireAuthBaseURL</key>
     <string>$(BELLWIRE_AUTH_BASE_URL)</string>
+    <key>BellwireBillingMode</key>
+    <string>$(BELLWIRE_BILLING_MODE)</string>
+    <key>BellwireProMonthlyProductID</key>
+    <string>$(BELLWIRE_PRO_MONTHLY_PRODUCT_ID)</string>
+    <key>BellwireProYearlyProductID</key>
+    <string>$(BELLWIRE_PRO_YEARLY_PRODUCT_ID)</string>
+    <key>BellwireSupportEmail</key>
+    <string>$(BELLWIRE_SUPPORT_EMAIL)</string>
+    <key>BellwirePrivacyURL</key>
+    <string>$(BELLWIRE_PRIVACY_URL)</string>
+    <key>BellwireTermsURL</key>
+    <string>$(BELLWIRE_TERMS_URL)</string>
+    <key>BellwireSupportURL</key>
+    <string>$(BELLWIRE_SUPPORT_URL)</string>
     <key>BellwireKeychainAccessGroup</key>
     <string>$(AppIdentifierPrefix)$(BELLWIRE_APP_BUNDLE_ID).shared</string>
     <key>BellwireAppGroup</key>

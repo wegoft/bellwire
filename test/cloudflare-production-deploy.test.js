@@ -92,7 +92,10 @@ describe("Cloudflare production verification", () => {
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
     expect(workflow).toContain("environment: production");
-    expect(workflow).toContain("Roll back deployed Worker versions after failure");
+    expect(workflow).toContain("Roll back Worker code after failure; D1 migrations stay forward-only");
+    expect(workflow.indexOf("CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"))
+      .toBeGreaterThan(workflow.indexOf("Install dependencies"));
+    expect(workflow.match(/^\s+CLOUDFLARE_ACCOUNT_ID:/gmu)).toHaveLength(7);
     expect(`${authConfig}\n${apiConfig}`).not.toMatch(/SUPABASE|LEGACY_SUPABASE|REWRAP|CUTOVER/u);
   });
 });

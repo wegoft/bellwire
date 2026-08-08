@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+name: DCO
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  signoff:
+    name: Developer Certificate of Origin
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pull request history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - name: Check commit sign-offs
+        env:
+          DCO_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DCO_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/check-dco.mjs

@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export const LOCAL_XCCONFIG_PATH = "ios/Bellwire/Configuration/Local.xcconfig";
 export const WRANGLER_SELF_HOST_PATH = "wrangler.self-host.toml";
 export const WRANGLER_AUTH_SELF_HOST_PATH = "wrangler.auth.self-host.toml";
+export const SELF_HOSTED_APP_ICON_PATH =
+  "ios/Bellwire/Bellwire/Assets.xcassets/SelfHostedAppIcon.appiconset";
 
 export function parseArguments(argv, booleanOptions = new Set(), allowedOptions) {
   const options = {};
@@ -38,6 +40,18 @@ export function validateBootstrapOptions(options) {
 
   const apiURL = httpsOrigin(required(options, "api-url"), "--api-url");
   const authURL = httpsOrigin(required(options, "auth-url"), "--auth-url");
+  const appName = required(options, "app-name");
+  if (appName.toLowerCase() === "bellwire" || !validXcconfigText(appName)) {
+    throw new Error("--app-name must be a safe custom name other than Bellwire");
+  }
+  const appIcon = required(options, "app-icon");
+  const supportEmail = required(options, "support-email").toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(supportEmail)) {
+    throw new Error("--support-email must be a valid email address");
+  }
+  const privacyURL = httpsURL(required(options, "privacy-url"), "--privacy-url");
+  const termsURL = httpsURL(required(options, "terms-url"), "--terms-url");
+  const supportURL = httpsURL(required(options, "support-url"), "--support-url");
 
   const workerName = options["worker-name"] ?? "bellwire-self-host";
   const authWorkerName = options["auth-worker-name"] ?? `${workerName}-auth`;
@@ -92,6 +106,12 @@ export function validateBootstrapOptions(options) {
     queuePrefix,
     urlScheme,
     apnsEnvironment,
+    appName,
+    appIcon,
+    supportEmail,
+    privacyURL,
+    termsURL,
+    supportURL,
   };
 }
 
@@ -104,11 +124,54 @@ BELLWIRE_EXTENSION_BUNDLE_ID = ${configuration.extensionBundleId}
 BELLWIRE_WIDGET_BUNDLE_ID = ${configuration.widgetBundleId}
 BELLWIRE_APP_GROUP = ${configuration.appGroup}
 BELLWIRE_URL_SCHEME = ${configuration.urlScheme}
+BELLWIRE_APP_DISPLAY_NAME = ${configuration.appName}
+BELLWIRE_APP_ICON_NAME = SelfHostedAppIcon
+BELLWIRE_BILLING_MODE = disabled
+BELLWIRE_PRO_MONTHLY_PRODUCT_ID = self-hosted.disabled.monthly
+BELLWIRE_PRO_YEARLY_PRODUCT_ID = self-hosted.disabled.yearly
+BELLWIRE_SUPPORT_EMAIL = ${configuration.supportEmail}
 
 // The empty $() keeps // from being parsed as an xcconfig comment.
 BELLWIRE_API_BASE_URL = ${urlForXcconfig(configuration.apiURL)}
 BELLWIRE_AUTH_BASE_URL = ${urlForXcconfig(configuration.authURL)}
+BELLWIRE_PRIVACY_URL = ${urlForXcconfig(configuration.privacyURL)}
+BELLWIRE_TERMS_URL = ${urlForXcconfig(configuration.termsURL)}
+BELLWIRE_SUPPORT_URL = ${urlForXcconfig(configuration.supportURL)}
 `;
+}
+
+export async function readSelfHostedAppIcon(sourcePath) {
+  const source = path.resolve(sourcePath);
+  const details = await lstat(source).catch(() => undefined);
+  if (!details?.isFile() || details.isSymbolicLink()) {
+    throw new Error("--app-icon must be a regular PNG file, not a symlink");
+  }
+  const image = await readFile(source);
+  if (
+    image.length < 24
+    || image.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a"
+  ) {
+    throw new Error("--app-icon must be a valid PNG file");
+  }
+  if (image.readUInt32BE(16) !== 1024 || image.readUInt32BE(20) !== 1024) {
+    throw new Error("--app-icon must be exactly 1024x1024 pixels");
+  }
+  return image;
+}
+
+export async function writeSelfHostedAppIcon(root, image) {
+  const directory = path.join(root, SELF_HOSTED_APP_ICON_PATH);
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, "AppIcon.png"), image, { flag: "wx", mode: 0o600 });
+  await writeFile(path.join(directory, "Contents.json"), `${JSON.stringify({
+    images: [{
+      filename: "AppIcon.png",
+      idiom: "universal",
+      platform: "ios",
+      size: "1024x1024",
+    }],
+    info: { author: "xcode", version: 1 },
+  }, null, 2)}\n`, { flag: "wx", mode: 0o600 });
 }
 
 export function renderWranglerConfiguration(configuration) {
@@ -126,6 +189,7 @@ AUTH_ISSUER = ${JSON.stringify(configuration.authURL)}
 AUTH_AUDIENCE = "bellwire-api"
 APNS_BUNDLE_ID = ${JSON.stringify(configuration.bundleId)}
 APP_URL_SCHEME = ${JSON.stringify(configuration.urlScheme)}
+APP_DISPLAY_NAME = ${JSON.stringify(configuration.appName)}
 APNS_ENVIRONMENT = ${JSON.stringify(configuration.apnsEnvironment)}
 ENTITLEMENT_ENFORCEMENT_MODE = "disabled"
 
@@ -296,6 +360,23 @@ function httpsOrigin(value, label) {
   }
   if (url.pathname !== "/") throw new Error(`${label} must not include a path`);
   return url.origin;
+}
+
+function httpsURL(value, label) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${label} must be a valid HTTPS URL`);
+  }
+  if (url.protocol !== "https:" || url.username || url.password) {
+    throw new Error(`${label} must be an HTTPS URL without credentials`);
+  }
+  return url.href;
+}
+
+function validXcconfigText(value) {
+  return value.length <= 40 && !/[\r\n=#$\\/]/u.test(value);
 }
 
 function validBundleId(value) {

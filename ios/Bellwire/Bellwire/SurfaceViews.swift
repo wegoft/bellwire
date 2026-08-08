@@ -299,7 +299,7 @@ struct SurfaceFooter: View {
                     HStack(spacing: 4) {
                         Text(action.title)
                         Image(systemName: "arrow.up.right")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.caption.bold())
                     }
                     .font(BellwireTypography.metadata.weight(.semibold))
                     .foregroundStyle(BellwireTheme.accent)

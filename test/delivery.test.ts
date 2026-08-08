@@ -560,6 +560,7 @@ describe("APNs client", () => {
     const baseConfig = {
       bundleId: "app.bellwire",
       urlScheme: "bellwire",
+      appName: "Bellwire",
     };
     const clients = ["sandbox", "production"].flatMap((environment) =>
       Array.from({ length: 8 }, () => pool.get({
@@ -602,6 +603,7 @@ describe("APNs client", () => {
       const client = new ApnsClient({
         bundleId: "app.bellwire",
         urlScheme: "bellwire",
+        appName: "Bellwire",
         environment: "production",
       }, providerTokens, async () => new Response(JSON.stringify({ reason }), {
         status: 403,
@@ -630,6 +632,7 @@ describe("APNs client", () => {
     const client = new ApnsClient({
       bundleId: "app.bellwire",
       urlScheme: "bellwire-self-host",
+      appName: "Example Signals",
       environment: "sandbox",
     }, staticProviderTokenSource(), fetchImpl);
 
@@ -669,6 +672,7 @@ describe("APNs client", () => {
     const client = new ApnsClient({
       bundleId: "app.bellwire",
       urlScheme: "bellwire",
+      appName: "Bellwire",
       environment: "sandbox",
     }, staticProviderTokenSource(), async (input, init) => {
       captured = new Request(input, init);
@@ -715,6 +719,7 @@ describe("APNs client", () => {
     const client = new ApnsClient({
       bundleId: "app.bellwire",
       urlScheme: "bellwire",
+      appName: "Example Signals",
       environment: "production",
     }, staticProviderTokenSource(), fetchImpl);
 
@@ -732,8 +737,9 @@ describe("APNs client", () => {
     expect(payload).toMatchObject({
       aps: {
         alert: {
-          title: "Bellwire",
+          title: "Example Signals",
           "loc-key": "BELLWIRE_PRIVATE_NOTIFICATION_BODY",
+          "loc-args": ["Example Signals"],
         },
         "mutable-content": 1,
       },
@@ -756,6 +762,7 @@ describe("APNs client", () => {
     const client = new ApnsClient({
       bundleId: "app.bellwire",
       urlScheme: "bellwire",
+      appName: "Bellwire",
       environment: "sandbox",
     }, staticProviderTokenSource(), fetchImpl);
 

@@ -579,6 +579,8 @@ struct PrivateEventPayload: Codable {
 struct AccountEntitlement: Codable {
     let plan: String
     let status: String
+    let deployment: String?
+    let capabilities: EntitlementCapabilities?
     let productId: String?
     let expiresAt: String?
     let downgradeDeadline: String?
@@ -587,7 +589,23 @@ struct AccountEntitlement: Codable {
     let activeProjects: Int
     let activeDevices: Int
 
-    var hasPro: Bool { plan == "pro" && (status == "active" || status == "grace") }
+    var isSelfHosted: Bool { deployment == "self_hosted" }
+
+    var hasPro: Bool {
+        isSelfHosted || (plan == "pro" && (status == "active" || status == "grace"))
+    }
+
+    var canExportProjects: Bool { capabilities?.projectExport ?? hasPro }
+    var canUseLiveActivities: Bool { capabilities?.liveActivities ?? hasPro }
+    var billingEnabled: Bool { capabilities?.billing != "disabled" && !isSelfHosted }
+    var planDisplayName: String { isSelfHosted ? "Self-hosted" : (hasPro ? "Pro" : "Free") }
+}
+
+struct EntitlementCapabilities: Codable {
+    let billing: String
+    let commercialLimitsEnforced: Bool
+    let projectExport: Bool
+    let liveActivities: Bool
 }
 
 struct PlanLimits: Codable {

@@ -47,6 +47,12 @@ Use the D1 UUIDs printed by Wrangler:
 
 ```bash
 npm run self-host:bootstrap -- \
+  --app-name SignalNest \
+  --app-icon /secure/signalnest-app-icon-1024.png \
+  --support-email support@example.com \
+  --privacy-url https://example.com/privacy \
+  --terms-url https://example.com/terms \
+  --support-url https://example.com/support \
   --team-id ABC123DEFG \
   --bundle-id com.example.bellwire \
   --url-scheme bellwire-self-host \
@@ -57,14 +63,25 @@ npm run self-host:bootstrap -- \
   --auth-d1-id 22222222-2222-4222-8222-222222222222
 ```
 
-The command creates three ignored files and refuses to overwrite any of them:
+The command creates three ignored configuration files and one ignored app-icon
+asset set, and refuses to overwrite any of them:
 
 - `ios/Bellwire/Configuration/Local.xcconfig`
 - `wrangler.self-host.toml`
 - `wrangler.auth.self-host.toml`
+- `ios/Bellwire/Bellwire/Assets.xcassets/SelfHostedAppIcon.appiconset`
 
-The iOS file contains only public Worker origins and Apple identifiers. The two
-Wrangler files contain resource bindings but no secrets.
+The icon must be a regular 1024×1024 PNG. The iOS file contains only public
+Worker origins, Apple identifiers, custom support/legal endpoints, and disables
+App Store billing. The two Wrangler files contain resource bindings but no
+secrets. Self-hosted entitlement responses explicitly expose the deployment
+mode and capabilities and do not enforce Bellwire Cloud commercial limits.
+
+The bootstrap replaces the app name and icon, but it does not generate new
+mascot or logo illustrations. The official Bellwire mascot, logo, app icon, and
+other brand artwork listed in `LICENSE.md` remain reserved. A redistributed
+visual fork must replace or remove those assets as required by `TRADEMARK.md`;
+private deployments may keep them only to the extent permitted by those terms.
 
 ## 4. Apply both D1 schemas
 

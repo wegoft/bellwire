@@ -161,6 +161,49 @@ describe("Bellwire MVP API", () => {
     });
   });
 
+  it("publishes explicit hosted and self-hosted feature capabilities", async () => {
+    const selfHosted = new BellwireService(repository, dispatcher, undefined, "disabled");
+    await expect(selfHosted.getAccountEntitlement(userPrincipal)).resolves.toMatchObject({
+      deployment: "self_hosted",
+      plan: "pro",
+      status: "active",
+      capabilities: {
+        billing: "disabled",
+        commercialLimitsEnforced: false,
+        projectExport: true,
+        liveActivities: true,
+      },
+    });
+
+    const hosted = new BellwireService(repository, dispatcher, undefined, "enforce");
+    await expect(hosted.getAccountEntitlement(userPrincipal)).resolves.toMatchObject({
+      deployment: "hosted",
+      plan: "free",
+      capabilities: {
+        billing: "app_store",
+        commercialLimitsEnforced: true,
+        projectExport: false,
+        liveActivities: false,
+      },
+    });
+  });
+
+  it("allows self-hosted export without an App Store transaction", async () => {
+    const selfHosted = new BellwireService(repository, dispatcher, undefined, "disabled");
+    const project = await selfHosted.createProject(userPrincipal, { name: "Self-hosted" });
+    await repository.updateProject({ ...project, deliveryMode: "hosted" });
+    await expect(selfHosted.exportHostedProject(userPrincipal, project.id)).resolves.toMatchObject({
+      version: 1,
+      project: { id: project.id, deliveryMode: "hosted" },
+      events: [],
+    });
+
+    const hosted = new BellwireService(repository, dispatcher, undefined, "enforce");
+    await expect(hosted.exportHostedProject(userPrincipal, project.id)).rejects.toMatchObject({
+      code: "PLAN_LIMIT_REACHED",
+    });
+  });
+
   it("creates a project, schema, surface, and one-time ingest token while storing only its hash", async () => {
     const projectId = await createProject();
     const token = await configureProject(projectId);
@@ -2361,6 +2404,10 @@ describe("Bellwire MVP API", () => {
   });
 
   it("exports Hosted Event and delivery records only for a server-authoritative Pro account", async () => {
+    const hostedApp = createApp({
+      service: new BellwireService(repository, dispatcher, undefined, "enforce"),
+      authenticator: new StaticAuthenticator(userPrincipal),
+    });
     const projectId = await createProject();
     await makeHosted(projectId);
     const eventId = "55555555-5555-4555-8555-555555555555";
@@ -2388,7 +2435,7 @@ describe("Bellwire MVP API", () => {
       updatedAt: occurredAt,
     });
 
-    expect((await app.request(`/v1/projects/${projectId}/export`, {
+    expect((await hostedApp.request(`/v1/projects/${projectId}/export`, {
       headers: { authorization: "Bearer test" },
     })).status).toBe(409);
 
@@ -2404,7 +2451,7 @@ describe("Bellwire MVP API", () => {
       signedDate: occurredAt,
       updatedAt: occurredAt,
     });
-    const response = await app.request(`/v1/projects/${projectId}/export`, {
+    const response = await hostedApp.request(`/v1/projects/${projectId}/export`, {
       headers: { authorization: "Bearer test" },
     });
     expect(response.status).toBe(200);

@@ -40,7 +40,20 @@ describe("self-host bootstrap and doctor", () => {
     expect(ios).toContain("BELLWIRE_EXTENSION_BUNDLE_ID = com.example.bellwire.NotificationService");
     expect(ios).toContain("BELLWIRE_WIDGET_BUNDLE_ID = com.example.bellwire.Widgets");
     expect(ios).toContain("BELLWIRE_APP_GROUP = group.com.example.bellwire.shared");
+    expect(ios).toContain("BELLWIRE_APP_DISPLAY_NAME = Example Signals");
+    expect(ios).toContain("BELLWIRE_APP_ICON_NAME = SelfHostedAppIcon");
+    expect(ios).toContain("BELLWIRE_BILLING_MODE = disabled");
+    expect(ios).toContain("BELLWIRE_SUPPORT_EMAIL = support@example.com");
+    expect(ios).toContain("BELLWIRE_PRIVACY_URL = https:/$()/example.com/privacy");
+    expect(readFileSync(
+      join(
+        root,
+        "ios/Bellwire/Bellwire/Assets.xcassets/SelfHostedAppIcon.appiconset/Contents.json",
+      ),
+      "utf8",
+    )).toContain('"filename": "AppIcon.png"');
     expect(worker).toContain('APP_URL_SCHEME = "bellwire-self-host"');
+    expect(worker).toContain('APP_DISPLAY_NAME = "Example Signals"');
     expect(worker).toContain('compatibility_flags = ["nodejs_compat"]');
     expect(worker).toContain('ENTITLEMENT_ENFORCEMENT_MODE = "disabled"');
     expect(worker).toContain('crons = ["17 * * * *"]');
@@ -97,6 +110,20 @@ describe("self-host bootstrap and doctor", () => {
     expect(result.stderr).toContain("must be a Cloudflare D1 database UUID");
   });
 
+  it("validates the custom app icon before writing any configuration", () => {
+    const root = temporaryRoot();
+    const invalidIcon = join(root, "invalid.png");
+    writeFileSync(invalidIcon, "not a png");
+    const args = bootstrapArguments(root);
+    args[args.indexOf("--app-icon") + 1] = invalidIcon;
+
+    const result = run(bootstrapScript, args);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("--app-icon must be a valid PNG file");
+    expect(() => readFileSync(join(root, "wrangler.self-host.toml"))).toThrow();
+    expect(() => readFileSync(join(root, "ios/Bellwire/Configuration/Local.xcconfig"))).toThrow();
+  });
+
   it("rejects unknown options instead of silently ignoring a typo", () => {
     const result = run(bootstrapScript, ["--teamid", "ABC123DEFG"]);
     expect(result.status).toBe(1);
@@ -137,7 +164,7 @@ function temporaryRoot() {
 function writeGitignore(root) {
   writeFileSync(
     join(root, ".gitignore"),
-    ".dev.vars\nwrangler.self-host.toml\nwrangler.auth.self-host.toml\nios/Bellwire/Configuration/Local.xcconfig\n",
+    ".dev.vars\nwrangler.self-host.toml\nwrangler.auth.self-host.toml\nios/Bellwire/Configuration/Local.xcconfig\nios/Bellwire/Bellwire/Assets.xcassets/SelfHostedAppIcon.appiconset/\n",
   );
 }
 
@@ -152,6 +179,15 @@ function bootstrapArguments(root) {
     "--auth-url", "https://bellwire-auth.example.workers.dev",
     "--business-d1-id", "11111111-1111-4111-8111-111111111111",
     "--auth-d1-id", "22222222-2222-4222-8222-222222222222",
+    "--app-name", "Example Signals",
+    "--app-icon", join(
+      repositoryRoot,
+      "ios/Bellwire/Bellwire/Assets.xcassets/AppIcon.appiconset/BellwireIcon.png",
+    ),
+    "--support-email", "support@example.com",
+    "--privacy-url", "https://example.com/privacy",
+    "--terms-url", "https://example.com/terms",
+    "--support-url", "https://example.com/support",
   ];
 }
 

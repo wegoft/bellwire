@@ -433,9 +433,10 @@ describe("iOS Inbox preview", () => {
     );
 
     expect(accountOverview).toContain("if hasPro {");
-    expect(accountOverview).toContain("ProActiveSettingsRow()\n                    } else {");
-    expect(accountOverview).toContain("SettingsRowView(\n                            icon: \"sparkles\"");
-    expect(accountOverview).toContain('title: "Upgrade to Bellwire Pro"');
+    expect(accountOverview).toContain("ProActiveSettingsRow()");
+    expect(accountOverview).toContain("if model.entitlement?.isSelfHosted == true {");
+    expect(accountOverview).toContain('icon: "sparkles"');
+    expect(accountOverview).toContain('title: "Upgrade to \\(AppConfig.displayName) Pro"');
     expect(accountOverview).not.toContain('icon: hasPro ? "checkmark.seal.fill" : "sparkles"');
 
     expect(theme).not.toContain("static let proActiveSurface = adaptiveColor(");
@@ -454,13 +455,15 @@ describe("iOS Inbox preview", () => {
     expect(proActiveRow).not.toContain(".overlay");
     expect(proActiveRow).not.toContain(".stroke(");
     expect(proActiveRow).not.toContain(".frame(width: 40, height: 40)");
-    expect(proActiveRow).toContain('Text("Manage Bellwire Pro")');
+    expect(proActiveRow).toContain('Text("Manage \\(AppConfig.displayName) Pro")');
     expect(proActiveRow).toContain('Text("Your Pro access is active")');
     expect(proActiveRow).toContain('Image(systemName: "chevron.right")');
     expect(proActiveRow).toContain(".foregroundStyle(BellwireTheme.mutedInk)");
     expect(proActiveRow).toContain(".padding(.vertical, 13)");
     expect(proActiveRow).toContain(".frame(maxWidth: .infinity, minHeight: 44");
-    expect(proActiveRow).toContain('.accessibilityLabel(Text("Manage Bellwire Pro"))');
+    expect(proActiveRow).toContain(
+      '.accessibilityLabel(Text("Manage \\(AppConfig.displayName) Pro"))',
+    );
     expect(proActiveRow).toContain('.accessibilityValue(Text("Your Pro access is active"))');
     expect(zhHans).not.toContain('"PRO ACTIVE" = "PRO 已生效";');
   });
@@ -594,7 +597,7 @@ describe("iOS Inbox preview", () => {
     );
   });
 
-  it("localizes the Welcome hero and linked legal footer as complete phrases", () => {
+  it("localizes the Welcome hero while keeping deployment legal links configurable", () => {
     const onboarding = readFileSync("ios/Bellwire/Bellwire/OnboardingViews.swift", "utf8");
     const english = readFileSync(
       "ios/Bellwire/Bellwire/en.lproj/Localizable.strings",
@@ -608,11 +611,10 @@ describe("iOS Inbox preview", () => {
       onboarding.indexOf("struct WelcomeView"),
       onboarding.indexOf("private struct WelcomePreviewRow"),
     );
-    const legal =
-      "By continuing, you agree to Bellwire’s [Terms of Service](https://bellwire.app/terms) and [Privacy Policy](https://bellwire.app/privacy). Sensitive fields stay redacted until you reveal them.";
-
     expect(welcome).toContain('Text("Signals from every project,\\non your iPhone.")');
-    expect(welcome).toContain(`Text("${legal}")`);
+    expect(welcome).toContain('"By continuing, you agree to Bellwire’s policies."');
+    expect(welcome).toContain('Link("Terms of Service", destination: AppConfig.termsURL)');
+    expect(welcome).toContain('Link("Privacy Policy", destination: AppConfig.privacyURL)');
     expect(welcome).not.toContain('+ Text("every project,")');
     expect(welcome).not.toContain(".foregroundColor(");
     expect(english).toContain(
@@ -621,9 +623,12 @@ describe("iOS Inbox preview", () => {
     expect(chinese).toContain(
       '"Signals from every project,\\non your iPhone." = "每个项目的 Signal，\\n尽在你的 iPhone。";',
     );
-    expect(english).toContain(`"${legal}" = "${legal}";`);
-    expect(chinese).toContain("[服务条款](https://bellwire.app/terms)");
-    expect(chinese).toContain("[隐私政策](https://bellwire.app/privacy)");
+    expect(english).toContain(
+      '"By continuing, you agree to Bellwire’s policies." = "By continuing, you agree to Bellwire’s policies.";',
+    );
+    expect(chinese).toContain(
+      '"By continuing, you agree to Bellwire’s policies." = "继续即表示你同意 Bellwire 的相关政策。";',
+    );
   });
 
   it("makes Notification permission state-aware in Settings", () => {

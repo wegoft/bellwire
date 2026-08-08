@@ -97,7 +97,7 @@ private struct BellwireSurfacesWidget: Widget {
                     Color(red: 0.055, green: 0.052, blue: 0.046)
                 }
         }
-        .configurationDisplayName("Bellwire Surfaces")
+        .configurationDisplayName("Project Surfaces")
         .description("Keep your most important project state on the Home Screen.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
@@ -110,7 +110,11 @@ private struct BellwireWidgetView: View {
     var body: some View {
         if !entry.snapshot.isPro {
             VStack(alignment: .leading, spacing: 8) {
-                Label("Bellwire Pro", systemImage: "bolt.fill")
+                Label {
+                    Text("\(appDisplayName) Pro")
+                } icon: {
+                    Image(systemName: "bolt.fill")
+                }
                     .font(.headline)
                     .foregroundStyle(accent)
                 Text("Unlock live project Surfaces on your Home Screen.")
@@ -121,7 +125,11 @@ private struct BellwireWidgetView: View {
             .widgetURL(widgetURL("home"))
         } else if entry.snapshot.surfaces.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Label("Bellwire", systemImage: "bell.fill")
+                Label {
+                    Text(appDisplayName)
+                } icon: {
+                    Image(systemName: "bell.fill")
+                }
                     .font(.headline)
                     .foregroundStyle(accent)
                 Text("Publish a Surface to see live project state here.")
@@ -145,6 +153,11 @@ private struct BellwireWidgetView: View {
             }
             .widgetURL(widgetURL("home"))
         }
+    }
+
+    private var appDisplayName: String {
+        Bundle.main.object(forInfoDictionaryKey: "BellwireAppDisplayName") as? String
+            ?? "App"
     }
 
     private func surfaceRow(_ surface: BellwireNativeSurface) -> some View {

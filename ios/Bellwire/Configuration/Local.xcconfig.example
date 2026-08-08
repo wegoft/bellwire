@@ -7,7 +7,16 @@ BELLWIRE_EXTENSION_BUNDLE_ID = $(BELLWIRE_APP_BUNDLE_ID).NotificationService
 BELLWIRE_WIDGET_BUNDLE_ID = $(BELLWIRE_APP_BUNDLE_ID).Widgets
 BELLWIRE_APP_GROUP = group.$(BELLWIRE_APP_BUNDLE_ID).shared
 BELLWIRE_URL_SCHEME = bellwire-self-host
+BELLWIRE_APP_DISPLAY_NAME = My Signal App
+BELLWIRE_APP_ICON_NAME = SelfHostedAppIcon
+BELLWIRE_BILLING_MODE = disabled
+BELLWIRE_PRO_MONTHLY_PRODUCT_ID = self-hosted.disabled.monthly
+BELLWIRE_PRO_YEARLY_PRODUCT_ID = self-hosted.disabled.yearly
+BELLWIRE_SUPPORT_EMAIL = support@example.com
 
 // Keep the https:/$()/ form so xcconfig does not treat // as a comment.
 BELLWIRE_API_BASE_URL = https:/$()/YOUR_WORKER.workers.dev
 BELLWIRE_AUTH_BASE_URL = https:/$()/YOUR_AUTH_WORKER.workers.dev
+BELLWIRE_PRIVACY_URL = https:/$()/example.com/privacy
+BELLWIRE_TERMS_URL = https:/$()/example.com/terms
+BELLWIRE_SUPPORT_URL = https:/$()/example.com/support

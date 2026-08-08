@@ -3,6 +3,7 @@
 export interface ApnsConfiguration {
   bundleId: string;
   urlScheme: string;
+  appName: string;
   environment: "sandbox" | "production";
 }
 
@@ -89,18 +90,19 @@ export class ApnsClient {
           alert: notification.modeRequest
             ? {
                 title: notification.title ?? "Approval needed",
-                body: notification.body ?? "Open Bellwire to review this request.",
+                body: notification.body ?? `Open ${this.config.appName} to review this request.`,
                 ...(notification.subtitle ? { subtitle: notification.subtitle } : {}),
               }
             : notification.deliveryMode === "hosted"
             ? {
-                title: notification.title ?? "Bellwire",
+                title: notification.title ?? this.config.appName,
                 body: notification.body ?? "",
                 ...(notification.subtitle ? { subtitle: notification.subtitle } : {}),
               }
             : {
-                title: "Bellwire",
+                title: this.config.appName,
                 "loc-key": "BELLWIRE_PRIVATE_NOTIFICATION_BODY",
+                "loc-args": [this.config.appName],
               },
           sound: notification.sound ?? "default",
           "thread-id": notification.threadId,
@@ -225,6 +227,7 @@ export class ApnsClientPool {
 function sameConfiguration(left: ApnsConfiguration, right: ApnsConfiguration): boolean {
   return left.bundleId === right.bundleId &&
     left.urlScheme === right.urlScheme &&
+    left.appName === right.appName &&
     left.environment === right.environment;
 }
 

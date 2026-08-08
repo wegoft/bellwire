@@ -8,6 +8,7 @@ struct SettingsView: View {
     @EnvironmentObject private var purchaseManager: PurchaseManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
+    @Environment(\.locale) private var locale
     @State private var isGeneratingBinding = false
     @State private var isRequestingNotificationPermission = false
     @State private var showsAgentInstructions = false
@@ -25,7 +26,7 @@ struct SettingsView: View {
     @AppStorage("agentLiveActivitiesEnabled") private var agentLiveActivitiesEnabled = false
 
     private var hasPro: Bool {
-        model.entitlement?.hasPro ?? purchaseManager.hasPro
+        model.entitlement?.hasPro ?? (!AppConfig.billingEnabled || purchaseManager.hasPro)
     }
 
     private func refresh() async {
@@ -80,7 +81,7 @@ struct SettingsView: View {
                 FeedbackMailView(
                     isPresented: $showsFeedbackMail,
                     recipient: feedbackEmail,
-                    subject: "Bellwire Feedback",
+                    subject: "\(AppConfig.displayName) Feedback",
                     body: feedbackBody
                 )
             }
@@ -115,7 +116,7 @@ struct SettingsView: View {
                 Text("Agents can start a Live Activity only when a Surface explicitly requests one. You can turn this off at any time.")
             }
             .alert(
-                "Sign out of Bellwire?",
+                AppConfig.branded("Sign out of Bellwire?", locale: locale),
                 isPresented: $showsSignOutConfirmation
             ) {
                 Button("Sign out", role: .destructive) { model.signOut() }
@@ -135,7 +136,10 @@ struct SettingsView: View {
             .alert(item: $pendingDeviceDeletion) { device in
                 Alert(
                     title: Text("Remove device?"),
-                    message: Text("“\(device.name)” will stop receiving Bellwire notifications. You can register it again later."),
+                    message: Text(AppConfig.branded(
+                        "“\(device.name)” will stop receiving Bellwire notifications. You can register it again later.",
+                        locale: locale
+                    )),
                     primaryButton: .destructive(Text("Remove")) {
                         Task { await model.deleteDevice(id: device.id) }
                     },
@@ -169,7 +173,7 @@ struct SettingsView: View {
                     }
                     Spacer()
                     StatusBadgeView(
-                        text: hasPro ? "Pro" : "Free",
+                        text: model.entitlement?.planDisplayName ?? (hasPro ? "Pro" : "Free"),
                         color: hasPro ? BellwireTheme.accent : BellwireTheme.mutedInk,
                         showsDot: false
                     )
@@ -178,32 +182,45 @@ struct SettingsView: View {
 
                 Divider().overlay(BellwireTheme.separator)
 
-                Button {
-                    if hasPro {
-                        Task { await model.captureProductEvent("subscription_managed", source: "settings") }
-                        openURL(URL(string: "https://apps.apple.com/account/subscriptions")!)
-                    } else {
-                        Task { await model.captureProductEvent("upgrade_clicked", source: "settings") }
-                        showsPaywall = true
+                if model.entitlement?.isSelfHosted == true {
+                    SettingsRowView(
+                        icon: "server.rack",
+                        title: "Self-hosted deployment",
+                        hint: "Commercial feature limits and App Store billing are disabled"
+                    ) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundStyle(BellwireTheme.success)
                     }
-                } label: {
-                    if hasPro {
-                        ProActiveSettingsRow()
-                    } else {
-                        SettingsRowView(
-                            icon: "sparkles",
-                            title: "Upgrade to Bellwire Pro",
-                            hint: "More projects, events, devices, and history"
-                        ) {
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(BellwireTheme.accent)
+                } else {
+                    Button {
+                        if hasPro {
+                            Task { await model.captureProductEvent("subscription_managed", source: "settings") }
+                            if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
+                                openURL(url)
+                            }
+                        } else {
+                            Task { await model.captureProductEvent("upgrade_clicked", source: "settings") }
+                            showsPaywall = true
+                        }
+                    } label: {
+                        if hasPro {
+                            ProActiveSettingsRow()
+                        } else {
+                            SettingsRowView(
+                                icon: "sparkles",
+                                title: "Upgrade to \(AppConfig.displayName) Pro",
+                                hint: "More projects, events, devices, and history"
+                            ) {
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(BellwireTheme.accent)
+                            }
                         }
                     }
+                    .buttonStyle(PressableButtonStyle())
                 }
-                .buttonStyle(PressableButtonStyle())
 
-                if let entitlement = model.entitlement {
+                if let entitlement = model.entitlement, !entitlement.isSelfHosted {
                     Divider().overlay(BellwireTheme.separator).padding(.leading, 44)
                     VStack(alignment: .leading, spacing: BellwireSpacing.compact) {
                         HStack {
@@ -291,12 +308,12 @@ struct SettingsView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: BellwireSpacing.compact) {
-                        Text("Bellwire Pro")
+                        Text("\(AppConfig.displayName) Pro")
                             .font(.headline.weight(.semibold))
                             .foregroundStyle(BellwireTheme.ink)
                         if hasPro {
                             Text("ACTIVE")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .font(BellwireTypography.technicalLabel.bold())
                                 .tracking(0.6)
                                 .foregroundStyle(BellwireTheme.accentInk)
                                 .padding(.horizontal, 7)
@@ -341,7 +358,7 @@ struct SettingsView: View {
         .accessibilityHint(
             hasPro
                 ? "Opens App Store subscription management"
-                : "Opens Bellwire Pro purchase options"
+                : "Opens \(AppConfig.displayName) Pro purchase options"
         )
     }
 
@@ -352,7 +369,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: BellwireSpacing.standard) {
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(entitlement.plan == "pro" ? "Pro" : "Free")
+                            Text(entitlement.planDisplayName)
                                 .font(.headline.weight(.semibold))
                                 .foregroundStyle(BellwireTheme.ink)
                             Text("\(entitlement.usage.acceptedSignals.formatted()) of \(entitlement.limits.monthlySignals.formatted()) Signals")
@@ -409,7 +426,7 @@ struct SettingsView: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(BellwireTheme.warning)
                             Text(
-                                "Pause projects and remove devices until you are within the Free limits. Bellwire will never delete them just because Pro ended."
+                                "Pause projects and remove devices until you are within the Free limits. \(AppConfig.displayName) will never delete them just because Pro ended."
                             )
                             .font(.caption)
                             .foregroundStyle(BellwireTheme.secondaryInk)
@@ -480,8 +497,8 @@ struct SettingsView: View {
                     }
                     Text(
                         request.toMode == .hosted
-                            ? "Bellwire Cloud will receive and retain this project's Event, Inbox, Surface, and detailed notification content."
-                            : "Bellwire will send content-free wakes. At least one iPhone must have a verified Direct connection."
+                            ? "\(AppConfig.hostedServiceDisplayName) will receive and retain this project's Event, Inbox, Surface, and detailed notification content."
+                            : "\(AppConfig.displayName) will send content-free wakes. At least one iPhone must have a verified Direct connection."
                     )
                     .font(.caption)
                     .foregroundStyle(BellwireTheme.secondaryInk)
@@ -712,7 +729,7 @@ struct SettingsView: View {
                         title: "Automatic Live Activities",
                         hint: hasPro
                             ? "Only for Surfaces that explicitly request one"
-                            : "Included with Bellwire Pro"
+                            : "Included with \(AppConfig.displayName) Pro"
                     ) {
                         Image(systemName: agentLiveActivitiesEnabled ? "checkmark.circle.fill" : "circle")
                             .font(.body.weight(.semibold))
@@ -811,7 +828,7 @@ struct SettingsView: View {
                     SettingsRowView(
                         icon: "globe",
                         title: "Language",
-                        hint: "Choose the language used throughout Bellwire"
+                        hint: "Choose the language used throughout \(AppConfig.displayName)"
                     ) {
                         settingSelectionLabel(selectedLanguage.title)
                     }
@@ -819,7 +836,7 @@ struct SettingsView: View {
                 .buttonStyle(PressableButtonStyle())
                 .accessibilityLabel("Language")
                 .accessibilityValue(Text(selectedLanguage.title))
-                .accessibilityHint("Changes the language used throughout Bellwire")
+                .accessibilityHint("Changes the language used throughout \(AppConfig.displayName)")
 
                 Divider().overlay(BellwireTheme.separator).padding(.leading, 44)
 
@@ -846,7 +863,7 @@ struct SettingsView: View {
                     SettingsRowView(
                         icon: "circle.lefthalf.filled",
                         title: "Appearance",
-                        hint: "Choose the appearance used throughout Bellwire"
+                        hint: "Choose the appearance used throughout \(AppConfig.displayName)"
                     ) {
                         settingSelectionLabel(selectedAppearance.title)
                     }
@@ -854,7 +871,7 @@ struct SettingsView: View {
                 .buttonStyle(PressableButtonStyle())
                 .accessibilityLabel("Appearance")
                 .accessibilityValue(Text(selectedAppearance.title))
-                .accessibilityHint("Changes Bellwire between light and dark appearance")
+                .accessibilityHint("Changes \(AppConfig.displayName) between light and dark appearance")
             }
             .padding(.horizontal, BellwireSpacing.standard)
             .bellwireListGroup()
@@ -877,13 +894,15 @@ struct SettingsView: View {
                     }
                 }
                 .buttonStyle(PressableButtonStyle())
-                .accessibilityHint("Opens Bellwire support in your browser")
+                .accessibilityHint("Opens \(AppConfig.displayName) support in your browser")
                 Divider().overlay(BellwireTheme.separator).padding(.leading, 44)
                 Button { openFeedback() } label: {
                     SettingsRowView(
                         icon: feedbackEmailCopied ? "checkmark" : "bubble.left.and.bubble.right",
                         title: "Send feedback",
-                        hint: feedbackEmailCopied ? "Feedback email copied" : "Help improve Bellwire"
+                        hint: feedbackEmailCopied
+                            ? "Feedback email copied"
+                            : "Help improve \(AppConfig.displayName)"
                     ) {
                         Image(systemName: feedbackEmailCopied ? "checkmark" : "arrow.up.right")
                             .font(.caption.weight(.semibold))
@@ -891,7 +910,7 @@ struct SettingsView: View {
                     }
                 }
                 .buttonStyle(PressableButtonStyle())
-                .accessibilityHint("Opens an email to Bellwire support")
+                .accessibilityHint("Opens an email to \(AppConfig.displayName) support")
             }
             .padding(.horizontal, BellwireSpacing.standard)
             .bellwireListGroup()
@@ -906,7 +925,7 @@ struct SettingsView: View {
                     SettingsRowView(
                         icon: "hand.raised",
                         title: "Privacy policy",
-                        hint: "How Bellwire handles account, device, and project data"
+                        hint: "How \(AppConfig.displayName) handles account, device, and project data"
                     ) {
                         Image(systemName: "arrow.up.right")
                             .font(.caption.weight(.semibold))
@@ -914,13 +933,13 @@ struct SettingsView: View {
                     }
                 }
                 .buttonStyle(PressableButtonStyle())
-                .accessibilityHint("Opens the Bellwire privacy policy in your browser")
+                .accessibilityHint("Opens the \(AppConfig.displayName) privacy policy in your browser")
                 Divider().overlay(BellwireTheme.separator).padding(.leading, 44)
                 Button { openTermsOfService() } label: {
                     SettingsRowView(
                         icon: "doc.text",
                         title: "Terms of service",
-                        hint: "Rules for using Bellwire"
+                        hint: "Rules for using \(AppConfig.displayName)"
                     ) {
                         Image(systemName: "arrow.up.right")
                             .font(.caption.weight(.semibold))
@@ -928,7 +947,7 @@ struct SettingsView: View {
                     }
                 }
                 .buttonStyle(PressableButtonStyle())
-                .accessibilityHint("Opens the Bellwire terms of service in your browser")
+                .accessibilityHint("Opens the \(AppConfig.displayName) terms of service in your browser")
                 Divider().overlay(BellwireTheme.separator).padding(.leading, 44)
                 Button { showsSignOutConfirmation = true } label: {
                     SettingsRowView(
@@ -981,7 +1000,7 @@ struct SettingsView: View {
                 .foregroundStyle(BellwireTheme.accent)
                 .lineLimit(1)
             Image(systemName: "chevron.up.chevron.down")
-                .font(.system(size: 9, weight: .semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(BellwireTheme.mutedInk)
         }
     }
@@ -1010,10 +1029,10 @@ struct SettingsView: View {
     private var appVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
-        return "Bellwire \(version) · build \(build)"
+        return "\(AppConfig.displayName) \(version) · build \(build)"
     }
 
-    private var feedbackEmail: String { "feedback@bellwire.app" }
+    private var feedbackEmail: String { AppConfig.supportEmail }
 
     private var feedbackBody: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
@@ -1024,7 +1043,7 @@ struct SettingsView: View {
 
 
         ---
-        Bellwire \(version) (\(build))
+        \(AppConfig.displayName) \(version) (\(build))
         \(device.localizedModel) · \(device.systemName) \(device.systemVersion)
         """
     }
@@ -1060,18 +1079,15 @@ struct SettingsView: View {
     }
 
     private func openPrivacyPolicy() {
-        guard let url = URL(string: "https://bellwire.app/privacy") else { return }
-        openURL(url)
+        openURL(AppConfig.privacyURL)
     }
 
     private func openTermsOfService() {
-        guard let url = URL(string: "https://bellwire.app/terms") else { return }
-        openURL(url)
+        openURL(AppConfig.termsURL)
     }
 
     private func openSupport() {
-        guard let url = URL(string: "https://bellwire.app/support") else { return }
-        openURL(url)
+        openURL(AppConfig.supportURL)
     }
 }
 
@@ -1147,7 +1163,7 @@ private struct ProActiveSettingsRow: View {
                 .frame(width: 32, height: 32)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Manage Bellwire Pro")
+                Text("Manage \(AppConfig.displayName) Pro")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(BellwireTheme.ink)
                 Text("Your Pro access is active")
@@ -1167,7 +1183,7 @@ private struct ProActiveSettingsRow: View {
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Manage Bellwire Pro"))
+        .accessibilityLabel(Text("Manage \(AppConfig.displayName) Pro"))
         .accessibilityValue(Text("Your Pro access is active"))
     }
 }
@@ -1234,14 +1250,20 @@ private struct AgentConnectionRowView: View {
             .buttonStyle(PressableButtonStyle())
             .disabled(isRevoking)
             .accessibilityLabel(Text("Disconnect \(connection.name)"))
-            .accessibilityHint("Revokes this Agent’s Bellwire access")
+            .accessibilityHint(AppConfig.branded(
+                "Revokes this Agent’s Bellwire access",
+                locale: locale
+            ))
         }
         .padding(.vertical, BellwireSpacing.compact)
         .alert("Disconnect Agent?", isPresented: $showsDisconnectConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Disconnect", role: .destructive, action: disconnect)
         } message: {
-            Text("“\(connection.name)” will immediately lose access to Bellwire. Your projects and data will remain.")
+            Text(AppConfig.branded(
+                "“\(connection.name)” will immediately lose access to Bellwire. Your projects and data will remain.",
+                locale: locale
+            ))
         }
     }
 
@@ -1258,6 +1280,7 @@ private struct AgentConnectionRowView: View {
 }
 
 private struct DeleteAccountView: View {
+    @Environment(\.locale) private var locale
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var showsFinalConfirmation = false
@@ -1279,7 +1302,10 @@ private struct DeleteAccountView: View {
                         .foregroundStyle(BellwireTheme.ink)
                         .accessibilityAddTraits(.isHeader)
 
-                    Text("Your Bellwire account and all connected data will be permanently deleted.")
+                    Text(AppConfig.branded(
+                        "Your Bellwire account and all connected data will be permanently deleted.",
+                        locale: locale
+                    ))
                         .font(.body)
                         .foregroundStyle(BellwireTheme.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1325,7 +1351,10 @@ private struct DeleteAccountView: View {
                 HStack(alignment: .top, spacing: BellwireSpacing.small) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(BellwireTheme.danger)
-                    Text("This action cannot be undone. You will need to create a new account to use Bellwire again.")
+                    Text(AppConfig.branded(
+                        "This action cannot be undone. You will need to create a new account to use Bellwire again.",
+                        locale: locale
+                    ))
                         .font(.subheadline)
                         .foregroundStyle(BellwireTheme.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1367,7 +1396,7 @@ private struct DeleteAccountView: View {
         .toolbar(.visible, for: .navigationBar)
         .interactiveDismissDisabled(isDeletingAccount)
         .alert(
-            "Permanently delete your Bellwire account?",
+            AppConfig.branded("Permanently delete your Bellwire account?", locale: locale),
             isPresented: $showsFinalConfirmation
         ) {
             Button("Delete account and data", role: .destructive) {
@@ -1375,7 +1404,10 @@ private struct DeleteAccountView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This permanently deletes your account and all Bellwire data. This action cannot be undone.")
+            Text(AppConfig.branded(
+                "This permanently deletes your account and all Bellwire data. This action cannot be undone.",
+                locale: locale
+            ))
         }
     }
 
@@ -1495,7 +1527,10 @@ struct BindingCodeSheet: View {
                         .font(BellwireTypography.pageTitle)
                         .foregroundStyle(BellwireTheme.ink)
                         .accessibilityAddTraits(.isHeader)
-                    Text("This code is single-use. Once your Agent connects, project events can start flowing into Bellwire.")
+                    Text(AppConfig.branded(
+                        "This code is single-use. Once your Agent connects, project events can start flowing into Bellwire.",
+                        locale: locale
+                    ))
                         .font(.subheadline)
                         .foregroundStyle(BellwireTheme.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1653,7 +1688,7 @@ struct BindingCodeSheet: View {
                 .bellwireTechnicalLabel()
             Text("> ")
                 .foregroundStyle(BellwireTheme.mutedInk)
-            + Text("Connect Bellwire with code ")
+            + Text("Connect \(AppConfig.displayName) with code ")
                 .foregroundStyle(BellwireTheme.ink)
             + Text(binding.code)
                 .foregroundStyle(BellwireTheme.accent)
@@ -1668,7 +1703,7 @@ struct BindingCodeSheet: View {
     }
 
     private var instruction: String {
-        "Connect Bellwire with code \(binding.code)."
+        "Connect \(AppConfig.displayName) with code \(binding.code)."
     }
 
     private var expiryDate: Date? {
@@ -1688,6 +1723,7 @@ private enum CopiedBindingAction {
 
 private struct AgentInstructionSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: BellwireSpacing.roomy) {
@@ -1700,7 +1736,10 @@ private struct AgentInstructionSheet: View {
                     .foregroundStyle(BellwireTheme.accent)
                     .frame(minHeight: 44)
             }
-            Text("1. Generate a binding code.\n2. Open the project with your Agent.\n3. Say: “Connect Bellwire with code …”\n4. Let the Agent configure the supported event and live-surface calls.")
+            Text(AppConfig.branded(
+                "1. Generate a binding code.\n2. Open the project with your Agent.\n3. Say: “Connect Bellwire with code …”\n4. Let the Agent configure the supported event and live-surface calls.",
+                locale: locale
+            ))
                 .font(.body)
                 .foregroundStyle(BellwireTheme.secondaryInk)
                 .lineSpacing(6)
