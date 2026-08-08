@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: Apache-2.0
+-- SPDX-License-Identifier: MIT-0
 create table if not exists bellwire_private_outbox (
   reference text primary key check (
     length(reference) between 22 and 200

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT-0
 
 import { readFile } from "node:fs/promises";
 import { randomBytes, randomUUID, webcrypto } from "node:crypto";

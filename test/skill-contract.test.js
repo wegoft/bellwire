@@ -36,9 +36,9 @@ describe("published Bellwire Skill contract", () => {
   it("is self-contained and keeps long references navigable", () => {
     expect(existsSync(join(skillRoot, "README.md"))).toBe(false);
     expect(readFileSync(join(skillRoot, "SKILL.md"), "utf8"))
-      .toMatch(/^license: Apache-2\.0$/mu);
+      .toMatch(/^license: MIT-0$/mu);
     expect(readFileSync(join(skillRoot, "LICENSE"), "utf8"))
-      .toContain("Apache License\n                           Version 2.0");
+      .toContain("MIT No Attribution");
     const markdownFiles = filesBelow(skillRoot).filter((path) => path.endsWith(".md"));
     for (const file of markdownFiles) {
       const source = readFileSync(file, "utf8");

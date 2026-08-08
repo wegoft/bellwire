@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT-0
 
 const FIELD_TYPES = new Set(["string", "number", "boolean", "datetime", "url", "enum"]);
 const SURFACE_TYPES = new Set([

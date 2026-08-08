@@ -14,7 +14,8 @@ Copyright © 2026 Bellwire contributors.
 | --- | --- | --- |
 | Worker APIs, delivery services, D1 schemas, and operational tooling | `src/**`, `d1/**`, `scripts/**`, JavaScript/TypeScript tests, and root runtime/build configuration unless listed below | `AGPL-3.0-only` |
 | Native iOS app | `ios/**` and `test/*.swift` | `MPL-2.0` |
-| Agent Skill, CLI, protocol references, examples and public documentation | `skills/**`, `examples/**`, public `docs/**`, `.github/**`, and the root community/documentation files listed below | `Apache-2.0` |
+| Agent Skill, its CLI, and bundled protocol references/examples | `skills/**` | `MIT-0` |
+| Standalone integration examples and public documentation | `examples/**`, public `docs/**`, `.github/**`, and the root community/documentation files listed below | `Apache-2.0` |
 | Bellwire app icon artwork and other Bellwire brand assets | `ios/Bellwire/Bellwire/Assets.xcassets/AppIcon.appiconset/BellwireIcon.png`, `ios/Bellwire/Design/AppIcon.svg`, and assets identified in `TRADEMARK.md` | No open-source trademark or artwork license |
 
 The Apache-2.0 root files are `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`,
@@ -32,6 +33,7 @@ not covered by an explicit exception, the repository default is
 
 - [GNU Affero General Public License v3.0 only](LICENSES/AGPL-3.0-only.txt)
 - [Mozilla Public License 2.0](LICENSES/MPL-2.0.txt)
+- [MIT No Attribution](LICENSES/MIT-0.txt)
 - [Apache License 2.0](LICENSES/Apache-2.0.txt)
 
 ## Contributions

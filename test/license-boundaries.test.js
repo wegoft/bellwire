@@ -32,6 +32,7 @@ describe("multi-license boundaries", () => {
     expect(read("LICENSES/MPL-2.0.txt")).toContain(
       "Mozilla Public License Version 2.0",
     );
+    expect(read("LICENSES/MIT-0.txt")).toContain("MIT No Attribution");
     expect(read("LICENSES/Apache-2.0.txt")).toContain(
       "Apache License\n                           Version 2.0, January 2004",
     );
@@ -39,7 +40,7 @@ describe("multi-license boundaries", () => {
 
   it("documents every component boundary and the trademark exclusion", () => {
     const policy = read("LICENSE.md");
-    for (const identifier of ["AGPL-3.0-only", "MPL-2.0", "Apache-2.0"]) {
+    for (const identifier of ["AGPL-3.0-only", "MPL-2.0", "MIT-0", "Apache-2.0"]) {
       expect(policy).toContain(identifier);
     }
     expect(policy).toContain("docs/private/**");
@@ -72,7 +73,7 @@ describe("multi-license boundaries", () => {
     expectSpdx(paths, "MPL-2.0");
   });
 
-  it("marks executable Skill and example code as Apache", () => {
+  it("marks executable Skill code as MIT-0", () => {
     const paths = [
       ...filesBelow("skills/bellwire/scripts").filter(
         (path) => extname(path) === ".mjs",
@@ -80,6 +81,12 @@ describe("multi-license boundaries", () => {
       ...filesBelow("skills/bellwire/assets").filter((path) =>
         [".mjs", ".sql", ".ts"].includes(extname(path)),
       ),
+    ];
+    expectSpdx(paths, "MIT-0");
+  });
+
+  it("marks standalone example code as Apache", () => {
+    const paths = [
       ...filesBelow("examples").filter((path) =>
         [".mjs", ".sh", ".ts"].includes(extname(path)),
       ),
@@ -94,7 +101,7 @@ describe("multi-license boundaries", () => {
       ["d1/LICENSE.md", "AGPL-3.0-only"],
       ["test/LICENSE.md", "AGPL-3.0-only"],
       ["ios/LICENSE.md", "MPL-2.0"],
-      ["skills/LICENSE.md", "Apache-2.0"],
+      ["skills/LICENSE.md", "MIT-0"],
       ["examples/LICENSE.md", "Apache-2.0"],
       ["docs/LICENSE.md", "Apache-2.0"],
     ]);

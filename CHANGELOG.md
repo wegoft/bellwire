@@ -7,6 +7,14 @@ All notable changes to Bellwire are documented here. The project follows
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-08-08
+
+### Fixed
+
+- Align the self-contained Agent Skill and CLI with ClawHub's mandatory
+  `MIT-0` Skill license while preserving the repository's AGPL, MPL, and Apache
+  boundaries for the Worker, iOS app, standalone examples, and documentation.
+
 ## [0.1.2] - 2026-08-08
 
 ### Fixed
@@ -72,11 +80,13 @@ All notable changes to Bellwire are documented here. The project follows
 
 - Worker, Supabase, and operational tooling under `AGPL-3.0-only`.
 - Native iOS app under `MPL-2.0`.
-- Skill, CLI, protocol references, examples, and public documentation under
-  `Apache-2.0`.
+- Agent Skill, its CLI, and bundled references/examples under `MIT-0`.
+- Standalone examples and public documentation under `Apache-2.0`.
 - Bellwire name, app icon, and official service identifiers reserved under the
   trademark policy.
 
-[Unreleased]: https://github.com/wegoft/bellwire/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/wegoft/bellwire/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/wegoft/bellwire/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/wegoft/bellwire/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/wegoft/bellwire/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/wegoft/bellwire/releases/tag/v0.1.0
