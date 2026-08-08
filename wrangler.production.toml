@@ -16,7 +16,6 @@ APNS_ENVIRONMENT = "production"
 ENTITLEMENT_ENFORCEMENT_MODE = "enforce"
 LIVE_ACTIVITY_AUTOMATION_ENABLED = "false"
 POSTHOG_HOST = "https://us.i.posthog.com"
-CUTOVER_WRITE_FREEZE = "false"
 
 [secrets]
 required = [

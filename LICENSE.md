@@ -12,7 +12,7 @@ Copyright © 2026 Bellwire contributors.
 
 | Component | Paths | SPDX license |
 | --- | --- | --- |
-| Worker APIs, delivery services, D1 and legacy Supabase schemas, and operational tooling | `src/**`, `d1/**`, `supabase/**`, `scripts/**`, JavaScript/TypeScript tests, and root runtime/build configuration unless listed below | `AGPL-3.0-only` |
+| Worker APIs, delivery services, D1 schemas, and operational tooling | `src/**`, `d1/**`, `scripts/**`, JavaScript/TypeScript tests, and root runtime/build configuration unless listed below | `AGPL-3.0-only` |
 | Native iOS app | `ios/**` and `test/*.swift` | `MPL-2.0` |
 | Agent Skill, CLI, protocol references, examples and public documentation | `skills/**`, `examples/**`, public `docs/**`, `.github/**`, and the root community/documentation files listed below | `Apache-2.0` |
 | Bellwire app icon artwork and other Bellwire brand assets | `ios/Bellwire/Bellwire/Assets.xcassets/AppIcon.appiconset/BellwireIcon.png`, `ios/Bellwire/Design/AppIcon.svg`, and assets identified in `TRADEMARK.md` | No open-source trademark or artwork license |

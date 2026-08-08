@@ -24,7 +24,7 @@ body:
       options:
         - iOS app
         - Worker API
-        - Supabase migrations
+        - D1 migrations
         - APNs delivery
         - Agent skill or CLI
         - Documentation

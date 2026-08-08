@@ -52,13 +52,10 @@ describe("multi-license boundaries", () => {
     );
   });
 
-  it("marks Workers, D1, legacy Supabase, tooling, and JS/TS tests as AGPL", () => {
+  it("marks Workers, D1, tooling, and JS/TS tests as AGPL", () => {
     const paths = [
       ...filesBelow("src").filter((path) => extname(path) === ".ts"),
       ...filesBelow("scripts").filter((path) => extname(path) === ".mjs"),
-      ...filesBelow("supabase/migrations").filter(
-        (path) => extname(path) === ".sql",
-      ),
       ...filesBelow("d1").filter((path) => extname(path) === ".sql"),
       ...filesBelow("test").filter((path) =>
         [".js", ".ts"].includes(extname(path)),
@@ -91,7 +88,6 @@ describe("multi-license boundaries", () => {
     const notices = new Map([
       ["src/LICENSE.md", "AGPL-3.0-only"],
       ["scripts/LICENSE.md", "AGPL-3.0-only"],
-      ["supabase/LICENSE.md", "AGPL-3.0-only"],
       ["d1/LICENSE.md", "AGPL-3.0-only"],
       ["test/LICENSE.md", "AGPL-3.0-only"],
       ["ios/LICENSE.md", "MPL-2.0"],

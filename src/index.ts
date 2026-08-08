@@ -8,7 +8,6 @@ import { BellwireService } from "./services/bellwire-service";
 import { AuthAdminClient } from "./services/auth-admin-client";
 import {
   AppleTokenClient,
-  decryptAppleRefreshToken,
   type AppleOAuthClient,
 } from "./services/apple-auth-service";
 import {
@@ -37,15 +36,11 @@ export interface Env {
   AUTH_AUDIENCE?: string;
   AUTH_INTERNAL_SECRET?: string;
   AUTH_SERVICE?: Fetcher;
-  LEGACY_SUPABASE_URL?: string;
-  SUPABASE_SERVICE_ROLE_KEY?: string;
   APPLE_TOKEN_ENCRYPTION_KEY?: string;
-  APPLE_TOKEN_REWRAP_SECRET?: string;
   APPLE_SIGN_IN_KEY_ID?: string;
   APPLE_SIGN_IN_TEAM_ID?: string;
   APPLE_SIGN_IN_CLIENT_ID?: string;
   APPLE_SIGN_IN_PRIVATE_KEY?: string;
-  CUTOVER_WRITE_FREEZE?: "true" | "false";
   APPLE_ROOT_CERTIFICATES_BASE64?: string;
   APPLE_APP_ID?: string;
   APNS_KEY_ID?: string;
@@ -73,18 +68,9 @@ export default {
     const url = new URL(request.url);
     if (
       request.method === "POST"
-      && url.pathname === "/internal/migrations/apple-refresh-tokens"
-    ) {
-      return migrateLegacyAppleRefreshTokens(request, env);
-    }
-    if (
-      request.method === "POST"
       && url.pathname.startsWith("/internal/auth/apple/")
     ) {
       return handleAppleAuthInternal(request, env);
-    }
-    if (env.CUTOVER_WRITE_FREEZE === "true" && url.pathname !== "/health") {
-      return cutoverWriteFreezeResponse();
     }
     if (env.DB && request.method === "GET" && url.pathname === "/health") {
       const health = await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
@@ -122,10 +108,6 @@ export default {
   },
 
   async queue(batch: MessageBatch<DeliveryQueueMessage>, env: Env): Promise<void> {
-    if (env.CUTOVER_WRITE_FREEZE === "true") {
-      for (const message of batch.messages) message.retry({ delaySeconds: 300 });
-      return;
-    }
     const repository = repositoryForEnv(env);
     const providerTokens = providerTokenSourceForEnv(env);
     const apnsForEnvironment = (environment: "sandbox" | "production") => apnsClients.get({
@@ -164,22 +146,9 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    if (env.CUTOVER_WRITE_FREEZE === "true") return;
     await repositoryForEnv(env).runMaintenance(new Date().toISOString());
   },
 };
-
-function cutoverWriteFreezeResponse(): Response {
-  return Response.json({
-    error: {
-      code: "CUTOVER_WRITE_FREEZE",
-      message: "Bellwire is completing a scheduled storage migration. Please retry shortly.",
-    },
-  }, {
-    status: 503,
-    headers: { "cache-control": "no-store", "retry-after": "120" },
-  });
-}
 
 type AppleOAuthOperator = AppleOAuthClient & { createClientSecret(): Promise<string> };
 
@@ -188,15 +157,15 @@ export async function handleAppleAuthInternal(
   env: Env,
   oauthClient?: AppleOAuthOperator,
 ): Promise<Response> {
-  const internalSecret = requiredMigrationEnv(env.AUTH_INTERNAL_SECRET, "AUTH_INTERNAL_SECRET");
+  const internalSecret = requiredInternalEnv(env.AUTH_INTERNAL_SECRET, "AUTH_INTERNAL_SECRET");
   if (!await secretsMatch(readBearer(request.headers.get("authorization")), internalSecret)) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
   const client = oauthClient ?? new AppleTokenClient({
-    keyId: requiredMigrationEnv(env.APPLE_SIGN_IN_KEY_ID, "APPLE_SIGN_IN_KEY_ID"),
-    teamId: requiredMigrationEnv(env.APPLE_SIGN_IN_TEAM_ID, "APPLE_SIGN_IN_TEAM_ID"),
-    clientId: requiredMigrationEnv(env.APPLE_SIGN_IN_CLIENT_ID, "APPLE_SIGN_IN_CLIENT_ID"),
-    privateKey: requiredMigrationEnv(
+    keyId: requiredInternalEnv(env.APPLE_SIGN_IN_KEY_ID, "APPLE_SIGN_IN_KEY_ID"),
+    teamId: requiredInternalEnv(env.APPLE_SIGN_IN_TEAM_ID, "APPLE_SIGN_IN_TEAM_ID"),
+    clientId: requiredInternalEnv(env.APPLE_SIGN_IN_CLIENT_ID, "APPLE_SIGN_IN_CLIENT_ID"),
+    privateKey: requiredInternalEnv(
       env.APPLE_SIGN_IN_PRIVATE_KEY,
       "APPLE_SIGN_IN_PRIVATE_KEY",
     ),
@@ -225,97 +194,6 @@ export async function handleAppleAuthInternal(
   return new Response("Not Found", { status: 404 });
 }
 
-interface LegacyAppleRefreshTokenRow {
-  user_id?: unknown;
-  refresh_token_ciphertext?: unknown;
-}
-
-export async function migrateLegacyAppleRefreshTokens(
-  request: Request,
-  env: Env,
-  fetchImpl: typeof fetch = (input, init) => fetch(input, init),
-): Promise<Response> {
-  const migrationSecret = env.APPLE_TOKEN_REWRAP_SECRET?.trim();
-  if (!migrationSecret) return new Response("Not Found", { status: 404 });
-  if (!await secretsMatch(readBearer(request.headers.get("authorization")), migrationSecret)) {
-    return Response.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  const supabaseUrl = requiredMigrationEnv(env.LEGACY_SUPABASE_URL, "LEGACY_SUPABASE_URL")
-    .replace(/\/$/u, "");
-  const serviceRoleKey = requiredMigrationEnv(
-    env.SUPABASE_SERVICE_ROLE_KEY,
-    "SUPABASE_SERVICE_ROLE_KEY",
-  );
-  const sourceEncryptionKey = requiredMigrationEnv(
-    env.APPLE_TOKEN_ENCRYPTION_KEY,
-    "APPLE_TOKEN_ENCRYPTION_KEY",
-  );
-  const authService = env.AUTH_SERVICE;
-  if (!authService) throw new Error("AUTH_SERVICE is required for Apple token migration");
-
-  const sourceResponse = await fetchImpl(
-    `${supabaseUrl}/rest/v1/apple_auth_tokens?select=user_id,refresh_token_ciphertext&order=user_id.asc`,
-    {
-      headers: {
-        apikey: serviceRoleKey,
-        authorization: `Bearer ${serviceRoleKey}`,
-      },
-    },
-  );
-  if (!sourceResponse.ok) {
-    throw new Error(`Legacy Apple token read failed with status ${sourceResponse.status}`);
-  }
-  const rows = await sourceResponse.json<unknown>();
-  if (!Array.isArray(rows) || rows.length > 100) {
-    throw new Error("Legacy Apple token source returned an invalid payload");
-  }
-  const tokens = await Promise.all(rows.map(async (candidate) => {
-    if (!candidate || typeof candidate !== "object") {
-      throw new Error("Legacy Apple token source returned an invalid row");
-    }
-    const row = candidate as LegacyAppleRefreshTokenRow;
-    if (
-      typeof row.user_id !== "string" || !row.user_id
-      || typeof row.refresh_token_ciphertext !== "string" || !row.refresh_token_ciphertext
-    ) {
-      throw new Error("Legacy Apple token source returned an incomplete row");
-    }
-    return {
-      userId: row.user_id,
-      refreshToken: await decryptAppleRefreshToken(
-        row.refresh_token_ciphertext,
-        sourceEncryptionKey,
-      ),
-    };
-  }));
-
-  const authResponse = await authService.fetch(new Request(
-    new URL(
-      "/internal/migrations/apple-refresh-tokens",
-      requiredMigrationEnv(env.AUTH_ISSUER, "AUTH_ISSUER"),
-    ),
-    {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${migrationSecret}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ tokens }),
-    },
-  ));
-  const result = await authResponse.json<{ migrated?: unknown; verified?: unknown }>()
-    .catch(() => null);
-  if (
-    !authResponse.ok
-    || result?.migrated !== tokens.length
-    || result.verified !== tokens.length
-  ) {
-    throw new Error(`Auth Apple token migration failed with status ${authResponse.status}`);
-  }
-  return Response.json({ source: rows.length, migrated: result.migrated, verified: result.verified });
-}
-
 function repositoryForEnv(env: Env): BellwireRepository {
   if (env.DB) return new D1BellwireRepository(env.DB);
   if (env.APP_ENV !== "development") {
@@ -329,8 +207,8 @@ function requiredEnv(value: string | undefined, name: string): string {
   return value;
 }
 
-function requiredMigrationEnv(value: string | undefined, name: string): string {
-  if (!value) throw new Error(`${name} is required for Apple token migration`);
+function requiredInternalEnv(value: string | undefined, name: string): string {
+  if (!value) throw new Error(`${name} is required for Apple authentication`);
   return value;
 }
 

@@ -12,7 +12,6 @@ AUTH_ISSUER = "https://auth.bellwire.app"
 AUTH_AUDIENCE = "bellwire-api"
 APPLE_SIGN_IN_CLIENT_ID = "app.bellwire"
 APPLE_APP_BUNDLE_ID = "app.bellwire"
-CUTOVER_WRITE_FREEZE = "false"
 
 [secrets]
 required = [

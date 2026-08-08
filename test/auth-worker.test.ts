@@ -14,10 +14,7 @@ import authWorker, {
 } from "../src/auth/index";
 import { InMemoryBellwireRepository } from "../src/repositories/in-memory-bellwire-repository";
 import { PrincipalAuthenticator } from "../src/security/authenticator";
-import {
-  AppleTokenClient,
-  decryptAppleRefreshToken,
-} from "../src/services/apple-auth-service";
+import { AppleTokenClient } from "../src/services/apple-auth-service";
 
 let miniflare: Miniflare;
 let database: D1Database;
@@ -67,29 +64,6 @@ describe("Bellwire Auth Worker", () => {
     await expect(invalid.json()).resolves.toMatchObject({
       error: { code: "AUTH_INVALID_REQUEST" },
     });
-  });
-
-  it("keeps health and JWKS available while blocking sign-in during cutover", async () => {
-    const env = { ...authEnv(), CUTOVER_WRITE_FREEZE: "true" as const };
-    const health = await authWorker.fetch(
-      new Request("https://auth.bellwire.app/health"),
-      env,
-      executionContext(),
-    );
-    expect(health.status).toBe(200);
-    const jwks = await authWorker.fetch(
-      new Request("https://auth.bellwire.app/api/auth/jwks"),
-      env,
-      executionContext(),
-    );
-    expect(jwks.status).toBe(200);
-    const blocked = await authWorker.fetch(
-      new Request("https://auth.bellwire.app/v1/native/apple/sign-in", { method: "POST" }),
-      env,
-      executionContext(),
-    );
-    expect(blocked.status).toBe(503);
-    expect(blocked.headers.get("retry-after")).toBe("120");
   });
 
   it("obtains the Apple client secret over a service binding without a local private key", async () => {
@@ -188,52 +162,6 @@ describe("Bellwire Auth Worker", () => {
       .resolves.toBeNull();
     await expect(database.prepare('SELECT id FROM "session" WHERE id = ?').bind("session-1").first())
       .resolves.toBeNull();
-  });
-
-  it("keeps Apple token rewrap disabled by default and verifies migrated ciphertext", async () => {
-    const now = "2026-08-08T10:00:00.000Z";
-    await database.prepare(`
-      INSERT INTO "user" (id, name, email, emailVerified, createdAt, updatedAt)
-      VALUES (?, ?, ?, 1, ?, ?)
-    `).bind("user-rewrap", "Rewrap User", "rewrap@example.com", now, now).run();
-    const baseEnv = authEnv();
-    const request = (authorization?: string) => new Request(
-      "https://auth.bellwire.app/internal/migrations/apple-refresh-tokens",
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(authorization ? { authorization } : {}),
-        },
-        body: JSON.stringify({
-          tokens: [{ userId: "user-rewrap", refreshToken: "legacy-refresh-token" }],
-        }),
-      },
-    );
-
-    const disabled = await authWorker.fetch(request(), baseEnv, executionContext());
-    expect(disabled.status).toBe(404);
-
-    const env = { ...baseEnv, APPLE_TOKEN_REWRAP_SECRET: "one-time-rewrap-secret" };
-    const unauthorized = await authWorker.fetch(request("Bearer wrong"), env, executionContext());
-    expect(unauthorized.status).toBe(401);
-
-    const migrated = await authWorker.fetch(
-      request(`Bearer ${env.APPLE_TOKEN_REWRAP_SECRET}`),
-      env,
-      executionContext(),
-    );
-    expect(migrated.status).toBe(200);
-    await expect(migrated.json()).resolves.toEqual({ migrated: 1, verified: 1 });
-    const stored = await database.prepare(`
-      SELECT encrypted_refresh_token FROM apple_auth_tokens WHERE user_id = ?
-    `).bind("user-rewrap").first<{ encrypted_refresh_token: string }>();
-    expect(stored?.encrypted_refresh_token).toMatch(/^v1\./u);
-    expect(stored?.encrypted_refresh_token).not.toContain("legacy-refresh-token");
-    await expect(decryptAppleRefreshToken(
-      stored!.encrypted_refresh_token,
-      env.APPLE_TOKEN_ENCRYPTION_KEY,
-    )).resolves.toBe("legacy-refresh-token");
   });
 
   it("publishes an ES256 JWKS for Bellwire API access tokens", async () => {

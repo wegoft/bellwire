@@ -199,13 +199,8 @@ APNS_ENVIRONMENT=sandbox \
 ```
 
 Apply [`d1/business`](d1/business) to the business D1 database and
-[`d1/auth`](d1/auth) to the Auth D1 database before deployment. The historical
-[`supabase/migrations`](supabase/migrations) directory is retained only as the
-source schema for migration and is not used by either Worker at runtime.
-For an existing hosted installation, follow the
-[Cloudflare cutover runbook](docs/cloudflare-cutover.md); it keeps snapshot,
-reconciliation, traffic switch, rollback, and Supabase retirement as separate
-gates.
+[`d1/auth`](d1/auth) to the Auth D1 database before deployment. These two D1
+schemas are the only database schemas used by the current Workers.
 
 ## iOS app
 

@@ -104,8 +104,6 @@ async function optionalFile(filePath) {
 
 function rejectSecrets(label, source) {
   const secretPatterns = [
-    /sb_secret_[A-Za-z0-9_-]+/u,
-    /SUPABASE_SERVICE_ROLE_KEY\s*=\s*\S+/u,
     /APNS_PRIVATE_KEY\s*=\s*\S+/u,
     /APPLE_TOKEN_ENCRYPTION_KEY\s*=\s*\S+/u,
     /BETTER_AUTH_SECRET\s*=\s*\S+/u,

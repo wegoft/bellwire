@@ -15,7 +15,6 @@ wrangler.self-host.toml
 wrangler.auth.self-host.toml
 wrangler.*.local.toml
 .wrangler/
-supabase/.temp/
 ios/Bellwire/Configuration/Local.xcconfig
 *.local
 *.p8
