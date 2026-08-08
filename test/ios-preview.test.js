@@ -160,6 +160,38 @@ describe("iOS Inbox preview", () => {
     expect(loading).toContain("paused: scenePhase != .active");
   });
 
+  it("uses the Bellwire mascot for pull-to-refresh feedback", () => {
+    const inbox = readFileSync("ios/Bellwire/Bellwire/InboxViews.swift", "utf8");
+    const details = readFileSync("ios/Bellwire/Bellwire/DetailViews.swift", "utf8");
+    const settings = readFileSync("ios/Bellwire/Bellwire/SettingsView.swift", "utf8");
+    const scrollView = readFileSync(
+      "ios/Bellwire/Bellwire/BellwireRefreshScrollView.swift",
+      "utf8",
+    );
+    const indicator = readFileSync(
+      "ios/Bellwire/Bellwire/BellwireRefreshIndicator.swift",
+      "utf8",
+    );
+
+    expect(inbox.match(/BellwireRefreshScrollView\(action: refresh\)/gu)).toHaveLength(3);
+    expect(details).toContain("BellwireRefreshScrollView(action: refresh)");
+    expect(settings).toContain("BellwireRefreshScrollView(action: refresh)");
+    expect(inbox).not.toContain(".refreshable");
+    expect(scrollView).toContain("private let refreshThreshold: CGFloat = 72");
+    expect(scrollView).toContain(".onGeometryChange(for: CGFloat.self)");
+    expect(scrollView).toContain("BellwireHaptics.selection()");
+    expect(scrollView).toContain("isRefreshing || isCompleting");
+    expect(scrollView).toContain("Task.sleep(for: .milliseconds(320))");
+    expect(scrollView).toContain('.accessibilityAction(named: Text("Refresh"))');
+    expect(indicator).toContain("MascotView(");
+    expect(indicator).toContain("return .listening");
+    expect(indicator).toContain("return .connecting");
+    expect(indicator).toContain("return .verified");
+    expect(indicator).toContain("@Environment(\\.accessibilityReduceMotion)");
+    expect(indicator).toContain("animates: isRefreshing && !reduceMotion");
+    expect(indicator).not.toContain("Circle()");
+  });
+
   it("recovers a missing Private manifest before refreshing encrypted envelopes", () => {
     const model = readFileSync("ios/Bellwire/Bellwire/AppModel.swift", "utf8");
     const project = readFileSync(

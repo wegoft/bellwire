@@ -89,6 +89,9 @@
 "unread" = "未读";
 "running" = "运行中";
 "Live surfaces" = "实时卡片";
+"Refresh" = "刷新";
+"Refreshing Bellwire" = "正在刷新 Bellwire";
+"Refresh complete" = "刷新完成";
 "Loading live cards…" = "正在加载实时卡片…";
 "Refreshing live cards" = "正在刷新实时卡片";
 "Syncing Hosted and Private sources." = "正在同步托管与私有数据源。";

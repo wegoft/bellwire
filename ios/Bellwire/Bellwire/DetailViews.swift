@@ -240,7 +240,7 @@ struct ProjectDetailView: View {
     @State private var isLoadingProject = true
 
     var body: some View {
-        ScrollView {
+        BellwireRefreshScrollView(action: refresh) {
             LazyVStack(alignment: .leading, spacing: BellwireSpacing.section) {
                 if let overview {
                     if let errorMessage {
@@ -312,7 +312,6 @@ struct ProjectDetailView: View {
                 }
             }
         }
-        .refreshable { await load(refreshDashboard: true) }
         .task(id: projectID) { await load() }
         .onChange(of: model.liveSurfaces) { _, _ in
             synchronizeLiveActivitySurfaceIDs()
@@ -735,6 +734,10 @@ struct ProjectDetailView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func refresh() async {
+        await load(refreshDashboard: true)
     }
 
     private func synchronizeLiveActivitySurfaceIDs() {
