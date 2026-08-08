@@ -1,4 +1,4 @@
--- SPDX-License-Identifier: Apache-2.0
+-- SPDX-License-Identifier: MIT-0
 create table if not exists bellwire_nonces (
   nonce text primary key,
   expires_at integer not null

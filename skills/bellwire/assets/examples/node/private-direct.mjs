@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT-0
 import { randomBytes } from "node:crypto";
 
 import { verifyBellwireDirectRequest } from "../../../scripts/verify-direct-request.mjs";

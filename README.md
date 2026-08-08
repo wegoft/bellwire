@@ -32,7 +32,7 @@ out of this public repository.
 
 > [!IMPORTANT]
 > Bellwire is multi-licensed: the Workers and Cloudflare D1 stack use AGPL-3.0-only,
-> the iOS app uses MPL-2.0, and the Skill, CLI, protocol references, examples,
+> the iOS app uses MPL-2.0, the Agent Skill uses MIT-0, and integration examples
 > and public docs use Apache-2.0. The Bellwire brand is reserved. See
 > [LICENSE.md](LICENSE.md) for the exact path boundaries.
 

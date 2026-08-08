@@ -1,7 +1,7 @@
 ---
 name: bellwire
 description: Add, update, test, diagnose, or maintain Private-first Bellwire live cards, inbox events, and phone notifications in application backends, Node.js, Cloudflare Workers, CI/CD workflows, and shell automation. Use for Bellwire binding, signed Direct v2 endpoints, opaque references and outboxes, wake tokens, Hosted Events and Surfaces, mode-change approval, provider webhooks, delivery checks, conformance, or notification troubleshooting.
-license: Apache-2.0
+license: MIT-0
 ---
 
 # Bellwire
