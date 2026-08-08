@@ -77,6 +77,9 @@ describe("multi-license boundaries", () => {
       ...filesBelow("skills/bellwire/scripts").filter(
         (path) => extname(path) === ".mjs",
       ),
+      ...filesBelow("skills/bellwire/assets").filter((path) =>
+        [".mjs", ".sql", ".ts"].includes(extname(path)),
+      ),
       ...filesBelow("examples").filter((path) =>
         [".mjs", ".sh", ".ts"].includes(extname(path)),
       ),

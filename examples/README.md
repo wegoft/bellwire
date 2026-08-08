@@ -7,11 +7,11 @@ approved Hosted mode in the App.
 
 ## Private reference implementations
 
-- [Node.js Direct v2](node/private-direct.mjs): signed endpoint handler,
+- [Node.js Direct v2](../skills/bellwire/assets/examples/node/private-direct.mjs): signed endpoint handler,
   database callback boundaries, outbox record, and bounded wake sender.
-- [Cloudflare Worker Direct v2](cloudflare-worker/bellwire-direct.ts): D1-backed
+- [Cloudflare Worker Direct v2](../skills/bellwire/assets/examples/cloudflare-worker/bellwire-direct.ts): D1-backed
   atomic nonce consumption plus notification, Inbox, and Surface routes.
-- [D1 outbox schema](cloudflare-worker/bellwire-private-outbox.sql): opaque
+- [D1 outbox schema](../skills/bellwire/assets/examples/cloudflare-worker/bellwire-private-outbox.sql): opaque
   24-hour detail storage owned by the user's service.
 
 Create a wake-only token with `create-wake-token`, keep it in
@@ -33,6 +33,7 @@ After binding the CLI with an Agent token, create a schema from one of the
 templates:
 
 ```bash
+bellwire_secret_dir="$(mktemp -d)"
 node skills/bellwire/scripts/bellwire.mjs create-schema \
   --project "$BELLWIRE_PROJECT_ID" \
   --file examples/templates/deployment.failed.event-spec.json
@@ -40,11 +41,12 @@ node skills/bellwire/scripts/bellwire.mjs create-schema \
 node skills/bellwire/scripts/bellwire.mjs create-token \
   --project "$BELLWIRE_PROJECT_ID" \
   --name production \
+  --secret-output "$bellwire_secret_dir/ingest-token" \
   --json
 ```
 
-Store the returned Ingest token in the source application's secret manager.
-The token is shown only once.
+Import the `0600` file into the source application's secret manager without
+printing it. The Token is created only once and is never written to stdout.
 
 ## Choose an adapter
 

@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: Apache-2.0
 
-import { readFile } from "node:fs/promises";
+import { open, readFile, unlink } from "node:fs/promises";
 import { createCipheriv, createECDH, hkdfSync, randomBytes } from "node:crypto";
+import { resolve } from "node:path";
+
+import {
+  isUUID,
+  validateDirectConnectionManifest,
+  validateEventSpec,
+  validateOpaqueReference,
+  validateSurfaceInput,
+  validateTestEvent,
+} from "./protocol-validation.mjs";
 
 const DEFAULT_API_URL = "https://api.bellwire.app";
-const FIELD_TYPES = new Set(["string", "number", "boolean", "datetime", "url", "enum"]);
-const SURFACE_TYPES = new Set([
-  "stats", "metrics", "segmented_progress", "progress", "alert", "timer",
-  "status", "checklist", "trend",
-]);
-const SURFACE_COLORS = new Set(["lime", "green", "cyan", "blue", "purple", "magenta", "red", "orange", "yellow", "gray"]);
 
 const { command, options } = parseArguments(process.argv.slice(2));
 
@@ -33,11 +37,12 @@ async function run(selectedCommand, args) {
     case "bind": {
       const code = required(args, "code");
       if (!/^\d{6}$/u.test(code)) throw new Error("--code must contain exactly six digits");
-      return apiRequest("/v1/device-bindings/confirm", {
-        method: "POST",
-        body: { code, name: args.name ?? "Codex" },
-        authenticated: false,
-      });
+      return withSecretOutput(args, () =>
+        apiRequest("/v1/device-bindings/confirm", {
+          method: "POST",
+          body: { code, name: args.name ?? "Codex" },
+          authenticated: false,
+        }));
     }
     case "list-projects":
       return apiRequest("/v1/projects");
@@ -94,36 +99,38 @@ async function run(selectedCommand, args) {
       });
     case "validate-spec": {
       const spec = await readJsonFile(required(args, "file"));
-      validateSpec(spec);
+      validateEventSpec(spec);
       return { valid: true, eventType: spec.eventType };
     }
     case "create-schema": {
       const projectId = required(args, "project");
       const spec = await readJsonFile(required(args, "file"));
-      validateSpec(spec);
+      validateEventSpec(spec);
       return apiRequest(`/v1/projects/${encodeURIComponent(projectId)}/event-schemas`, {
         method: "POST",
         body: spec,
       });
     }
     case "create-token":
-      return apiRequest(`/v1/projects/${encodeURIComponent(required(args, "project"))}/ingest-tokens`, {
-        method: "POST",
-        body: { name: args.name ?? "production" },
-      });
+      return withSecretOutput(args, () =>
+        apiRequest(`/v1/projects/${encodeURIComponent(required(args, "project"))}/ingest-tokens`, {
+          method: "POST",
+          body: { name: args.name ?? "production" },
+        }));
     case "revoke-token":
       return apiRequest(
         `/v1/projects/${encodeURIComponent(required(args, "project"))}/ingest-tokens/${encodeURIComponent(required(args, "token"))}`,
         { method: "DELETE" },
       );
     case "create-wake-token":
-      return apiRequest(`/v1/projects/${encodeURIComponent(required(args, "project"))}/wake-tokens`, {
-        method: "POST",
-        body: {
-          name: args.name ?? "production",
-          ...(args["expires-at"] ? { expiresAt: args["expires-at"] } : {}),
-        },
-      });
+      return withSecretOutput(args, () =>
+        apiRequest(`/v1/projects/${encodeURIComponent(required(args, "project"))}/wake-tokens`, {
+          method: "POST",
+          body: {
+            name: args.name ?? "production",
+            ...(args["expires-at"] ? { expiresAt: args["expires-at"] } : {}),
+          },
+        }));
     case "revoke-wake-token":
       return apiRequest(
         `/v1/projects/${encodeURIComponent(required(args, "project"))}/wake-tokens/${encodeURIComponent(required(args, "token"))}`,
@@ -149,17 +156,17 @@ async function run(selectedCommand, args) {
     }
     case "validate-surface": {
       const surface = await readJsonFile(required(args, "file"));
-      validateSurface(surface);
+      validateSurfaceInput(surface);
       return { valid: true, type: surface.type };
     }
     case "upsert-surface": {
       const projectId = required(args, "project");
       const surfaceKey = required(args, "key");
-      if (!/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/u.test(surfaceKey)) {
+      if (surfaceKey.length > 80 || !/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/u.test(surfaceKey)) {
         throw new Error("--key must use lowercase letters, digits, dots, dashes, or underscores");
       }
       const surface = await readJsonFile(required(args, "file"));
-      validateSurface(surface);
+      validateSurfaceInput(surface);
       return apiRequest(
         `/v1/projects/${encodeURIComponent(projectId)}/surfaces/${encodeURIComponent(surfaceKey)}`,
         { method: "PUT", body: surface },
@@ -198,7 +205,7 @@ async function run(selectedCommand, args) {
       const manifest = await readJsonFile(required(args, "file"));
       validateDirectConnectionManifest(manifest);
       const deviceKeyId = required(args, "device-key-id").toLowerCase();
-      if (!/^[0-9a-f-]{36}$/u.test(deviceKeyId)) throw new Error("--device-key-id must be a UUID");
+      if (!isUUID(deviceKeyId)) throw new Error("--device-key-id must be a UUID");
       const encrypted = encryptDirectConnection(
         manifest,
         deviceKeyId,
@@ -294,102 +301,33 @@ function safeJson(value, fallback = "Server returned invalid JSON") {
   }
 }
 
-function validateSpec(value) {
-  if (!isRecord(value)) throw new Error("Event Spec must be a JSON object");
-  if (typeof value.eventType !== "string" || !/^[a-z0-9]+(?:\.[a-z0-9]+)*$/u.test(value.eventType)) {
-    throw new Error("eventType must be a dotted event name such as payment.success");
-  }
-  if (!isRecord(value.fields) || Object.keys(value.fields).length === 0) {
-    throw new Error("fields must contain at least one field definition");
-  }
-  for (const [name, rawDefinition] of Object.entries(value.fields)) {
-    if (!/^[A-Za-z][A-Za-z0-9_]*$/u.test(name)) throw new Error(`Invalid field name: ${name}`);
-    if (!isRecord(rawDefinition) || !FIELD_TYPES.has(rawDefinition.type)) {
-      throw new Error(`Unsupported type for field ${name}`);
-    }
-    if (rawDefinition.required !== undefined && typeof rawDefinition.required !== "boolean") {
-      throw new Error(`required must be boolean for field ${name}`);
-    }
-    if (rawDefinition.sensitive !== undefined && typeof rawDefinition.sensitive !== "boolean") {
-      throw new Error(`sensitive must be boolean for field ${name}`);
-    }
-    if (
-      rawDefinition.type === "enum" &&
-      (!Array.isArray(rawDefinition.values) || rawDefinition.values.length === 0 ||
-        rawDefinition.values.some((item) => !nonEmpty(item)))
-    ) {
-      throw new Error(`Enum field ${name} requires values`);
-    }
-  }
-  if (value.notification !== undefined) {
-    if (!isRecord(value.notification)) throw new Error("notification must be an object");
-    if (!nonEmpty(value.notification.title) || !nonEmpty(value.notification.body)) {
-      throw new Error("notification.title and notification.body are required");
-    }
-    if (value.notification.title.length > 240 || value.notification.body.length > 240) {
-      throw new Error("notification title and body must be at most 240 characters");
-    }
-    if (value.notification.priority !== undefined && !["normal", "high"].includes(value.notification.priority)) {
-      throw new Error("notification.priority must be normal or high");
-    }
-    const template = `${value.notification.title} ${value.notification.body} ${value.notification.subtitle ?? ""}`;
-    const tokenPattern = /\{\{\s*([A-Za-z][A-Za-z0-9_]*)(?:\s*\|\s*default:\s*(['"])(.*?)\2)?\s*\}\}/gu;
-    const matches = [...template.matchAll(tokenPattern)];
-    if (template.replace(tokenPattern, "").includes("{{") || template.replace(tokenPattern, "").includes("}}")) {
-      throw new Error("notification contains unsupported template syntax");
-    }
-    for (const match of matches) {
-      const field = match[1];
-      if (!value.fields[field]) throw new Error(`Notification references unknown field ${field}`);
-      if (value.fields[field].sensitive === true) throw new Error(`Notification references sensitive field ${field}`);
-    }
-  }
-}
-
-function validateTestEvent(value) {
-  if (!isRecord(value) || !nonEmpty(value.type) || !isRecord(value.data) || !nonEmpty(value.occurredAt)) {
-    throw new Error("Test event requires type, data, and occurredAt");
-  }
-  if (Number.isNaN(Date.parse(value.occurredAt))) throw new Error("occurredAt must be an ISO datetime");
-}
-
-function validateDirectConnectionManifest(value) {
-  if (!isRecord(value) || value.version !== 2) {
-    throw new Error("Direct connection manifest version must be 2");
-  }
-  bounded(value.connectionId, "connectionId", 120, true);
-  bounded(value.baseUrl, "baseUrl", 2048, true);
+async function withSecretOutput(args, operation) {
+  const outputPath = resolve(required(args, "secret-output"));
+  let handle;
   try {
-    const url = new URL(value.baseUrl);
-    if (url.protocol !== "https:" || url.username || url.password || !url.hostname) throw new Error();
-  } catch {
-    throw new Error("baseUrl must be a public HTTPS URL without embedded credentials");
-  }
-  if (!isRecord(value.endpoints)) throw new Error("endpoints is required");
-  for (const name of ["notification", "inbox", "surfaces"]) {
-    validateEndpointPath(value.endpoints[name], `endpoints.${name}`);
-  }
-  if (
-    !Array.isArray(value.capabilities)
-    || value.capabilities.length === 0
-    || value.capabilities.some((item) =>
-      !["notification_detail", "inbox", "surfaces"].includes(item))
-  ) {
-    throw new Error("capabilities must contain only notification_detail, inbox, and surfaces");
-  }
-  for (const capability of ["notification_detail", "inbox", "surfaces"]) {
-    if (!value.capabilities.includes(capability)) {
-      throw new Error(`capabilities must include ${capability}`);
+    handle = await open(outputPath, "wx", 0o600);
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "EEXIST") {
+      throw new Error(`--secret-output must be a new file: ${outputPath}`);
     }
+    throw new Error(`Cannot create --secret-output file ${outputPath}: ${error instanceof Error ? error.message : "unknown error"}`);
   }
-  if (!isRecord(value.project)) throw new Error("project is required");
-  bounded(value.project.id, "project.id", 120, true);
-  bounded(value.project.name, "project.name", 120, true);
-  bounded(value.project.icon, "project.icon", 120, true);
-  bounded(value.project.category, "project.category", 80, true);
-  if (value.project.logoUrl !== undefined) validateLogoUrl(value.project.logoUrl);
-  if (!Number.isInteger(value.project.displayOrder) || value.project.displayOrder < 0) {
-    throw new Error("project.displayOrder must be a non-negative integer");
+
+  try {
+    const result = await operation();
+    if (!isRecord(result) || !nonEmpty(result.token)) {
+      throw new Error("Bellwire did not return the expected one-time token");
+    }
+    await handle.writeFile(`${result.token}\n`, { encoding: "utf8" });
+    await handle.sync();
+    await handle.close();
+    const { token, ...publicResult } = result;
+    void token;
+    return { ...publicResult, secretStoredAt: outputPath };
+  } catch (error) {
+    await handle.close().catch(() => undefined);
+    await unlink(outputPath).catch(() => undefined);
+    throw error;
   }
 }
 
@@ -428,173 +366,6 @@ function encryptDirectConnection(manifest, deviceKeyId, agreementPublicKey) {
     ephemeralPublicKey: ephemeralPublicKey.toString("base64"),
     sealedBox: sealedBox.toString("base64"),
   };
-}
-
-function validateEndpointPath(value, name) {
-  if (!nonEmpty(value) || !value.startsWith("/") || value.startsWith("//")) {
-    throw new Error(`${name} must be an absolute URL path`);
-  }
-  try {
-    const parsed = new URL(value, "https://bellwire.invalid");
-    if (parsed.origin !== "https://bellwire.invalid") throw new Error();
-  } catch {
-    throw new Error(`${name} must be a valid absolute URL path`);
-  }
-}
-
-function validateOpaqueReference(value) {
-  if (!/^[A-Za-z0-9_-]{22,200}$/u.test(value)) {
-    throw new Error("--reference must be a 22-200 character URL-safe opaque value");
-  }
-}
-
-function validateSurface(value) {
-  if (!isRecord(value) || !SURFACE_TYPES.has(value.type)) {
-    throw new Error(`Surface type must be one of: ${[...SURFACE_TYPES].join(", ")}`);
-  }
-  bounded(value.title, "title", 80, true);
-  bounded(value.subtitle, "subtitle", 120, false);
-  validateAction(value.action);
-  validateLiveActivity(value.liveActivity);
-  switch (value.type) {
-    case "stats": validateMetrics(value.metrics, 8, false); break;
-    case "metrics": validateMetrics(value.metrics, 4, true); break;
-    case "progress": {
-      if (finite(value.percentage)) {
-        if (value.percentage < 0 || value.percentage > 100) throw new Error("percentage must be between 0 and 100");
-      } else if (!finite(value.value) || !finite(value.upperLimit) || value.upperLimit <= 0 || value.value < 0 || value.value > value.upperLimit) {
-        throw new Error("progress requires percentage or value with a positive upperLimit");
-      }
-      break;
-    }
-    case "segmented_progress":
-      if (!Number.isInteger(value.numberOfSteps) || value.numberOfSteps < 1 || value.numberOfSteps > 12) {
-        throw new Error("numberOfSteps must be between 1 and 12");
-      }
-      if (!Number.isInteger(value.currentStep) || value.currentStep < 0 || value.currentStep > value.numberOfSteps) {
-        throw new Error("currentStep must be between 0 and numberOfSteps");
-      }
-      bounded(value.stepLabel, "stepLabel", 80, false);
-      break;
-    case "alert":
-      bounded(value.message, "message", 240, true);
-      validateAdornment(value.icon, "icon", "symbol", 80);
-      validateAdornment(value.badge, "badge", "title", 24);
-      break;
-    case "timer":
-      if (!Number.isInteger(value.durationSeconds) || value.durationSeconds < 1 || value.durationSeconds > 604800) {
-        throw new Error("durationSeconds must be between 1 and 604800");
-      }
-      if (value.countsDown !== undefined && typeof value.countsDown !== "boolean") {
-        throw new Error("countsDown must be boolean");
-      }
-      break;
-    case "status":
-      oneOf(value.state, "state", ["neutral", "running", "success", "warning", "critical", "paused"]);
-      bounded(value.label, "label", 32, false);
-      break;
-    case "checklist": {
-      if (!Array.isArray(value.items) || value.items.length < 1 || value.items.length > 8) {
-        throw new Error("items must contain between 1 and 8 checklist entries");
-      }
-      const ids = new Set();
-      value.items.forEach((item, index) => {
-        if (!isRecord(item)) throw new Error(`items[${index}] must be an object`);
-        bounded(item.id, `items[${index}].id`, 64, true);
-        if (!/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/u.test(item.id)) {
-          throw new Error(`items[${index}].id must be a stable lowercase key`);
-        }
-        if (ids.has(item.id)) throw new Error("Checklist item IDs must be unique");
-        ids.add(item.id);
-        bounded(item.title, `items[${index}].title`, 80, true);
-        bounded(item.detail, `items[${index}].detail`, 120, false);
-        oneOf(
-          item.state,
-          `items[${index}].state`,
-          ["pending", "running", "completed", "failed", "skipped"],
-        );
-      });
-      break;
-    }
-    case "trend":
-      if (!Array.isArray(value.points) || value.points.length < 2 || value.points.length > 30) {
-        throw new Error("points must contain between 2 and 30 trend points");
-      }
-      value.points.forEach((point, index) => {
-        if (!isRecord(point)) throw new Error(`points[${index}] must be an object`);
-        bounded(point.label, `points[${index}].label`, 24, true);
-        if (!finite(point.value)) throw new Error(`points[${index}].value must be a finite number`);
-      });
-      oneOf(value.goal, "goal", ["up", "down", "neutral"]);
-      bounded(value.displayValue, "displayValue", 64, false);
-      bounded(value.unit, "unit", 16, false);
-      break;
-  }
-}
-
-function oneOf(value, name, allowed) {
-  if (!allowed.includes(value)) throw new Error(`${name} must be one of: ${allowed.join(", ")}`);
-}
-
-function validateMetrics(value, maximum, numeric) {
-  if (!Array.isArray(value) || value.length < 1 || value.length > maximum) {
-    throw new Error(`metrics must contain between 1 and ${maximum} items`);
-  }
-  value.forEach((metric, index) => {
-    if (!isRecord(metric)) throw new Error(`metrics[${index}] must be an object`);
-    bounded(metric.label, `metrics[${index}].label`, 40, true);
-    if (numeric ? !finite(metric.value) : !(finite(metric.value) || nonEmpty(metric.value))) {
-      throw new Error(`metrics[${index}].value has an invalid type`);
-    }
-    bounded(metric.unit, `metrics[${index}].unit`, 16, false);
-    validateColor(metric.color, `metrics[${index}].color`);
-  });
-}
-
-function validateAdornment(value, name, key, maximum) {
-  if (value === undefined) return;
-  if (!isRecord(value)) throw new Error(`${name} must be an object`);
-  bounded(value[key], `${name}.${key}`, maximum, true);
-  validateColor(value.color, `${name}.color`);
-}
-
-function validateAction(value) {
-  if (value === undefined) return;
-  if (!isRecord(value) || value.type !== "open_url") throw new Error("action.type must be open_url");
-  bounded(value.title, "action.title", 40, true);
-  bounded(value.url, "action.url", 2048, true);
-  try {
-    const url = new URL(value.url);
-    if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error();
-  } catch {
-    throw new Error("action.url must use http or https");
-  }
-}
-
-function validateLiveActivity(value) {
-  if (value === undefined) return;
-  if (!isRecord(value)) throw new Error("liveActivity must be an object");
-  bounded(value.sessionId, "liveActivity.sessionId", 80, true);
-  if (!/^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/u.test(value.sessionId)) {
-    throw new Error("liveActivity.sessionId must be a stable key");
-  }
-  oneOf(value.state, "liveActivity.state", ["active", "ended"]);
-}
-
-function validateColor(value, name) {
-  if (value !== undefined && !SURFACE_COLORS.has(value)) {
-    throw new Error(`${name} is not a supported color`);
-  }
-}
-
-function bounded(value, name, maximum, requiredValue) {
-  if (value === undefined && !requiredValue) return;
-  if (!nonEmpty(value)) throw new Error(`${name} is required`);
-  if (value.length > maximum) throw new Error(`${name} must be at most ${maximum} characters`);
-}
-
-function finite(value) {
-  return typeof value === "number" && Number.isFinite(value);
 }
 
 function required(args, key) {
@@ -648,19 +419,19 @@ Usage:
   bellwire.mjs <command> [options] [--json]
 
 Commands:
-  bind --code <6 digits> [--name <agent>]
+  bind --code <6 digits> [--name <agent>] --secret-output <new-file>
   list-projects
   list-direct-recoveries
   create-project --name <name> [--logo-url <https-url>] [--icon <sf-symbol>] [--category <name>]
   request-mode-change --project <id> --to private|hosted
-  update-project --project <id> [--logo-url <https-url> | --clear-logo] [--name <name>] [--status active|paused]
+  update-project --project <id> [--logo-url <https-url> | --clear-logo] [--name <name>] [--icon <sf-symbol>] [--category <name>] [--status active|paused]
   set-project-order --project <id> --order <integer>
   delete-project --project <id>
   validate-spec --file <event-spec.json>
   create-schema --project <id> --file <event-spec.json>
-  create-token --project <id> [--name <name>]
+  create-token --project <id> [--name <name>] --secret-output <new-file>
   revoke-token --project <id> --token <token-id>
-  create-wake-token --project <id> [--name <name>] [--expires-at <iso-date>]
+  create-wake-token --project <id> [--name <name>] [--expires-at <iso-date>] --secret-output <new-file>
   revoke-wake-token --project <id> --token <token-id>
   generate-reference
   send-wake --project <id> --reference <opaque-ref> --idempotency-key <key> [--priority normal|high]
@@ -679,5 +450,10 @@ Environment:
   BELLWIRE_AGENT_TOKEN  Management token (except bind and send-wake)
   BELLWIRE_WAKE_TOKEN   Private project wake-only runtime token
   BELLWIRE_API_URL      Override the hosted API URL
+
+Secret handling:
+  Token-returning commands require --secret-output. The CLI creates that file
+  exclusively with mode 0600, writes only the token there, and never prints the
+  token to stdout or stderr. Move it into the approved secret store promptly.
 `);
 }

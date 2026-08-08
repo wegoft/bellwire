@@ -5,6 +5,10 @@
   file, or the user's approved password manager.
 - Store each provider webhook signing secret separately from Bellwire tokens. Never reuse one provider's signing secret for another endpoint or environment.
 - Never add tokens to source, examples, fixtures, shell history, screenshots, issue text, or logs.
+- For `bind`, `create-token`, and `create-wake-token`, require
+  `--secret-output <new-file>`. Import the resulting `0600` file into the
+  approved secret store without printing it, then remove that exact temporary
+  file after successful import.
 - Give each project its own mode-specific runtime token. Never reuse a wake or
   Ingest Token across repositories.
 - Treat email, phone, name, IP address, customer ID, access token, and free-form user content as sensitive unless the user says otherwise.

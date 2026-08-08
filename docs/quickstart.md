@@ -24,21 +24,27 @@ once the enabled device registers, avoiding three sample notifications at once.
 ## Connect an Agent
 
 1. In Bellwire Settings, choose **Generate binding code**.
-2. In a clone of this repository, exchange the single-use six-digit code:
+2. Choose a temporary directory outside the repository, then exchange the
+   single-use six-digit code without printing the returned Agent Token:
 
    ```bash
+   bellwire_secret_dir="$(mktemp -d)"
    node skills/bellwire/scripts/bellwire.mjs bind \
      --code 123456 \
      --name "Codex on Mac" \
+     --secret-output "$bellwire_secret_dir/agent-token" \
      --json
    ```
 
-3. Save the returned `bw_agent_...` token in your password manager or local
-   secret store, then expose it only to the current shell:
+3. Import the `0600` token file into your password manager or local secret store
+   without printing it, then expose it only to the current shell:
 
    ```bash
-   export BELLWIRE_AGENT_TOKEN='bw_agent_REPLACE_ME'
+   export BELLWIRE_AGENT_TOKEN="$(<"$bellwire_secret_dir/agent-token")"
    ```
+
+   Remove that exact temporary token file after the approved secret store has
+   accepted it.
 
 4. Confirm the connection and create a real project. New projects are Private:
 

@@ -2,8 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { readFile } from "node:fs/promises";
-import { randomBytes, webcrypto } from "node:crypto";
+import { randomBytes, randomUUID, webcrypto } from "node:crypto";
 import { pathToFileURL } from "node:url";
+
+import {
+  isUUID,
+  validateDirectConnectionManifest,
+  validateDirectInboxResponse,
+  validateDirectSurfacesResponse,
+  validateOpaqueReference,
+  validatePrivateEvent,
+} from "./protocol-validation.mjs";
 
 const LIMITS = {
   notification: 64 * 1024,
@@ -13,7 +22,8 @@ const LIMITS = {
 
 export async function runDirectConformance(options) {
   const manifest = JSON.parse(await readFile(options.manifestPath, "utf8"));
-  validateManifest(manifest);
+  validateDirectConnectionManifest(manifest);
+  if (!isUUID(options.deviceKeyId)) throw new Error("--device-key-id must be a UUID");
   const privateKey = await importPrivateKey(options.signingPrivateKey);
   const checks = [];
   let securityCandidate;
@@ -22,14 +32,14 @@ export async function runDirectConformance(options) {
     if (!options.reference) {
       throw new Error("--reference is required for notification_detail conformance");
     }
-    validateReference(options.reference);
+    validateOpaqueReference(options.reference);
     const url = endpointURL(
       manifest,
       "notification",
       new URLSearchParams({ ref: options.reference }),
     );
     const value = await signedJSON(url, manifest.connectionId, options.deviceKeyId, privateKey, LIMITS.notification);
-    validatePrivateEvent(value, options.reference);
+    validatePrivateEvent(value.json, options.reference);
     securityCandidate = value.request;
     checks.push({ endpoint: "notification", ok: true, bytes: value.bytes });
   }
@@ -42,13 +52,7 @@ export async function runDirectConformance(options) {
       privateKey,
       LIMITS.inbox,
     );
-    if (!Array.isArray(value.json.events) || value.json.events.length > 50) {
-      throw new Error("Inbox response must contain at most 50 events");
-    }
-    for (const event of value.json.events) validatePrivateEvent({ json: event }, event.reference);
-    if (value.json.nextCursor !== null && value.json.nextCursor !== undefined) {
-      boundedString(value.json.nextCursor, "nextCursor", 1, 512);
-    }
+    validateDirectInboxResponse(value.json);
     securityCandidate ??= value.request;
     checks.push({ endpoint: "inbox", ok: true, bytes: value.bytes, events: value.json.events.length });
   }
@@ -61,9 +65,7 @@ export async function runDirectConformance(options) {
       privateKey,
       LIMITS.surfaces,
     );
-    if (!Array.isArray(value.json.surfaces)) {
-      throw new Error("Surfaces response must contain a surfaces array");
-    }
+    validateDirectSurfacesResponse(value.json, manifest.project.id);
     securityCandidate ??= value.request;
     checks.push({ endpoint: "surfaces", ok: true, bytes: value.bytes, surfaces: value.json.surfaces.length });
   }
@@ -141,25 +143,29 @@ async function signedRequest(
 }
 
 async function verifySecurityFailures(candidate, connectionId, keyId, privateKey) {
-  await expectUnauthorized(candidate.url, candidate.headers, "replayed nonce");
+  const fingerprints = [];
+  fingerprints.push(await expectUnauthorized(candidate.url, candidate.headers, "replayed nonce"));
 
   const stale = await signedRequest(candidate.url, connectionId, keyId, privateKey, {
     timestamp: String(Math.floor(Date.now() / 1_000) - 6 * 60),
   });
-  await expectUnauthorized(stale.url, stale.headers, "stale timestamp");
+  fingerprints.push(await expectUnauthorized(stale.url, stale.headers, "stale timestamp"));
 
   const unknownKey = await signedRequest(
     candidate.url,
     connectionId,
-    `${keyId}-unknown`,
+    randomUUID(),
     privateKey,
   );
-  await expectUnauthorized(unknownKey.url, unknownKey.headers, "unknown key");
+  fingerprints.push(await expectUnauthorized(unknownKey.url, unknownKey.headers, "unknown key"));
 
   const signedOriginal = await signedRequest(candidate.url, connectionId, keyId, privateKey);
   const tampered = new URL(signedOriginal.url);
   tampered.searchParams.set("bellwire_conformance_tampered", "1");
-  await expectUnauthorized(tampered, signedOriginal.headers, "tampered query");
+  fingerprints.push(await expectUnauthorized(tampered, signedOriginal.headers, "tampered query"));
+  if (new Set(fingerprints).size !== 1) {
+    throw new Error("Authentication failures must return the same HTTP 401 response");
+  }
 }
 
 async function expectUnauthorized(url, headers, label) {
@@ -167,27 +173,12 @@ async function expectUnauthorized(url, headers, label) {
     headers,
     signal: AbortSignal.timeout(8_000),
   });
-  await response.body?.cancel();
+  const body = await response.text();
   if (response.status !== 401) {
     throw new Error(`${label} must return the uniform HTTP 401 response, got ${response.status}`);
   }
-}
-
-function validateManifest(value) {
-  if (!isRecord(value) || value.version !== 2) throw new Error("Manifest version must be 2");
-  boundedString(value.connectionId, "connectionId", 1, 120);
-  const base = new URL(value.baseUrl);
-  if (base.protocol !== "https:" || base.username || base.password) {
-    throw new Error("baseUrl must be HTTPS without embedded credentials");
-  }
-  if (!isRecord(value.endpoints) || !Array.isArray(value.capabilities)) {
-    throw new Error("Manifest endpoints and capabilities are required");
-  }
-  for (const capability of value.capabilities) {
-    if (!["notification_detail", "inbox", "surfaces"].includes(capability)) {
-      throw new Error(`Unsupported capability: ${capability}`);
-    }
-  }
+  if (Buffer.byteLength(body) > 8 * 1024) throw new Error(`${label} returned an oversized authentication error`);
+  return `${response.headers.get("content-type") ?? ""}\n${body}`;
 }
 
 function endpointURL(manifest, name, search) {
@@ -203,51 +194,6 @@ function endpointURL(manifest, name, search) {
     for (const [key, value] of search) url.searchParams.set(key, value);
   }
   return url;
-}
-
-function validatePrivateEvent(value, expectedReference) {
-  const event = value.json ?? value;
-  if (!isRecord(event)) throw new Error("Private event must be a JSON object");
-  validateReference(event.reference);
-  if (expectedReference && event.reference !== expectedReference) {
-    throw new Error("Notification response reference does not match the request");
-  }
-  boundedString(event.eventType, "eventType", 1, 120);
-  boundedString(event.title, "title", 1, 240);
-  boundedString(event.body, "body", 1, 1_000);
-  if (event.subtitle !== undefined) boundedString(event.subtitle, "subtitle", 0, 240);
-  if (typeof event.occurredAt !== "string" || Number.isNaN(Date.parse(event.occurredAt))) {
-    throw new Error("occurredAt must be an ISO datetime");
-  }
-  if (!isRecord(event.data)) throw new Error("data must be a JSON object");
-  if (event.deepLink !== undefined && event.deepLink !== null) {
-    boundedString(event.deepLink, "deepLink", 1, 2_048);
-    const deepLink = new URL(event.deepLink);
-    if (!["https:", "bellwire:"].includes(deepLink.protocol)
-        || deepLink.username
-        || deepLink.password) {
-      throw new Error("deepLink must be an HTTPS or bellwire URL without credentials");
-    }
-  }
-  if (event.logoUrl !== undefined && event.logoUrl !== null) {
-    boundedString(event.logoUrl, "logoUrl", 1, 2_048);
-    const logo = new URL(event.logoUrl);
-    if (logo.protocol !== "https:" || logo.username || logo.password || !logo.hostname) {
-      throw new Error("logoUrl must be a public HTTPS URL");
-    }
-  }
-}
-
-function validateReference(value) {
-  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{22,200}$/u.test(value)) {
-    throw new Error("reference must be a 22-200 character URL-safe opaque value");
-  }
-}
-
-function boundedString(value, name, minimum, maximum) {
-  if (typeof value !== "string" || value.length < minimum || value.length > maximum) {
-    throw new Error(`${name} must contain ${minimum}-${maximum} characters`);
-  }
 }
 
 async function importPrivateKey(encoded) {

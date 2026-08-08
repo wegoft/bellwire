@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const templatesRoot = join(repositoryRoot, "examples/templates");
+const skillAssetsRoot = join(repositoryRoot, "skills/bellwire/assets");
 const cli = join(repositoryRoot, "skills/bellwire/scripts/bellwire.mjs");
 
 describe("public integration examples", () => {
@@ -53,12 +54,15 @@ describe("public integration examples", () => {
 
   it("keeps executable examples syntactically valid and free of token-shaped values", () => {
     const nodeExample = join(repositoryRoot, "examples/node/send-event.mjs");
+    const privateNodeExample = join(skillAssetsRoot, "examples/node/private-direct.mjs");
     const shellExample = join(repositoryRoot, "examples/shell/send-event.sh");
     expect(spawnSync(process.execPath, ["--check", nodeExample]).status).toBe(0);
+    expect(spawnSync(process.execPath, ["--check", privateNodeExample]).status).toBe(0);
     expect(spawnSync("bash", ["-n", shellExample]).status).toBe(0);
 
     const publicSources = [
       readFileSync(nodeExample, "utf8"),
+      readFileSync(privateNodeExample, "utf8"),
       readFileSync(shellExample, "utf8"),
       ...readdirSync(templatesRoot).map((name) => readFileSync(join(templatesRoot, name), "utf8")),
     ].join("\n");
@@ -79,7 +83,7 @@ describe("public integration examples", () => {
         "--agreement-public-key",
         publicKey.toString("base64"),
         "--file",
-        join(templatesRoot, "direct-connection.manifest.json"),
+        join(skillAssetsRoot, "templates/direct-connection.manifest.json"),
         "--json",
       ],
       { cwd: repositoryRoot, encoding: "utf8" },
