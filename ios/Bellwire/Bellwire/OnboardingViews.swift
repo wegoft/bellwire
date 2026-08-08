@@ -6,6 +6,7 @@ struct WelcomeView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
     @State private var mascotState: MascotState = .idle
 
     var body: some View {
@@ -17,7 +18,7 @@ struct WelcomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: BellwireSpacing.compact) {
-                        Text("Bellwire")
+                        Text(AppConfig.displayName)
                             .bellwireTechnicalLabel()
                         Spacer()
                     }
@@ -30,7 +31,10 @@ struct WelcomeView: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityAddTraits(.isHeader)
 
-                        Text("Bellwire is wired up by your AI Agent. Codex, Claude Code, and other agents connect project events to your phone — no notification code or webhook setup required.")
+                        Text(AppConfig.branded(
+                            "Bellwire is wired up by your AI Agent. Codex, Claude Code, and other agents connect project events to your phone — no notification code or webhook setup required.",
+                            locale: locale
+                        ))
                             .font(.body)
                             .foregroundStyle(BellwireTheme.secondaryInk)
                             .lineSpacing(3)
@@ -97,12 +101,22 @@ struct WelcomeView: View {
                                 .foregroundStyle(BellwireTheme.mutedInk)
                         }
 
-                        Text("By continuing, you agree to Bellwire’s [Terms of Service](https://bellwire.app/terms) and [Privacy Policy](https://bellwire.app/privacy). Sensitive fields stay redacted until you reveal them.")
-                            .font(.footnote)
-                            .foregroundStyle(BellwireTheme.mutedInk)
-                            .multilineTextAlignment(.center)
-                            .lineSpacing(2)
-                            .fixedSize(horizontal: false, vertical: true)
+                        VStack(spacing: BellwireSpacing.micro) {
+                            Text(AppConfig.branded(
+                                "By continuing, you agree to Bellwire’s policies.",
+                                locale: locale
+                            ))
+                            HStack(spacing: BellwireSpacing.standard) {
+                                Link("Terms of Service", destination: AppConfig.termsURL)
+                                Link("Privacy Policy", destination: AppConfig.privacyURL)
+                            }
+                            Text("Sensitive fields stay redacted until you reveal them.")
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(BellwireTheme.mutedInk)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.top, 34)
                     .padding(.bottom, BellwireSpacing.roomy)
@@ -162,6 +176,7 @@ private struct WelcomePreviewRow: View {
 
 struct NotificationOnboardingView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.locale) private var locale
     @Binding var isComplete: Bool
     @State private var isRequesting = false
 
@@ -180,7 +195,7 @@ struct NotificationOnboardingView: View {
                     )
                     .padding(.top, 28)
 
-                    Text("Let Bellwire ring\nwhen it matters.")
+                    Text(AppConfig.branded("Let Bellwire ring\nwhen it matters.", locale: locale))
                         .font(BellwireTypography.pageTitle)
                         .tracking(-0.6)
                         .foregroundStyle(BellwireTheme.ink)

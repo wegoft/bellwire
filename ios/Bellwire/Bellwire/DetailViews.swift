@@ -432,7 +432,7 @@ struct ProjectDetailView: View {
                                 .foregroundStyle(BellwireTheme.danger)
                         }
                     } else {
-                        Text("Bellwire Cloud stores Event, Inbox, Surface, and detailed notification content according to your plan retention.")
+                        Text("\(AppConfig.hostedServiceDisplayName) stores Event, Inbox, Surface, and detailed notification content according to your plan retention.")
                             .font(.caption)
                             .foregroundStyle(BellwireTheme.secondaryInk)
                     }
@@ -450,7 +450,7 @@ struct ProjectDetailView: View {
             VStack(alignment: .leading, spacing: BellwireSpacing.small) {
                 SectionHeaderView(
                     title: "Plan & usage",
-                    hint: entitlement.plan == "pro" ? "Pro" : "Free"
+                    hint: entitlement.planDisplayName
                 )
                 VStack(alignment: .leading, spacing: BellwireSpacing.standard) {
                     HStack {
@@ -776,7 +776,7 @@ struct ProjectDetailView: View {
     }
 
     private func export(_ project: ProjectOverview) {
-        guard model.entitlement?.hasPro == true else {
+        guard model.canExportProjects else {
             Task { await model.captureProductEvent("upgrade_clicked", source: "project_export") }
             showsPaywall = true
             return
@@ -798,7 +798,7 @@ struct ProjectDetailView: View {
     }
 
     private func toggleLiveActivity(_ surface: LiveSurfaceRecord) {
-        guard model.entitlement?.hasPro == true else {
+        guard model.canUseLiveActivities else {
             Task { await model.captureProductEvent("upgrade_clicked", source: "live_activity") }
             showsPaywall = true
             return

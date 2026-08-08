@@ -8,6 +8,7 @@ struct BellwireRefreshIndicator: View {
     let isCompleting: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
 
     var body: some View {
         MascotView(
@@ -44,7 +45,7 @@ struct BellwireRefreshIndicator: View {
         if isCompleting {
             Text("Refresh complete")
         } else {
-            Text("Refreshing Bellwire")
+            Text(AppConfig.branded("Refreshing Bellwire", locale: locale))
         }
     }
 

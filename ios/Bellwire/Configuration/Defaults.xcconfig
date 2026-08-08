@@ -8,9 +8,18 @@ BELLWIRE_EXTENSION_BUNDLE_ID = $(BELLWIRE_APP_BUNDLE_ID).NotificationService
 BELLWIRE_WIDGET_BUNDLE_ID = $(BELLWIRE_APP_BUNDLE_ID).Widgets
 BELLWIRE_APP_GROUP = group.$(BELLWIRE_APP_BUNDLE_ID).shared
 BELLWIRE_URL_SCHEME = bellwire
+BELLWIRE_APP_DISPLAY_NAME = Bellwire
+BELLWIRE_APP_ICON_NAME = AppIcon
+BELLWIRE_BILLING_MODE = app_store
+BELLWIRE_PRO_MONTHLY_PRODUCT_ID = app.bellwire.pro.monthly
+BELLWIRE_PRO_YEARLY_PRODUCT_ID = app.bellwire.pro.yearly
+BELLWIRE_SUPPORT_EMAIL = feedback@bellwire.app
 
 // The empty $() keeps // from being parsed as an xcconfig comment.
 BELLWIRE_API_BASE_URL = https:/$()/api.bellwire.app
 BELLWIRE_AUTH_BASE_URL = https:/$()/auth.bellwire.app
+BELLWIRE_PRIVACY_URL = https:/$()/bellwire.app/privacy
+BELLWIRE_TERMS_URL = https:/$()/bellwire.app/terms
+BELLWIRE_SUPPORT_URL = https:/$()/bellwire.app/support
 
 #include? "Local.xcconfig"

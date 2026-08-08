@@ -407,6 +407,7 @@ enum EventFilter: String, CaseIterable, Identifiable {
 }
 
 private struct FirstSessionActivationView: View {
+    @Environment(\.locale) private var locale
     let isGeneratingBinding: Bool
     let isCreatingHostedDemo: Bool
     let connectAgent: () -> Void
@@ -482,10 +483,16 @@ private struct FirstSessionActivationView: View {
                 }
                 .buttonStyle(PressableButtonStyle())
                 .disabled(isGeneratingBinding || isCreatingHostedDemo)
-                .accessibilityHint("Creates a Hosted sample in Bellwire Cloud")
+                .accessibilityHint(AppConfig.branded(
+                    "Creates a Hosted sample in Bellwire Cloud",
+                    locale: locale
+                ))
 
                 Label {
-                    Text("Sample content is stored in Bellwire Cloud. Delete the demo at any time.")
+                    Text(AppConfig.branded(
+                        "Sample content is stored in Bellwire Cloud. Delete the demo at any time.",
+                        locale: locale
+                    ))
                         .fixedSize(horizontal: false, vertical: true)
                 } icon: {
                     Image(systemName: "cloud.fill")

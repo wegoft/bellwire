@@ -44,6 +44,8 @@ describe("multi-license boundaries", () => {
       expect(policy).toContain(identifier);
     }
     expect(policy).toContain("docs/private/**");
+    expect(policy).toContain(".agents/skills/swiftui-pro/**");
+    expect(policy).toContain("docs/brand/assets/**");
     expect(policy).toMatch(/Bellwire app icon\s+files remain brand assets/);
     expect(read("CHANGELOG.md")).toContain(
       "SPDX-License-Identifier: Apache-2.0",
@@ -51,6 +53,16 @@ describe("multi-license boundaries", () => {
     expect(read("TRADEMARK.md")).toMatch(
       /must use their own app name, icon,\s+Bundle IDs, URL scheme, signing identity, and service domain/,
     );
+  });
+
+  it("ships the bundled SwiftUI skill's upstream MIT notice", () => {
+    const license = read(".agents/skills/swiftui-pro/LICENSE");
+    const notices = read("THIRD_PARTY_NOTICES.md");
+    expect(license).toContain("MIT License");
+    expect(license).toContain("Copyright (c) 2026 Paul Hudson");
+    expect(notices).toContain("SwiftUI-Agent-Skill");
+    expect(notices).toContain("be297e146e9080167780afabeee896873c6fc1c5");
+    expect(notices).toContain("CycloneDX npm SBOM");
   });
 
   it("marks Workers, D1, tooling, and JS/TS tests as AGPL", () => {

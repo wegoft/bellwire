@@ -16,6 +16,7 @@ wrangler.auth.self-host.toml
 wrangler.*.local.toml
 .wrangler/
 ios/Bellwire/Configuration/Local.xcconfig
+ios/Bellwire/Bellwire/Assets.xcassets/SelfHostedAppIcon.appiconset/
 *.local
 *.p8
 

@@ -47,6 +47,8 @@
 		B00000000000000000000027 /* TrendSurfaceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000032 /* TrendSurfaceCard.swift */; };
 		B10000000000000000000001 /* BellwireRefreshIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000001 /* BellwireRefreshIndicator.swift */; };
 		B10000000000000000000002 /* BellwireRefreshScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000002 /* BellwireRefreshScrollView.swift */; };
+		BT0000000000000000000001 /* EntitlementCapabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT0000000000000000000001 /* EntitlementCapabilityTests.swift */; };
+		BT0000000000000000000002 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FT0000000000000000000003 /* XCTest.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -63,6 +65,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = A00000000000000000000003;
 			remoteInfo = BellwireWidgets;
+		};
+		HT0000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A30000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A00000000000000000000001;
+			remoteInfo = Bellwire;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -132,6 +141,9 @@
 		F00000000000000000000032 /* TrendSurfaceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendSurfaceCard.swift; sourceTree = "<group>"; };
 		F10000000000000000000001 /* BellwireRefreshIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BellwireRefreshIndicator.swift; sourceTree = "<group>"; };
 		F10000000000000000000002 /* BellwireRefreshScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BellwireRefreshScrollView.swift; sourceTree = "<group>"; };
+		FT0000000000000000000001 /* EntitlementCapabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementCapabilityTests.swift; sourceTree = "<group>"; };
+		FT0000000000000000000002 /* BellwireTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BellwireTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FT0000000000000000000003 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -153,6 +165,14 @@
 			files = ();
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DT0000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BT0000000000000000000002 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -164,6 +184,7 @@
 				E00000000000000000000006 /* BellwireShared */,
 				E00000000000000000000004 /* BellwireNotificationService */,
 				E00000000000000000000007 /* BellwireWidgets */,
+				ET0000000000000000000001 /* BellwireTests */,
 				E00000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -217,6 +238,7 @@
 				F00000000000000000000011 /* Bellwire.app */,
 				F00000000000000000000016 /* BellwireNotificationService.appex */,
 				F00000000000000000000026 /* BellwireWidgets.appex */,
+				FT0000000000000000000002 /* BellwireTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -256,6 +278,15 @@
 				F00000000000000000000025 /* BellwireWidgets.entitlements */,
 			);
 			path = BellwireWidgets;
+			sourceTree = "<group>";
+		};
+		ET0000000000000000000001 /* BellwireTests */ = {
+			isa = PBXGroup;
+			children = (
+				FT0000000000000000000001 /* EntitlementCapabilityTests.swift */,
+				FT0000000000000000000003 /* XCTest.framework */,
+			);
+			path = BellwireTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -310,6 +341,23 @@
 			productReference = F00000000000000000000026 /* BellwireWidgets.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		AT0000000000000000000001 /* BellwireTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CT0000000000000000000001 /* Build configuration list for PBXNativeTarget "BellwireTests" */;
+			buildPhases = (
+				AT0000000000000000000002 /* Sources */,
+				DT0000000000000000000001 /* Frameworks */,
+				AT0000000000000000000003 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = (
+				GT0000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = BellwireTests;
+			productName = BellwireTests;
+			productReference = FT0000000000000000000002 /* BellwireTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -323,6 +371,7 @@
 					A00000000000000000000001 = { CreatedOnToolsVersion = 26.0; };
 					A00000000000000000000002 = { CreatedOnToolsVersion = 26.0; };
 					A00000000000000000000003 = { CreatedOnToolsVersion = 26.0; };
+					AT0000000000000000000001 = { CreatedOnToolsVersion = 26.0; TestTargetID = A00000000000000000000001; };
 				};
 			};
 			buildConfigurationList = C00000000000000000000001 /* Build configuration list for PBXProject "Bellwire" */;
@@ -338,6 +387,7 @@
 				A00000000000000000000001 /* Bellwire */,
 				A00000000000000000000002 /* BellwireNotificationService */,
 				A00000000000000000000003 /* BellwireWidgets */,
+				AT0000000000000000000001 /* BellwireTests */,
 			);
 		};
 /* End PBXProject section */
@@ -386,6 +436,12 @@
 			files = (
 				B0000000000000000000001E /* Localizable.strings in Resources */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AT0000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
@@ -447,6 +503,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AT0000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BT0000000000000000000001 /* EntitlementCapabilityTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -459,6 +523,11 @@
 			isa = PBXTargetDependency;
 			target = A00000000000000000000003 /* BellwireWidgets */;
 			targetProxy = H00000000000000000000002 /* PBXContainerItemProxy */;
+		};
+		GT0000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A00000000000000000000001 /* Bellwire */;
+			targetProxy = HT0000000000000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -495,7 +564,7 @@
 			VALIDATE_PRODUCT = YES;
 		}; name = Release; };
 		C20000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
-			ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+			ASSETCATALOG_COMPILER_APPICON_NAME = "$(BELLWIRE_APP_ICON_NAME)";
 			ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 			CODE_SIGN_ENTITLEMENTS = Bellwire/Bellwire.entitlements;
 			CODE_SIGN_STYLE = Automatic;
@@ -516,7 +585,7 @@
 			TARGETED_DEVICE_FAMILY = 1;
 		}; name = Debug; };
 		C20000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
-			ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+			ASSETCATALOG_COMPILER_APPICON_NAME = "$(BELLWIRE_APP_ICON_NAME)";
 			ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 			CODE_SIGN_ENTITLEMENTS = Bellwire/Bellwire.entitlements;
 			CODE_SIGN_STYLE = Automatic;
@@ -612,6 +681,30 @@
 			SWIFT_VERSION = 5.0;
 			TARGETED_DEVICE_FAMILY = 1;
 		}; name = Release; };
+		CT0000000000000000000002 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
+			BUNDLE_LOADER = "$(TEST_HOST)";
+			CODE_SIGN_STYLE = Automatic;
+			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
+			GENERATE_INFOPLIST_FILE = YES;
+			IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+			PRODUCT_BUNDLE_IDENTIFIER = "$(BELLWIRE_APP_BUNDLE_ID).Tests";
+			PRODUCT_NAME = "$(TARGET_NAME)";
+			SWIFT_VERSION = 5.0;
+			TARGETED_DEVICE_FAMILY = 1;
+			TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Bellwire.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Bellwire";
+		}; name = Debug; };
+		CT0000000000000000000003 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
+			BUNDLE_LOADER = "$(TEST_HOST)";
+			CODE_SIGN_STYLE = Automatic;
+			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
+			GENERATE_INFOPLIST_FILE = YES;
+			IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+			PRODUCT_BUNDLE_IDENTIFIER = "$(BELLWIRE_APP_BUNDLE_ID).Tests";
+			PRODUCT_NAME = "$(TARGET_NAME)";
+			SWIFT_VERSION = 5.0;
+			TARGETED_DEVICE_FAMILY = 1;
+			TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Bellwire.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Bellwire";
+		}; name = Release; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -636,6 +729,12 @@
 		C00000000000000000000004 /* Build configuration list for PBXNativeTarget "BellwireWidgets" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (C40000000000000000000001 /* Debug */, C40000000000000000000002 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CT0000000000000000000001 /* Build configuration list for PBXNativeTarget "BellwireTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (CT0000000000000000000002 /* Debug */, CT0000000000000000000003 /* Release */);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};

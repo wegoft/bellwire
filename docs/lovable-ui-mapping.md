@@ -1,12 +1,12 @@
-# Bellwire Lovable → Native iOS UI Mapping
+# Bellwire Lovable → Native iOS UI Mapping (historical)
 
 > [!IMPORTANT]
 > 本文保留旧 Lovable 到原生 iOS 的功能映射和业务逻辑边界。新的视觉主题、字体、Surface、吉祥物使用和逐屏布局以 [Bellwire UI 重构总纲](./brand/ui-redesign-blueprint.md) 为准；旧暖纸色与衬线视觉方向不再作为实现依据。
 
 ## Scope and source of truth
 
-- Design reference (read-only): `/Users/xwchris/projects/agent-whisper-sync`, HEAD `7ac14e8f46b9df97f4c6159e2571e3b73d4076e0`.
-- Native app (editable): `/Users/xwchris/projects/agentpush/ios/Bellwire`.
+- Design reference (historical): the former `agent-whisper-sync` repository at commit `7ac14e8f46b9df97f4c6159e2571e3b73d4076e0`.
+- Native app: [`../ios/Bellwire`](../ios/Bellwire).
 - Functional source of truth: the existing Swift models, `AppModel`, `APIClient`, Keychain session, APNs delegate, deep-link handling, and server responses.
 - Visual source of truth: Lovable `src/routes/index.tsx`, `src/styles.css`, and `src/routes/__root.tsx`.
 - The Lovable phone frame, fake status bar/notch, showcase captions, fixed browser dimensions, hover behavior, and web backdrop implementation are explicitly excluded.
@@ -148,12 +148,12 @@ Dynamic metrics use monospaced digits. Text uses semantic styles or `@ScaledMetr
 
 ## 9. Risks and mitigations
 
-1. **All iOS source is currently untracked.** There is no Git baseline for per-line restoration. Limit edits to known UI files and verify non-UI file hashes/status remain unchanged.
+1. **This document is historical.** Treat the current tracked Swift sources and tests as authoritative; do not infer implementation status from this original migration checklist.
 2. **Projects have no dedicated unread/latest-event fields.** Derive badges/latest event from the already loaded `events` collection; do not fabricate values.
 3. **Running status is not on `ProjectSummary`.** Derive a running affordance only from matching progress/segmented/timer live surfaces; otherwise show the real project status.
 4. **Event schema version is not returned in `EventDetail`.** Do not invent a version. Show the event type; omit version or label it only where a real schema record can be matched.
 5. **Rotate endpoint is unsupported.** Keep endpoint copy; do not surface an enabled Rotate control.
-6. **Privacy/Terms URLs are not present in current configuration.** Do not invent URLs. Keep legal copy non-interactive or mark the row unavailable until a real route is configured.
+6. **Privacy/Terms URLs are deployment configuration.** Use `AppConfig` values generated through xcconfig; do not hard-code fork-specific legal endpoints in Swift.
 7. **Offline is not separately modeled.** Existing connection errors are presented as actionable offline/error state while preserving loaded content when available.
 8. **Notification denial after onboarding.** Settings must expose real permission state and open the native iOS Settings app.
 9. **Small devices and Dynamic Type.** Avoid fixed screen heights, let cards wrap, keep controls at least 44pt, and use scrollable onboarding content for compact height.

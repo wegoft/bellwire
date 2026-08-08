@@ -47,6 +47,7 @@ export interface Env {
   APNS_TEAM_ID?: string;
   APNS_BUNDLE_ID?: string;
   APP_URL_SCHEME?: string;
+  APP_DISPLAY_NAME?: string;
   APNS_PRIVATE_KEY?: string;
   APNS_ENVIRONMENT?: "sandbox" | "production";
   ENTITLEMENT_ENFORCEMENT_MODE?: "disabled" | "shadow" | "enforce";
@@ -113,6 +114,7 @@ export default {
     const apnsForEnvironment = (environment: "sandbox" | "production") => apnsClients.get({
       bundleId: requiredEnv(env.APNS_BUNDLE_ID, "APNS_BUNDLE_ID"),
       urlScheme: env.APP_URL_SCHEME ?? "bellwire",
+      appName: env.APP_DISPLAY_NAME?.trim() || "Bellwire",
       environment,
     }, providerTokens);
     const processor = new DeliveryProcessor(repository, apnsForEnvironment);

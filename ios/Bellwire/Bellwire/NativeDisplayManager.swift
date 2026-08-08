@@ -221,7 +221,7 @@ final class NativeDisplayManager {
         return BellwireNativeSurface(
             id: surface.id,
             projectID: surface.projectId,
-            projectName: surface.project?.name ?? "Bellwire",
+            projectName: surface.project?.name ?? AppConfig.displayName,
             projectIcon: surface.project?.icon ?? "rectangle.3.group",
             surfaceKey: surface.surfaceKey,
             type: surface.type,

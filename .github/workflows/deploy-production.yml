@@ -33,9 +33,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
@@ -49,6 +49,8 @@ jobs:
         run: npm run test:worker
       - name: Build production Workers without uploading
         run: npm run build:production
+      - name: Check forward-compatible D1 migrations
+        run: npm run migrations:check
 
   deploy:
     name: Deploy Auth then API
@@ -58,19 +60,20 @@ jobs:
     environment: production
     env:
       CI: "true"
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
       - name: Install dependencies
         run: npm ci
       - name: Require Cloudflare deployment credentials
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -78,6 +81,9 @@ jobs:
           test -n "${CLOUDFLARE_API_TOKEN:?}"
       - name: Capture rollback versions
         id: rollback_versions
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -89,18 +95,30 @@ jobs:
           echo "auth_version=$auth_version" >> "$GITHUB_OUTPUT"
           echo "api_version=$api_version" >> "$GITHUB_OUTPUT"
       - name: Apply Auth D1 migrations
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npm run d1:migrate:auth:production
       - name: Deploy Auth Worker
         id: deploy_auth
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: >-
           npm run deploy:auth:production --
           --message "GitHub ${GITHUB_SHA}: deploy Bellwire Auth"
       - name: Verify Auth production boundary
         run: npm run verify:auth:production
       - name: Apply business D1 migrations
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npm run d1:migrate:api:production
       - name: Deploy API Worker
         id: deploy_api
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: >-
           npm run deploy:api:production --
           --message "GitHub ${GITHUB_SHA}: deploy Bellwire API"
@@ -118,8 +136,11 @@ jobs:
             echo "- API: https://api.bellwire.app/health"
             echo "- Order: Auth D1 → Auth Worker → Auth verification → Business D1 → API Worker → full verification"
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Roll back deployed Worker versions after failure
+      - name: Roll back Worker code after failure; D1 migrations stay forward-only
         if: ${{ failure() && (steps.deploy_auth.outcome == 'success' || steps.deploy_api.outcome == 'success') }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail

@@ -23,7 +23,9 @@ npm ci
 npm run lint
 npm run typecheck
 npm test
+npm run migrations:check
 npm run build
+npm run ios:test:unit
 npm run ios:build
 ```
 
@@ -46,7 +48,8 @@ git commit -s
 
 The `Signed-off-by` line certifies the contribution under the
 [Developer Certificate of Origin](https://developercertificate.org/). Do not
-sign off on code you do not have the right to contribute.
+sign off on code you do not have the right to contribute. Pull requests run an
+automated DCO check; bot-authored dependency updates are exempt.
 
 ## Contribution licensing
 

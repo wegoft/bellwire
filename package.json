@@ -1,12 +1,14 @@
 {
   "name": "bellwire",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "private": true,
   "license": "SEE LICENSE IN LICENSE.md",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "dev:auth": "wrangler dev -c wrangler.auth.toml",
+    "dev": "wrangler dev -c wrangler.dev.toml",
+    "dev:auth": "wrangler dev -c wrangler.auth.dev.toml",
+    "dev:stack": "node scripts/dev-stack.mjs",
+    "dev:smoke": "node scripts/dev-stack.mjs --smoke",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -20,14 +22,18 @@
     "ios:release": "node scripts/app-store-release.mjs",
     "build": "wrangler deploy --dry-run --outdir dist && wrangler deploy --dry-run --outdir dist-auth -c wrangler.auth.toml",
     "build:production": "wrangler deploy --dry-run --outdir dist -c wrangler.production.toml && wrangler deploy --dry-run --outdir dist-auth -c wrangler.auth.production.toml",
-    "d1:migrate:local": "wrangler d1 migrations apply DB --local && wrangler d1 migrations apply AUTH_DB --local -c wrangler.auth.toml",
+    "d1:migrate:local": "wrangler d1 migrations apply DB --local -c wrangler.dev.toml && wrangler d1 migrations apply AUTH_DB --local -c wrangler.auth.dev.toml",
+    "migrations:check": "node scripts/check-migrations.mjs",
+    "dco:check": "node scripts/check-dco.mjs",
+    "release:check": "node scripts/check-release.mjs",
     "d1:migrate:auth:production": "wrangler d1 migrations apply AUTH_DB --remote -c wrangler.auth.production.toml",
     "d1:migrate:api:production": "wrangler d1 migrations apply DB --remote -c wrangler.production.toml",
     "deploy:auth:production": "wrangler deploy --strict -c wrangler.auth.production.toml",
     "deploy:api:production": "wrangler deploy --strict -c wrangler.production.toml",
     "verify:auth:production": "node scripts/verify-cloudflare-production.mjs --auth-only",
     "verify:production": "node scripts/verify-cloudflare-production.mjs",
-    "ios:build": "xcodebuild -project ios/Bellwire/Bellwire.xcodeproj -scheme Bellwire -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build"
+    "ios:build": "xcodebuild -quiet -project ios/Bellwire/Bellwire.xcodeproj -scheme Bellwire -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build",
+    "ios:test:unit": "node scripts/ios-test.mjs"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",
@@ -46,6 +52,9 @@
     "typescript-eslint": "^8.38.0",
     "vitest": "^3.2.4",
     "wrangler": "^4.25.0"
+  },
+  "overrides": {
+    "undici": "^7.29.0"
   },
   "engines": {
     "node": ">=22"

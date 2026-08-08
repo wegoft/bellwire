@@ -122,6 +122,7 @@ struct MainTabView: View {
 }
 
 private struct InitialDashboardFailureView: View {
+    @Environment(\.locale) private var locale
     let message: String
     let isRetrying: Bool
     let retry: () -> Void
@@ -139,7 +140,7 @@ private struct InitialDashboardFailureView: View {
                 .accessibilityHidden(true)
 
             VStack(spacing: BellwireSpacing.compact) {
-                Text("Bellwire couldn’t load")
+                Text(AppConfig.branded("Bellwire couldn’t load", locale: locale))
                     .font(.title2)
                     .bold()
                     .foregroundStyle(BellwireTheme.ink)

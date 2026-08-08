@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+import Combine
 import Foundation
 import OSLog
 import StoreKit
@@ -11,8 +12,8 @@ enum BellwirePurchasePlan: String, CaseIterable, Identifiable {
 
     var productID: String {
         switch self {
-        case .yearly: return "app.bellwire.pro.yearly"
-        case .monthly: return "app.bellwire.pro.monthly"
+        case .yearly: AppConfig.yearlyProductID
+        case .monthly: AppConfig.monthlyProductID
         }
     }
 
@@ -63,12 +64,17 @@ final class PurchaseManager: ObservableObject {
 
     var hasPro: Bool {
         serverEntitlement?.hasPro
-            ?? !purchasedProductIDs.isDisjoint(with: Self.productIDs)
+            ?? (!AppConfig.billingEnabled
+                || !purchasedProductIDs.isDisjoint(with: Self.productIDs))
     }
 
-    static let productIDs = Set(BellwirePurchasePlan.allCases.map(\.productID))
+    static var productIDs: Set<String> {
+        guard AppConfig.billingEnabled else { return [] }
+        return Set(BellwirePurchasePlan.allCases.map(\.productID))
+    }
 
     init() {
+        guard AppConfig.billingEnabled else { return }
         updatesTask = Task { [weak self] in
             for await update in Transaction.updates {
                 guard let self else { return }
@@ -90,6 +96,11 @@ final class PurchaseManager: ObservableObject {
     }
 
     func prepare() async {
+        guard AppConfig.billingEnabled else {
+            loadState = .loaded
+            await refreshServerEntitlement()
+            return
+        }
         async let products: Void = loadProducts()
         async let entitlements: Void = refreshEntitlements()
         _ = await (products, entitlements)
@@ -105,6 +116,11 @@ final class PurchaseManager: ObservableObject {
     }
 
     func loadProducts() async {
+        guard AppConfig.billingEnabled else {
+            loadState = .loaded
+            products = [:]
+            return
+        }
         guard loadState != .loading else { return }
         loadState = .loading
         isUnavailableInCurrentStorefront = false
@@ -119,7 +135,7 @@ final class PurchaseManager: ObservableObject {
             } else {
                 loadState = .unavailable
                 isUnavailableInCurrentStorefront = true
-                errorMessage = "Bellwire Pro is not available in your current App Store region."
+                errorMessage = "\(AppConfig.displayName) Pro is not available in your current App Store region."
                 Self.logger.error(
                     "StoreKit did not return configured products: \(missingProductIDs.sorted().joined(separator: ", "), privacy: .public)"
                 )
@@ -138,7 +154,7 @@ final class PurchaseManager: ObservableObject {
         } catch {
             loadState = .unavailable
             isUnavailableInCurrentStorefront = false
-            errorMessage = "Bellwire Pro products are temporarily unavailable. Please try again."
+            errorMessage = "\(AppConfig.displayName) Pro products are temporarily unavailable. Please try again."
             Self.logger.error(
                 "StoreKit product request failed: \(String(describing: error), privacy: .public)"
             )
@@ -183,6 +199,7 @@ final class PurchaseManager: ObservableObject {
     }
 
     func restorePurchases() async {
+        guard AppConfig.billingEnabled else { return }
         guard !isRestoring else { return }
         isRestoring = true
         errorMessage = nil
@@ -195,7 +212,7 @@ final class PurchaseManager: ObservableObject {
             if hasPro {
                 BellwireHaptics.success()
             } else {
-                errorMessage = "No previous Bellwire Pro purchase was found."
+                errorMessage = "No previous \(AppConfig.displayName) Pro purchase was found."
             }
         } catch {
             errorMessage = "Purchases could not be restored. Please try again."
@@ -204,6 +221,10 @@ final class PurchaseManager: ObservableObject {
     }
 
     func refreshEntitlements(source: String = "sync") async {
+        guard AppConfig.billingEnabled else {
+            purchasedProductIDs = []
+            return
+        }
         var activeProductIDs = Set<String>()
 
         for await entitlement in Transaction.currentEntitlements {
@@ -216,7 +237,9 @@ final class PurchaseManager: ObservableObject {
             do {
                 try await upload(entitlement.jwsRepresentation, source: source)
             } catch {
-                errorMessage = "Your App Store purchase could not be synced with Bellwire."
+                errorMessage = AppConfig.branded(
+                    "Your App Store purchase could not be synced with Bellwire."
+                )
             }
         }
 
@@ -229,7 +252,9 @@ final class PurchaseManager: ObservableObject {
             try await upload(result.jwsRepresentation, source: "sync")
             await transaction.finish()
         } catch {
-            errorMessage = "Your App Store purchase could not be synced with Bellwire."
+            errorMessage = AppConfig.branded(
+                "Your App Store purchase could not be synced with Bellwire."
+            )
             return
         }
         await refreshEntitlements()
@@ -242,7 +267,7 @@ final class PurchaseManager: ObservableObject {
             serverEntitlement = try await entitlementLoader()
         } catch {
             if serverEntitlement == nil {
-                errorMessage = "Bellwire could not refresh your plan status."
+                errorMessage = AppConfig.branded("Bellwire could not refresh your plan status.")
             }
         }
     }

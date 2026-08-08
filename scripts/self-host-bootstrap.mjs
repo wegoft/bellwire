@@ -5,16 +5,19 @@ import path from "node:path";
 
 import {
   LOCAL_XCCONFIG_PATH,
+  SELF_HOSTED_APP_ICON_PATH,
   WRANGLER_AUTH_SELF_HOST_PATH,
   WRANGLER_SELF_HOST_PATH,
   fileExists,
   parseArguments,
+  readSelfHostedAppIcon,
   renderAuthWranglerConfiguration,
   renderLocalXcconfig,
   renderWranglerConfiguration,
   resolveRoot,
   validateBootstrapOptions,
   writeNewFile,
+  writeSelfHostedAppIcon,
 } from "./self-host-config.mjs";
 
 const usage = `Bellwire self-host bootstrap
@@ -26,7 +29,13 @@ Usage:
     --api-url https://bellwire-self-host.example.workers.dev \\
     --auth-url https://bellwire-self-host-auth.example.workers.dev \\
     --business-d1-id 11111111-1111-4111-8111-111111111111 \\
-    --auth-d1-id 22222222-2222-4222-8222-222222222222
+    --auth-d1-id 22222222-2222-4222-8222-222222222222 \\
+    --app-name "My Signal App" \\
+    --app-icon /secure/MySignalApp-1024.png \\
+    --support-email support@example.com \\
+    --privacy-url https://example.com/privacy \\
+    --terms-url https://example.com/terms \\
+    --support-url https://example.com/support
 
 Optional:
   --extension-bundle-id <id>       Defaults to <bundle-id>.NotificationService
@@ -61,6 +70,12 @@ const allowedOptions = new Set([
   "api-url",
   "auth-url",
   "apns-environment",
+  "app-name",
+  "app-icon",
+  "support-email",
+  "privacy-url",
+  "terms-url",
+  "support-url",
   "root",
   "json",
   "help",
@@ -82,16 +97,26 @@ try {
   if (await fileExists(iosPath)) existing.push(LOCAL_XCCONFIG_PATH);
   if (await fileExists(workerPath)) existing.push(WRANGLER_SELF_HOST_PATH);
   if (await fileExists(authWorkerPath)) existing.push(WRANGLER_AUTH_SELF_HOST_PATH);
+  if (await fileExists(path.join(root, SELF_HOSTED_APP_ICON_PATH))) {
+    existing.push(SELF_HOSTED_APP_ICON_PATH);
+  }
   if (existing.length > 0) {
     throw new Error(`Refusing to overwrite existing configuration: ${existing.join(", ")}`);
   }
+  const appIcon = await readSelfHostedAppIcon(configuration.appIcon);
 
   await writeNewFile(iosPath, renderLocalXcconfig(configuration));
   await writeNewFile(workerPath, renderWranglerConfiguration(configuration));
   await writeNewFile(authWorkerPath, renderAuthWranglerConfiguration(configuration));
+  await writeSelfHostedAppIcon(root, appIcon);
 
   const result = {
-    created: [LOCAL_XCCONFIG_PATH, WRANGLER_SELF_HOST_PATH, WRANGLER_AUTH_SELF_HOST_PATH],
+    created: [
+      LOCAL_XCCONFIG_PATH,
+      WRANGLER_SELF_HOST_PATH,
+      WRANGLER_AUTH_SELF_HOST_PATH,
+      SELF_HOSTED_APP_ICON_PATH,
+    ],
     workerName: configuration.workerName,
     authWorkerName: configuration.authWorkerName,
     businessD1: configuration.businessD1Name,
@@ -106,6 +131,7 @@ try {
     process.stdout.write(`Created ${LOCAL_XCCONFIG_PATH}\n`);
     process.stdout.write(`Created ${WRANGLER_SELF_HOST_PATH}\n`);
     process.stdout.write(`Created ${WRANGLER_AUTH_SELF_HOST_PATH}\n`);
+    process.stdout.write(`Created ${SELF_HOSTED_APP_ICON_PATH}\n`);
     process.stdout.write("No secrets were written. Add Worker secrets with wrangler, then run npm run self-host:doctor.\n");
   }
 } catch (error) {

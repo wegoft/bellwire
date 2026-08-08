@@ -796,7 +796,8 @@ struct DeviceRowView: View {
         SettingsRowView(
             icon: BellwireIcons.device,
             title: device.name,
-            hint: device.appVersion.map { "Bellwire \($0)" } ?? "Bellwire"
+            hint: device.appVersion.map { "\(AppConfig.displayName) \($0)" }
+                ?? AppConfig.displayName
         ) {
             HStack(spacing: BellwireSpacing.compact) {
                 StatusBadgeView(
@@ -808,11 +809,13 @@ struct DeviceRowView: View {
                     Menu {
                         Button("Remove device", role: .destructive, action: onDelete)
                     } label: {
-                        Image(systemName: "ellipsis")
+                        Label("Device options", systemImage: "ellipsis")
+                            .labelStyle(.iconOnly)
                             .font(.body.weight(.semibold))
                             .foregroundStyle(BellwireTheme.mutedInk)
                             .frame(width: 36, height: 36)
                     }
+                    .accessibilityLabel("Device options for \(device.name)")
                 }
             }
         }

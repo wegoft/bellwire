@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name = "bellwire-auth-dev"
+main = "src/auth/index.ts"
+compatibility_date = "2026-08-05"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = false
+
+[dev]
+port = 8788
+local_protocol = "http"
+
+[vars]
+AUTH_ENVIRONMENT = "development"
+AUTH_ISSUER = "http://127.0.0.1:8788"
+AUTH_AUDIENCE = "bellwire-api"
+APPLE_SIGN_IN_CLIENT_ID = "app.bellwire.local"
+APPLE_APP_BUNDLE_ID = "app.bellwire.local"
+
+[[d1_databases]]
+binding = "AUTH_DB"
+database_name = "bellwire-auth-local"
+database_id = "00000000-0000-4000-8000-000000000002"
+migrations_dir = "d1/auth"

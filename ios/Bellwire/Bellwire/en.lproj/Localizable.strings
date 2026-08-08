@@ -10,7 +10,7 @@
 "Changes Bellwire between light and dark appearance" = "Changes Bellwire between light and dark appearance";
 "Light" = "Light";
 "Dark" = "Dark";
-"BELLWIRE_PRIVATE_NOTIFICATION_BODY" = "Open Bellwire to view the update.";
+"BELLWIRE_PRIVATE_NOTIFICATION_BODY" = "Open %@ to view the update.";
 "Support" = "Support";
 "Send feedback" = "Send feedback";
 "Help improve Bellwire" = "Help improve Bellwire";
@@ -52,7 +52,7 @@
 "Unable to delete account. Please try again." = "Unable to delete account. Please try again.";
 "This permanently deletes your projects, events, devices, Agent connections, and account. This action cannot be undone." = "This permanently deletes your projects, events, devices, Agent connections, and account. This action cannot be undone.";
 "Signals from every project,\non your iPhone." = "Signals from every project,\non your iPhone.";
-"By continuing, you agree to Bellwire’s [Terms of Service](https://bellwire.app/terms) and [Privacy Policy](https://bellwire.app/privacy). Sensitive fields stay redacted until you reveal them." = "By continuing, you agree to Bellwire’s [Terms of Service](https://bellwire.app/terms) and [Privacy Policy](https://bellwire.app/privacy). Sensitive fields stay redacted until you reveal them.";
+"By continuing, you agree to Bellwire’s policies." = "By continuing, you agree to Bellwire’s policies.";
 "Connect your first project." = "Connect your first project.";
 "Your Agent can wire real project Signals to this iPhone with a one-time binding code." = "Your Agent can wire real project Signals to this iPhone with a one-time binding code.";
 "Connect your Agent" = "Connect your Agent";

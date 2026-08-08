@@ -6,8 +6,10 @@
     <string>$(BELLWIRE_APP_GROUP)</string>
     <key>BellwireURLScheme</key>
     <string>$(BELLWIRE_URL_SCHEME)</string>
+    <key>BellwireAppDisplayName</key>
+    <string>$(BELLWIRE_APP_DISPLAY_NAME)</string>
     <key>CFBundleDisplayName</key>
-    <string>Bellwire</string>
+    <string>$(BELLWIRE_APP_DISPLAY_NAME)</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>

@@ -399,9 +399,22 @@ export interface SignalUsage {
   courtesyRemainingSignals: number;
 }
 
+export type DeploymentMode = "hosted" | "self_hosted";
+
+export interface EntitlementCapabilities {
+  billing: "app_store" | "disabled";
+  commercialLimitsEnforced: boolean;
+  projectExport: boolean;
+  liveActivities: boolean;
+}
+
 export interface AccountEntitlement {
   plan: PlanId;
   status: EntitlementStatus;
+  /** Added by the API boundary. Optional for stored records and older clients. */
+  deployment?: DeploymentMode;
+  /** Server-authoritative feature gates. Optional for backwards compatibility. */
+  capabilities?: EntitlementCapabilities;
   productId?: string;
   expiresAt?: string;
   downgradeDeadline?: string;

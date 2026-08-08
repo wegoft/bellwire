@@ -10,7 +10,7 @@
 "Changes Bellwire between light and dark appearance" = "切换 Bellwire 的浅色或深色外观";
 "Light" = "浅色";
 "Dark" = "深色";
-"BELLWIRE_PRIVATE_NOTIFICATION_BODY" = "打开 Bellwire 查看更新。";
+"BELLWIRE_PRIVATE_NOTIFICATION_BODY" = "打开 %@ 查看更新。";
 "Support" = "支持";
 "Send feedback" = "发送反馈";
 "Help improve Bellwire" = "告诉我们哪里可以做得更好";
@@ -68,7 +68,7 @@
 "Just now" = "刚刚";
 "Signing in…" = "正在登录…";
 "Signs in using your Apple ID" = "使用你的 Apple ID 登录";
-"By continuing, you agree to Bellwire’s [Terms of Service](https://bellwire.app/terms) and [Privacy Policy](https://bellwire.app/privacy). Sensitive fields stay redacted until you reveal them." = "继续即表示你同意 Bellwire 的[服务条款](https://bellwire.app/terms)和[隐私政策](https://bellwire.app/privacy)。敏感字段在你主动查看前会保持隐藏。";
+"By continuing, you agree to Bellwire’s policies." = "继续即表示你同意 Bellwire 的相关政策。";
 
 "Step 2 of 3" = "第 2 步，共 3 步";
 "Let Bellwire ring\nwhen it matters." = "让 Bellwire 只在\n重要时刻提醒你。";

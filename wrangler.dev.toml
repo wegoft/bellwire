@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name = "bellwire-api-dev"
+main = "src/index.ts"
+compatibility_date = "2026-07-20"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = false
+
+[dev]
+port = 8787
+local_protocol = "http"
+
+[vars]
+APP_ENV = "development"
+APNS_BUNDLE_ID = "app.bellwire.local"
+APP_URL_SCHEME = "bellwire-local"
+APP_DISPLAY_NAME = "Bellwire"
+APNS_ENVIRONMENT = "sandbox"
+ENTITLEMENT_ENFORCEMENT_MODE = "disabled"
+LIVE_ACTIVITY_AUTOMATION_ENABLED = "false"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bellwire-local"
+database_id = "00000000-0000-4000-8000-000000000001"
+migrations_dir = "d1/business"

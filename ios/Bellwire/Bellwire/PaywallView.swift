@@ -73,7 +73,7 @@ struct PaywallView: View {
 
     private var topBar: some View {
         ZStack {
-            Text(localized("Bellwire Pro"))
+            Text("\(AppConfig.displayName) Pro")
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(BellwireTheme.ink)
 
@@ -266,10 +266,10 @@ struct PaywallView: View {
 
             HStack(spacing: BellwireSpacing.roomy) {
                 Button(localized("Terms")) {
-                    openURL(URL(string: "https://bellwire.app/terms")!)
+                    openURL(AppConfig.termsURL)
                 }
                 Button(localized("Privacy")) {
-                    openURL(URL(string: "https://bellwire.app/privacy")!)
+                    openURL(AppConfig.privacyURL)
                 }
             }
             .font(.caption.weight(.medium))
@@ -345,7 +345,7 @@ private struct PaywallPlanRow: View {
 
                     if plan == .yearly {
                         Text(savingsLabel)
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .font(BellwireTypography.technicalLabel.bold())
                             .tracking(0.6)
                             .foregroundStyle(BellwireTheme.accentInk)
                             .padding(.horizontal, 8)

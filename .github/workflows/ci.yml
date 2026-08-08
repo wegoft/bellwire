@@ -19,9 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
@@ -35,15 +35,19 @@ jobs:
         run: npm run test:worker
       - name: Build Worker
         run: npm run build
+      - name: Check forward-compatible D1 migrations
+        run: npm run migrations:check
+      - name: Smoke-test local API and Auth stack
+        run: npm run dev:smoke
 
   ios:
     name: iOS Simulator build
     runs-on: macos-15
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
@@ -51,6 +55,8 @@ jobs:
         run: npm ci
       - name: Test iOS helpers
         run: npm run test:ios
+      - name: Run iOS unit tests
+        run: npm run ios:test:unit
       - name: Build unsigned iOS app
         run: >-
           xcodebuild
