@@ -3,9 +3,13 @@
 
 import { spawn } from "node:child_process";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 const smoke = process.argv.slice(2).includes("--smoke");
 const children = [];
+const wranglerBin = fileURLToPath(
+  new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url),
+);
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.once(signal, async () => {
@@ -15,20 +19,20 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 }
 
 try {
-  await run("npx", [
-    "wrangler", "d1", "migrations", "apply", "DB", "--local", "-c", "wrangler.dev.toml",
+  await runWrangler([
+    "d1", "migrations", "apply", "DB", "--local", "-c", "wrangler.dev.toml",
   ]);
-  await run("npx", [
-    "wrangler", "d1", "migrations", "apply", "AUTH_DB", "--local",
+  await runWrangler([
+    "d1", "migrations", "apply", "AUTH_DB", "--local",
     "-c", "wrangler.auth.dev.toml",
   ]);
 
   children.push(start("API", [
-    "wrangler", "dev", "-c", "wrangler.dev.toml",
+    "dev", "-c", "wrangler.dev.toml",
     "--inspector-port", "9230", "--show-interactive-dev-session", "false",
   ]));
   children.push(start("Auth", [
-    "wrangler", "dev", "-c", "wrangler.auth.dev.toml",
+    "dev", "-c", "wrangler.auth.dev.toml",
     "--inspector-port", "9231", "--show-interactive-dev-session", "false",
   ]));
 
@@ -66,8 +70,12 @@ function run(command, args) {
   });
 }
 
+function runWrangler(args) {
+  return run(process.execPath, [wranglerBin, ...args]);
+}
+
 function start(label, args) {
-  const child = spawn("npx", args, {
+  const child = spawn(process.execPath, [wranglerBin, ...args], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"],
   });
