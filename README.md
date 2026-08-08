@@ -1,9 +1,10 @@
 <div align="center">
   <img src="ios/Bellwire/Bellwire/Assets.xcassets/AppIcon.appiconset/BellwireIcon.png" width="104" alt="Bellwire app icon">
   <h1>Bellwire</h1>
-  <p>Live project state and AI agent events, delivered as native cards and notifications on iPhone.</p>
+  <p><strong>The AI-first iPhone project radar for indie hackers and AI-native founders.</strong></p>
   <p>
     <a href="https://bellwire.app">Website</a> ·
+    <a href="https://apps.apple.com/us/app/bellwire/id6793009710">App Store</a> ·
     <a href="docs/quickstart.md">Quick Start</a> ·
     <a href="docs/self-hosting.md">Self-host</a> ·
     <a href="https://clawhub.ai/xwchris/skills/bellwire">ClawHub</a> ·
@@ -17,18 +18,73 @@
   </p>
 </div>
 
-Bellwire turns live project state and typed events into native iPhone cards, an
-inbox, and APNs notifications. New projects use **Private** delivery by default:
-Bellwire relays a content-free wake, while the iPhone fetches notification,
-Inbox, and Surface details directly from your signed HTTPS service. **Hosted**
-delivery is an explicit, user-approved option for projects that prefer Bellwire
-Cloud to store and render those details.
+## Know what every project earns — and when it needs you
 
-Use [Bellwire Cloud](https://bellwire.app) or connect a self-hosted deployment.
-The hosted API is available at
+If you are building several products with Codex, Claude Code, or another coding
+Agent, the hard part is no longer shipping one more feature. It is keeping track
+of what every project is earning, what is still running, and what quietly broke.
+
+Bellwire puts the small set of signals that actually need your attention on
+your iPhone:
+
+- revenue, payments, refunds, orders, and useful growth signals;
+- deployments, API health, incidents, and recoveries;
+- long-running Agent jobs, progress, and decisions waiting on you;
+- a durable cross-project event inbox after a notification disappears.
+
+You do not configure a dashboard builder or hand-wire another notification
+pipeline. Tell your coding Agent what matters. It inspects the real project,
+connects the source, deploys the adapter, and verifies one genuine signal end to
+end.
+
+> [!NOTE]
+> Bellwire is intentionally Agent-first, not a catalog of pretend one-click
+> integrations. Your Agent works with the repository and data sources you
+> already use, while pairing and sensitive delivery choices stay under your
+> control on iPhone.
+
+## From a request to a live project radar
+
+1. **Create a project on iPhone.** Bellwire gives you a one-time binding code.
+2. **Hand the job to your coding Agent.** Describe the revenue, project state,
+   and moments that deserve your attention.
+3. **Verify the real loop.** The Agent connects the source, deploys the data
+   path, and proves that a real payment, deployment, incident, or job reaches
+   Bellwire.
+
+Give this to Codex, Claude Code, or another coding Agent:
+
+```text
+Connect this project to Bellwire. Keep today's revenue, refunds, active users,
+the production deploy, and API health visible. Notify me when something needs
+attention. Keep it Private and verify one real signal end to end.
+```
+
+Start with the [Private-first quick start](docs/quickstart.md) or install the
+published [Bellwire Agent Skill](https://clawhub.ai/xwchris/skills/bellwire).
+
+## See the current app
+
+<p align="center">
+  <img src="https://bellwire.app/brand/bellwire-native-home-en-dark.png" width="30%" alt="Bellwire dark Home screen showing live project status and recent events">
+  <img src="https://bellwire.app/brand/bellwire-native-projects-en-dark.png" width="30%" alt="Bellwire dark Projects screen with connected products">
+  <img src="https://bellwire.app/brand/bellwire-native-events-en-dark.png" width="30%" alt="Bellwire dark Events inbox showing payments and Agent runs">
+</p>
+
+These are native screenshots from the current SwiftUI build using demo project
+data. Watch the native Simulator capture at
+[bellwire.app](https://bellwire.app/#film).
+
+## Private by default, Hosted by choice
+
+Every new project starts **Private**. Bellwire relays a content-free wake, while
+the iPhone fetches notification, Inbox, and Surface details directly from your
+signed HTTPS service. **Hosted** is an explicit, user-approved option when you
+prefer Bellwire Cloud to store, render, and operate that data path.
+
+Use [Bellwire Cloud](https://bellwire.app), or run the complete stack in your
+own Apple and Cloudflare accounts. The hosted API is available at
 [`https://api.bellwire.app`](https://api.bellwire.app).
-Product requirements and internal planning documents are intentionally kept
-out of this public repository.
 
 > [!IMPORTANT]
 > Bellwire is multi-licensed: the Workers and Cloudflare D1 stack use AGPL-3.0-only,
@@ -36,19 +92,12 @@ out of this public repository.
 > and public docs use Apache-2.0. The Bellwire brand is reserved. See
 > [LICENSE.md](LICENSE.md) for the exact path boundaries.
 
-Start with the [Private-first quick start](docs/quickstart.md), browse the
-[integration examples](examples/README.md), or deploy the full stack with the
-[self-hosting guide](docs/self-hosting.md). The repository also publishes an
-[OpenAPI 3.1 description](docs/openapi.yaml), [upgrade guide](docs/upgrading.md),
-[telemetry contract](docs/telemetry.md), and [security model](docs/security-model.md).
-
-## See Bellwire in action
-
-<p align="center">
-  <img src="app-store/screenshots/en-US/home.png" width="30%" alt="Bellwire home screen with live project cards">
-  <img src="app-store/screenshots/en-US/projects.png" width="30%" alt="Bellwire project management screen">
-  <img src="app-store/screenshots/en-US/events.png" width="30%" alt="Bellwire event inbox">
-</p>
+Browse the [integration examples](examples/README.md), deploy the full stack
+with the [self-hosting guide](docs/self-hosting.md), or use the
+[OpenAPI 3.1 description](docs/openapi.yaml). The repository also publishes an
+[upgrade guide](docs/upgrading.md), [telemetry contract](docs/telemetry.md), and
+[security model](docs/security-model.md). Product requirements and internal
+planning documents are intentionally kept out of this public repository.
 
 ## Choose a deployment
 
