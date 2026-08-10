@@ -154,7 +154,7 @@ describe("Bellwire MVP API", () => {
       status: "ok",
       service: "bellwire-api",
       compatibility: {
-        appVersion: "1.0.1",
+        appVersion: "1.0.2",
         apiVersion: "v1",
         schemaMigration: "d1-business-0001",
       },
