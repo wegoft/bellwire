@@ -274,7 +274,7 @@ describe("iOS Inbox preview", () => {
     const marketingVersions = [...project.matchAll(/MARKETING_VERSION = ([^;]+);/gu)]
       .map((match) => match[1]);
     expect(marketingVersions.length).toBeGreaterThan(0);
-    expect(new Set(marketingVersions)).toEqual(new Set(["1.0.1"]));
+    expect(new Set(marketingVersions)).toEqual(new Set(["1.0.2"]));
   });
 
   it("does not require Apple's optional authorization code to sign in", () => {
