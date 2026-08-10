@@ -3,6 +3,36 @@ import XCTest
 @testable import Bellwire
 
 final class EntitlementCapabilityTests: XCTestCase {
+    func testLegacyWidgetSnapshotDecodesWithoutProjectLogoFilename() throws {
+        let json = """
+        {
+          "isPro": true,
+          "updatedAt": "2026-08-11T00:00:00Z",
+          "surfaces": [{
+            "id": "surface-1",
+            "projectID": "project-1",
+            "projectName": "VideoSays",
+            "projectIcon": "play.rectangle.fill",
+            "surfaceKey": "revenue-today",
+            "type": "stats",
+            "title": "Today",
+            "checklistItems": [],
+            "trendPoints": [],
+            "updatedAt": "2026-08-11T00:00:00Z"
+          }]
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let snapshot = try decoder.decode(
+            BellwireWidgetSnapshot.self,
+            from: Data(json.utf8)
+        )
+
+        XCTAssertNil(snapshot.surfaces.first?.projectLogoFilename)
+    }
+
     func testSelfHostedCapabilitiesEnableFeaturesWithoutBilling() {
         let entitlement = makeEntitlement(
             plan: "pro",

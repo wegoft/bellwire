@@ -8,6 +8,7 @@ struct BellwireProjectOverviewTimelineEntry: TimelineEntry {
     let snapshot: BellwireWidgetSnapshot
     let project: BellwireProjectWidgetEntity?
     let surfaces: [BellwireNativeSurface]
+    let projectLogoData: Data?
     let hasUnavailableSelection: Bool
 }
 
@@ -60,6 +61,9 @@ struct BellwireProjectOverviewTimelineProvider: AppIntentTimelineProvider {
             snapshot: snapshot,
             project: project,
             surfaces: surfaces,
+            projectLogoData: BellwireWidgetSnapshotStore.projectLogoData(
+                filename: surfaces.first?.projectLogoFilename
+            ),
             hasUnavailableSelection: project != nil && surfaces.isEmpty
         )
     }
@@ -123,11 +127,13 @@ struct BellwireProjectOverviewCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: BellwireWidgetStyle.standardSpacing) {
             HStack(spacing: BellwireWidgetStyle.standardSpacing) {
-                Label(project.name, systemImage: project.icon)
-                    .font(.headline)
-                    .bold()
-                    .foregroundStyle(BellwireWidgetStyle.accent)
-                    .lineLimit(1)
+                BellwireWidgetProjectLabel(
+                    name: project.name,
+                    icon: project.icon,
+                    logoData: entry.projectLogoData,
+                    imageSize: 28,
+                    font: .headline
+                )
                 Spacer(minLength: 4)
                 Text(entry.snapshot.updatedAt, style: .relative)
                     .font(.caption)
@@ -221,6 +227,7 @@ struct BellwireProjectOverviewRow: View {
             icon: "play.rectangle.fill"
         ),
         surfaces: BellwireWidgetSnapshotStore.preview.surfaces,
+        projectLogoData: nil,
         hasUnavailableSelection: false
     )
 }

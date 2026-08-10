@@ -7,6 +7,7 @@ struct BellwireSurfaceTimelineEntry: TimelineEntry {
     let date: Date
     let snapshot: BellwireWidgetSnapshot
     let surface: BellwireNativeSurface?
+    let projectLogoData: Data?
     let hasUnavailableSelection: Bool
 }
 
@@ -53,6 +54,9 @@ struct BellwireSurfaceTimelineProvider: AppIntentTimelineProvider {
             date: .now,
             snapshot: snapshot,
             surface: selected,
+            projectLogoData: BellwireWidgetSnapshotStore.projectLogoData(
+                filename: selected?.projectLogoFilename
+            ),
             hasUnavailableSelection: selected == nil
                 && (configuration.project != nil || configuration.surface != nil)
         )
@@ -91,7 +95,10 @@ struct BellwireSurfaceWidgetView: View {
                     message: "Unlock live project Surfaces on your Home Screen."
                 )
             } else if let surface = entry.surface {
-                BellwireSurfaceWidgetCard(surface: surface)
+                BellwireSurfaceWidgetCard(
+                    surface: surface,
+                    projectLogoData: entry.projectLogoData
+                )
             } else if entry.hasUnavailableSelection {
                 BellwireWidgetMessageView(
                     icon: "rectangle.slash",
@@ -113,15 +120,18 @@ struct BellwireSurfaceWidgetView: View {
 struct BellwireSurfaceWidgetCard: View {
     @Environment(\.widgetFamily) private var family
     let surface: BellwireNativeSurface
+    let projectLogoData: Data?
 
     var body: some View {
         VStack(alignment: .leading, spacing: BellwireWidgetStyle.standardSpacing) {
             HStack(spacing: BellwireWidgetStyle.standardSpacing) {
-                Label(surface.projectName, systemImage: surface.projectIcon)
-                    .font(.caption)
-                    .bold()
-                    .foregroundStyle(BellwireWidgetStyle.accent)
-                    .lineLimit(1)
+                BellwireWidgetProjectLabel(
+                    name: surface.projectName,
+                    icon: surface.projectIcon,
+                    logoData: projectLogoData,
+                    imageSize: 22,
+                    font: .caption
+                )
                 Spacer(minLength: 4)
                 if family == .systemMedium {
                     Text(surface.updatedAt, style: .relative)
@@ -155,6 +165,7 @@ struct BellwireSurfaceWidgetCard: View {
         date: .now,
         snapshot: BellwireWidgetSnapshotStore.preview,
         surface: BellwireWidgetSnapshotStore.preview.surfaces.first,
+        projectLogoData: nil,
         hasUnavailableSelection: false
     )
 }
@@ -166,6 +177,7 @@ struct BellwireSurfaceWidgetCard: View {
         date: .now,
         snapshot: BellwireWidgetSnapshotStore.preview,
         surface: BellwireWidgetSnapshotStore.preview.surfaces.last,
+        projectLogoData: nil,
         hasUnavailableSelection: false
     )
 }

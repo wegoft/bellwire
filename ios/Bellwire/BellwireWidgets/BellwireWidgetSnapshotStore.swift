@@ -13,6 +13,7 @@ struct BellwireWidgetSnapshotStore {
                 projectID: "preview-project",
                 projectName: "VideoSays",
                 projectIcon: "play.rectangle.fill",
+                projectLogoFilename: nil,
                 surfaceKey: "revenue-today",
                 type: "stats",
                 title: "Today · VideoSays",
@@ -32,6 +33,7 @@ struct BellwireWidgetSnapshotStore {
                 projectID: "preview-project",
                 projectName: "VideoSays",
                 projectIcon: "play.rectangle.fill",
+                projectLogoFilename: nil,
                 surfaceKey: "revenue-30d",
                 type: "trend",
                 title: "CNY revenue trend · VideoSays",
@@ -73,12 +75,41 @@ struct BellwireWidgetSnapshotStore {
         return URL(string: "\(urlScheme)://projects/\(projectID)")
     }
 
+    static func projectLogoData(filename: String?) -> Data? {
+        guard let filename,
+              isValidProjectLogoFilename(filename),
+              let container = FileManager.default.containerURL(
+                forSecurityApplicationGroupIdentifier: appGroup
+              )
+        else {
+            return nil
+        }
+        let fileURL = container
+            .appending(path: projectLogoDirectory, directoryHint: .isDirectory)
+            .appending(path: filename)
+        guard let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe),
+              data.count <= maximumProjectLogoBytes
+        else {
+            return nil
+        }
+        return data
+    }
+
     static var appDisplayName: String {
         Bundle.main.object(forInfoDictionaryKey: "BellwireAppDisplayName") as? String
             ?? "Bellwire"
     }
 
     private static let snapshotFilename = "bellwire-widget-snapshot.json"
+    private static let projectLogoDirectory = "WidgetProjectLogos"
+    private static let maximumProjectLogoBytes = 1 * 1_024 * 1_024
+
+    private static func isValidProjectLogoFilename(_ filename: String) -> Bool {
+        guard filename.count == 68, filename.hasSuffix(".png") else { return false }
+        return filename.dropLast(4).allSatisfy { character in
+            character.isHexDigit && (character.isNumber || character.isLowercase)
+        }
+    }
 
     private static var appGroup: String {
         Bundle.main.object(forInfoDictionaryKey: "BellwireAppGroup") as? String
