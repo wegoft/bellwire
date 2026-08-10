@@ -627,6 +627,11 @@ struct InboxView: View {
                 path.append(.event(id))
                 model.pendingEventID = nil
             }
+            .onChange(of: model.pendingProjectID, initial: true) { _, newValue in
+                guard let id = newValue else { return }
+                path.append(.project(id))
+                model.pendingProjectID = nil
+            }
             .task {
                 guard !hasPresentedGreeting else { return }
                 if !reduceMotion { await Task.yield() }

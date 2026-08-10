@@ -6,239 +6,9 @@ import WidgetKit
 @main
 struct BellwireWidgetBundle: WidgetBundle {
     var body: some Widget {
-        BellwireSurfacesWidget()
+        BellwireSurfaceWidget()
+        BellwireProjectOverviewWidget()
         BellwireSurfaceLiveActivity()
-    }
-}
-
-private struct BellwireTimelineEntry: TimelineEntry {
-    let date: Date
-    let snapshot: BellwireWidgetSnapshot
-}
-
-private struct BellwireTimelineProvider: TimelineProvider {
-    func placeholder(in context: Context) -> BellwireTimelineEntry {
-        .init(date: .now, snapshot: Self.preview)
-    }
-
-    func getSnapshot(
-        in context: Context,
-        completion: @escaping (BellwireTimelineEntry) -> Void
-    ) {
-        completion(.init(date: .now, snapshot: readSnapshot() ?? Self.preview))
-    }
-
-    func getTimeline(
-        in context: Context,
-        completion: @escaping (Timeline<BellwireTimelineEntry>) -> Void
-    ) {
-        let snapshot = readSnapshot()
-            ?? BellwireWidgetSnapshot(isPro: false, updatedAt: .now, surfaces: [])
-        completion(
-            Timeline(
-                entries: [.init(date: .now, snapshot: snapshot)],
-                policy: .after(Date().addingTimeInterval(15 * 60))
-            )
-        )
-    }
-
-    private func readSnapshot() -> BellwireWidgetSnapshot? {
-        guard let container = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: appGroup
-        ),
-        let data = try? Data(
-            contentsOf: container.appendingPathComponent("bellwire-widget-snapshot.json")
-        )
-        else { return nil }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try? decoder.decode(BellwireWidgetSnapshot.self, from: data)
-    }
-
-    private var appGroup: String {
-        Bundle.main.object(forInfoDictionaryKey: "BellwireAppGroup") as? String
-            ?? "group.app.bellwire.shared"
-    }
-
-    private static let preview = BellwireWidgetSnapshot(
-        isPro: true,
-        updatedAt: .now,
-        surfaces: [
-            .init(
-                id: "preview",
-                projectID: "preview-project",
-                projectName: "VideoSays",
-                projectIcon: "play.rectangle.fill",
-                surfaceKey: "today-revenue",
-                type: "stats",
-                title: "Today revenue",
-                subtitle: "47 orders",
-                value: "$3,842",
-                progress: nil,
-                statusState: nil,
-                statusLabel: nil,
-                checklistItems: [],
-                trendPoints: [],
-                trendGoal: nil,
-                trendUnit: nil,
-                updatedAt: .now
-            )
-        ]
-    )
-}
-
-private struct BellwireSurfacesWidget: Widget {
-    let kind = "BellwireSurfaces"
-
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: BellwireTimelineProvider()) { entry in
-            BellwireWidgetView(entry: entry)
-                .containerBackground(for: .widget) {
-                    Color(red: 0.055, green: 0.052, blue: 0.046)
-                }
-        }
-        .configurationDisplayName("Project Surfaces")
-        .description("Keep your most important project state on the Home Screen.")
-        .supportedFamilies([.systemSmall, .systemMedium])
-    }
-}
-
-private struct BellwireWidgetView: View {
-    @Environment(\.widgetFamily) private var family
-    let entry: BellwireTimelineEntry
-
-    var body: some View {
-        if !entry.snapshot.isPro {
-            VStack(alignment: .leading, spacing: 8) {
-                Label {
-                    Text("\(appDisplayName) Pro")
-                } icon: {
-                    Image(systemName: "bolt.fill")
-                }
-                    .font(.headline)
-                    .foregroundStyle(accent)
-                Text("Unlock live project Surfaces on your Home Screen.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .widgetURL(widgetURL("home"))
-        } else if entry.snapshot.surfaces.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Label {
-                    Text(appDisplayName)
-                } icon: {
-                    Image(systemName: "bell.fill")
-                }
-                    .font(.headline)
-                    .foregroundStyle(accent)
-                Text("Publish a Surface to see live project state here.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        } else {
-            VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 10) {
-                ForEach(entry.snapshot.surfaces.prefix(family == .systemSmall ? 1 : 2)) { surface in
-                    surfaceRow(surface)
-                    if surface.id != entry.snapshot.surfaces.prefix(2).last?.id,
-                       family == .systemMedium {
-                        Divider().overlay(Color.white.opacity(0.1))
-                    }
-                }
-                Spacer(minLength: 0)
-                Text(entry.snapshot.updatedAt, style: .relative)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            .widgetURL(widgetURL("home"))
-        }
-    }
-
-    private var appDisplayName: String {
-        Bundle.main.object(forInfoDictionaryKey: "BellwireAppDisplayName") as? String
-            ?? "App"
-    }
-
-    private func surfaceRow(_ surface: BellwireNativeSurface) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 7) {
-                Image(systemName: surface.projectIcon)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(accent)
-                Text(surface.projectName)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                if surface.type == "status" {
-                    Label(
-                        surface.statusLabel ?? nativeStatusLabel(surface.statusState),
-                        systemImage: nativeStatusSymbol(surface.statusState)
-                    )
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(nativeStatusColor(surface.statusState))
-                } else if surface.type == "checklist" {
-                    Text("\(completedCount(surface.checklistItems))/\(surface.checklistItems.count)")
-                        .font(.caption.weight(.bold))
-                        .monospacedDigit()
-                        .foregroundStyle(accent)
-                } else if let value = surface.value {
-                    Text(value)
-                        .font(.caption.weight(.bold))
-                        .monospacedDigit()
-                        .foregroundStyle(accent)
-                }
-            }
-            Text(surface.title)
-                .font(.headline)
-                .lineLimit(1)
-            if surface.type == "checklist", !surface.checklistItems.isEmpty {
-                ProgressView(
-                    value: Double(completedCount(surface.checklistItems)),
-                    total: Double(surface.checklistItems.count)
-                )
-                .tint(accent)
-                if let current = surface.checklistItems.first(where: { $0.state == "running" })
-                    ?? surface.checklistItems.first(where: { $0.state == "pending" }) {
-                    Text(current.title)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            } else if surface.type == "trend", surface.trendPoints.count > 1 {
-                HStack(spacing: 8) {
-                    NativeSparkline(values: surface.trendPoints.map(\.value))
-                        .stroke(trendColor(surface.trendPoints, goal: surface.trendGoal), lineWidth: 2)
-                        .frame(height: 20)
-                    Text(trendDelta(surface.trendPoints, unit: surface.trendUnit))
-                        .font(.caption2.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(trendColor(surface.trendPoints, goal: surface.trendGoal))
-                }
-            } else if let progress = surface.progress {
-                ProgressView(value: progress)
-                    .tint(accent)
-            } else if let subtitle = surface.subtitle {
-                Text(subtitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-    }
-
-    private var accent: Color {
-        Color(red: 1.0, green: 0.58, blue: 0.08)
-    }
-
-    private func completedCount(_ items: [BellwireNativeSurface.ChecklistItem]) -> Int {
-        items.count { $0.state == "completed" || $0.state == "skipped" }
-    }
-
-    private func widgetURL(_ host: String) -> URL? {
-        let scheme = Bundle.main.object(forInfoDictionaryKey: "BellwireURLScheme") as? String
-            ?? "bellwire"
-        return URL(string: "\(scheme)://\(host)")
     }
 }
 
@@ -390,7 +160,7 @@ private struct NativeActivityDetail: View {
     }
 }
 
-private struct NativeSparkline: Shape {
+struct NativeSparkline: Shape {
     let values: [Double]
 
     func path(in rect: CGRect) -> Path {
@@ -408,7 +178,7 @@ private struct NativeSparkline: Shape {
     }
 }
 
-private func nativeStatusLabel(_ state: String?) -> String {
+func nativeStatusLabel(_ state: String?) -> String {
     switch state {
     case "running": "Running"
     case "success": "Healthy"
@@ -419,7 +189,7 @@ private func nativeStatusLabel(_ state: String?) -> String {
     }
 }
 
-private func nativeStatusSymbol(_ state: String?) -> String {
+func nativeStatusSymbol(_ state: String?) -> String {
     switch state {
     case "running": "arrow.triangle.2.circlepath"
     case "success": "checkmark.circle.fill"
@@ -430,7 +200,7 @@ private func nativeStatusSymbol(_ state: String?) -> String {
     }
 }
 
-private func nativeStatusColor(_ state: String?) -> Color {
+func nativeStatusColor(_ state: String?) -> Color {
     switch state {
     case "success": .green
     case "warning": .yellow
@@ -440,17 +210,17 @@ private func nativeStatusColor(_ state: String?) -> Color {
     }
 }
 
-private func checklistSummary(_ items: [BellwireNativeSurface.ChecklistItem]) -> String {
+func checklistSummary(_ items: [BellwireNativeSurface.ChecklistItem]) -> String {
     "\(items.count { $0.state == "completed" || $0.state == "skipped" })/\(items.count)"
 }
 
-private func checklistProgress(_ items: [BellwireNativeSurface.ChecklistItem]) -> Double {
+func checklistProgress(_ items: [BellwireNativeSurface.ChecklistItem]) -> Double {
     guard !items.isEmpty else { return 0 }
     return Double(items.count { $0.state == "completed" || $0.state == "skipped" })
         / Double(items.count)
 }
 
-private func trendDelta(_ points: [BellwireNativeSurface.TrendPoint], unit: String?) -> String {
+func trendDelta(_ points: [BellwireNativeSurface.TrendPoint], unit: String?) -> String {
     guard let first = points.first?.value, let last = points.last?.value else { return "—" }
     let delta = last - first
     return "\(delta >= 0 ? "+" : "")\(delta.formatted(.number.precision(.fractionLength(0...2))))\(unit ?? "")"
@@ -461,7 +231,7 @@ private func trendSymbol(_ points: [BellwireNativeSurface.TrendPoint]) -> String
     return last > first ? "arrow.up.right" : last < first ? "arrow.down.right" : "arrow.right"
 }
 
-private func trendColor(_ points: [BellwireNativeSurface.TrendPoint], goal: String?) -> Color {
+func trendColor(_ points: [BellwireNativeSurface.TrendPoint], goal: String?) -> Color {
     guard let first = points.first?.value, let last = points.last?.value else { return .secondary }
     if goal == "neutral" || first == last { return .secondary }
     let improved = goal == "down" ? last < first : last > first

@@ -17,15 +17,15 @@ final class NativeDisplayManager {
         isPro: Bool
     ) async {
         let allNativeSurfaces = surfaces.map(Self.nativeSurface)
-        let nativeSurfaces = Array(allNativeSurfaces.prefix(10))
         writeSnapshot(
             BellwireWidgetSnapshot(
                 isPro: isPro,
                 updatedAt: .now,
-                surfaces: nativeSurfaces
+                surfaces: allNativeSurfaces
             )
         )
         WidgetCenter.shared.reloadTimelines(ofKind: "BellwireSurfaces")
+        WidgetCenter.shared.reloadTimelines(ofKind: "BellwireProjectOverview")
 
         await synchronizePrivateAgentActivities(
             surfaces: surfaces,
@@ -111,6 +111,7 @@ final class NativeDisplayManager {
             BellwireWidgetSnapshot(isPro: false, updatedAt: .now, surfaces: [])
         )
         WidgetCenter.shared.reloadTimelines(ofKind: "BellwireSurfaces")
+        WidgetCenter.shared.reloadTimelines(ofKind: "BellwireProjectOverview")
         for activity in Activity<BellwireActivityAttributes>.activities {
             await activity.end(nil, dismissalPolicy: .immediate)
         }

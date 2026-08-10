@@ -47,6 +47,12 @@
 		B00000000000000000000027 /* TrendSurfaceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000032 /* TrendSurfaceCard.swift */; };
 		B10000000000000000000001 /* BellwireRefreshIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000001 /* BellwireRefreshIndicator.swift */; };
 		B10000000000000000000002 /* BellwireRefreshScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000002 /* BellwireRefreshScrollView.swift */; };
+		B20000000000000000000001 /* BellwireWidgetSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000001 /* BellwireWidgetSnapshotStore.swift */; };
+		B20000000000000000000002 /* BellwireWidgetStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000002 /* BellwireWidgetStyle.swift */; };
+		B20000000000000000000003 /* BellwireWidgetEntities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000003 /* BellwireWidgetEntities.swift */; };
+		B20000000000000000000004 /* BellwireWidgetIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000004 /* BellwireWidgetIntents.swift */; };
+		B20000000000000000000005 /* BellwireSurfaceWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000005 /* BellwireSurfaceWidget.swift */; };
+		B20000000000000000000006 /* BellwireProjectOverviewWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000006 /* BellwireProjectOverviewWidget.swift */; };
 		BT0000000000000000000001 /* EntitlementCapabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT0000000000000000000001 /* EntitlementCapabilityTests.swift */; };
 		BT0000000000000000000002 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FT0000000000000000000003 /* XCTest.framework */; };
 /* End PBXBuildFile section */
@@ -141,6 +147,12 @@
 		F00000000000000000000032 /* TrendSurfaceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendSurfaceCard.swift; sourceTree = "<group>"; };
 		F10000000000000000000001 /* BellwireRefreshIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BellwireRefreshIndicator.swift; sourceTree = "<group>"; };
 		F10000000000000000000002 /* BellwireRefreshScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BellwireRefreshScrollView.swift; sourceTree = "<group>"; };
+		F20000000000000000000001 /* BellwireWidgetSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BellwireWidgetSnapshotStore.swift; sourceTree = "<group>"; };
+		F20000000000000000000002 /* BellwireWidgetStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BellwireWidgetStyle.swift; sourceTree = "<group>"; };
+		F20000000000000000000003 /* BellwireWidgetEntities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BellwireWidgetEntities.swift; sourceTree = "<group>"; };
+		F20000000000000000000004 /* BellwireWidgetIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BellwireWidgetIntents.swift; sourceTree = "<group>"; };
+		F20000000000000000000005 /* BellwireSurfaceWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BellwireSurfaceWidget.swift; sourceTree = "<group>"; };
+		F20000000000000000000006 /* BellwireProjectOverviewWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BellwireProjectOverviewWidget.swift; sourceTree = "<group>"; };
 		FT0000000000000000000001 /* EntitlementCapabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementCapabilityTests.swift; sourceTree = "<group>"; };
 		FT0000000000000000000002 /* BellwireTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BellwireTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FT0000000000000000000003 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
@@ -273,6 +285,12 @@
 			isa = PBXGroup;
 			children = (
 				F00000000000000000000023 /* BellwireWidgets.swift */,
+				F20000000000000000000001 /* BellwireWidgetSnapshotStore.swift */,
+				F20000000000000000000002 /* BellwireWidgetStyle.swift */,
+				F20000000000000000000003 /* BellwireWidgetEntities.swift */,
+				F20000000000000000000004 /* BellwireWidgetIntents.swift */,
+				F20000000000000000000005 /* BellwireSurfaceWidget.swift */,
+				F20000000000000000000006 /* BellwireProjectOverviewWidget.swift */,
 				F00000000000000000000029 /* Localizable.strings */,
 				F00000000000000000000024 /* Info.plist */,
 				F00000000000000000000025 /* BellwireWidgets.entitlements */,
@@ -500,6 +518,12 @@
 			files = (
 				B0000000000000000000001B /* NativeDisplayModels.swift in Sources */,
 				B0000000000000000000001C /* BellwireWidgets.swift in Sources */,
+				B20000000000000000000001 /* BellwireWidgetSnapshotStore.swift in Sources */,
+				B20000000000000000000002 /* BellwireWidgetStyle.swift in Sources */,
+				B20000000000000000000003 /* BellwireWidgetEntities.swift in Sources */,
+				B20000000000000000000004 /* BellwireWidgetIntents.swift in Sources */,
+				B20000000000000000000005 /* BellwireSurfaceWidget.swift in Sources */,
+				B20000000000000000000006 /* BellwireProjectOverviewWidget.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -568,7 +592,7 @@
 			ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 			CODE_SIGN_ENTITLEMENTS = Bellwire/Bellwire.entitlements;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 14;
+			CURRENT_PROJECT_VERSION = 15;
 			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
 			ENABLE_PREVIEWS = YES;
 			GENERATE_INFOPLIST_FILE = NO;
@@ -589,7 +613,7 @@
 			ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 			CODE_SIGN_ENTITLEMENTS = Bellwire/Bellwire.entitlements;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 14;
+			CURRENT_PROJECT_VERSION = 15;
 			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
 			ENABLE_PREVIEWS = YES;
 			GENERATE_INFOPLIST_FILE = NO;
@@ -609,7 +633,7 @@
 			APPLICATION_EXTENSION_API_ONLY = YES;
 			CODE_SIGN_ENTITLEMENTS = BellwireNotificationService/BellwireNotificationService.entitlements;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 14;
+			CURRENT_PROJECT_VERSION = 15;
 			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
 			GENERATE_INFOPLIST_FILE = NO;
 			INFOPLIST_FILE = BellwireNotificationService/Info.plist;
@@ -628,7 +652,7 @@
 			APPLICATION_EXTENSION_API_ONLY = YES;
 			CODE_SIGN_ENTITLEMENTS = BellwireNotificationService/BellwireNotificationService.entitlements;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 14;
+			CURRENT_PROJECT_VERSION = 15;
 			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
 			GENERATE_INFOPLIST_FILE = NO;
 			INFOPLIST_FILE = BellwireNotificationService/Info.plist;
@@ -647,7 +671,7 @@
 			APPLICATION_EXTENSION_API_ONLY = YES;
 			CODE_SIGN_ENTITLEMENTS = BellwireWidgets/BellwireWidgets.entitlements;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 14;
+			CURRENT_PROJECT_VERSION = 15;
 			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
 			GENERATE_INFOPLIST_FILE = NO;
 			INFOPLIST_FILE = BellwireWidgets/Info.plist;
@@ -666,7 +690,7 @@
 			APPLICATION_EXTENSION_API_ONLY = YES;
 			CODE_SIGN_ENTITLEMENTS = BellwireWidgets/BellwireWidgets.entitlements;
 			CODE_SIGN_STYLE = Automatic;
-			CURRENT_PROJECT_VERSION = 14;
+			CURRENT_PROJECT_VERSION = 15;
 			DEVELOPMENT_TEAM = "$(BELLWIRE_DEVELOPMENT_TEAM)";
 			GENERATE_INFOPLIST_FILE = NO;
 			INFOPLIST_FILE = BellwireWidgets/Info.plist;

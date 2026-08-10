@@ -61,6 +61,7 @@ final class AppModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var binding: BindingResponse?
     @Published var pendingEventID: String?
+    @Published var pendingProjectID: String?
     @Published var pendingModeRequestNavigation = false
 
     private let keychain = KeychainStore()
@@ -897,6 +898,11 @@ final class AppModel: ObservableObject {
             if let id, !id.isEmpty { pendingEventID = id }
             return
         }
+        if url.host == "projects" {
+            let id = url.pathComponents.dropFirst().first
+            if let id, !id.isEmpty { pendingProjectID = id }
+            return
+        }
         guard url.host == "private" else { return }
         let components = Array(url.pathComponents.dropFirst())
         guard components.count == 2 else { return }
@@ -997,6 +1003,7 @@ final class AppModel: ObservableObject {
         revokingAgentConnectionID = nil
         binding = nil
         pendingEventID = nil
+        pendingProjectID = nil
         pendingModeRequestNavigation = false
         lastDashboardRefreshAt = nil
         isLoading = false
