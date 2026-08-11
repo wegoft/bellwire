@@ -117,22 +117,17 @@ try {
     result.appStoreConnect = "validated";
 
     if (options.upload) {
-      runAltool(
+      const uploadResult = runAltool(
         ["--upload-app", "-f", ipaPath, "--show-progress"],
         { issuerId, keyId: key.id, keyDirectory },
         "App Store upload",
       );
+      const deliveryId = deliveryIdFromAltool(uploadResult);
       runAltool(
         [
           "--build-status",
-          "--apple-id",
-          key.appId,
-          "--bundle-version",
-          expected.build,
-          "--bundle-short-version-string",
-          expected.version,
-          "--platform",
-          "ios",
+          "--delivery-id",
+          deliveryId,
           "--wait",
         ],
         { issuerId, keyId: key.id, keyDirectory },
@@ -348,6 +343,16 @@ function runAltool(command, { issuerId, keyId, keyDirectory }, label) {
     const diagnostic = redact(`${result.stdout ?? ""}\n${result.stderr ?? ""}`, [issuerId, keyId]);
     throw new Error(`${label} failed${diagnostic ? `: ${diagnostic}` : ""}`);
   }
+  return result;
+}
+
+function deliveryIdFromAltool(result) {
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+  const match = output.match(/(?:"delivery-uuid"\s*:\s*"|Delivery UUID:\s*)([0-9a-f-]{36})/iu);
+  if (!match) {
+    throw new Error("App Store upload succeeded without returning a delivery ID");
+  }
+  return match[1];
 }
 
 function redact(value, secrets) {
