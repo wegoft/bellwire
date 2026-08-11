@@ -18,6 +18,7 @@ struct BellwireNativeSurface: Codable, Hashable, Identifiable {
     let projectID: String
     let projectName: String
     let projectIcon: String
+    let projectLogoFilename: String?
     let surfaceKey: String
     let type: String
     let title: String

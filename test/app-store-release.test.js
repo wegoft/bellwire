@@ -55,6 +55,12 @@ describe("App Store release CLI", () => {
     expect(result.stdout).toContain("APP_STORE_CONNECT_ISSUER_ID");
   });
 
+  it("waits for the exact delivery returned by a successful upload", () => {
+    const source = readFileSync(cli, "utf8");
+    expect(source).toContain("deliveryIdFromAltool(uploadResult)");
+    expect(source).toContain('"--delivery-id"');
+  });
+
   it("verifies the exact Bellwire release identity without contacting Apple", () => {
     const result = run(releaseArguments("--local-only", "--json"));
     expect(result.status, result.stderr).toBe(0);

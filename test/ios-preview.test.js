@@ -269,12 +269,12 @@ describe("iOS Inbox preview", () => {
     const buildNumbers = [...project.matchAll(/CURRENT_PROJECT_VERSION = ([^;]+);/gu)]
       .map((match) => match[1]);
     expect(buildNumbers.length).toBeGreaterThan(0);
-    expect(new Set(buildNumbers)).toEqual(new Set(["14"]));
+    expect(new Set(buildNumbers)).toEqual(new Set(["17"]));
 
     const marketingVersions = [...project.matchAll(/MARKETING_VERSION = ([^;]+);/gu)]
       .map((match) => match[1]);
     expect(marketingVersions.length).toBeGreaterThan(0);
-    expect(new Set(marketingVersions)).toEqual(new Set(["1.0.1"]));
+    expect(new Set(marketingVersions)).toEqual(new Set(["1.0.2"]));
   });
 
   it("does not require Apple's optional authorization code to sign in", () => {
@@ -739,5 +739,49 @@ describe("iOS Inbox preview", () => {
       "Unlimited Surfaces per project · Live Activities · export",
     );
     expect(surfaces).not.toContain("LinearGradient");
+  });
+
+  it("offers configurable widgets without truncating selectable cards", () => {
+    const surfaceWidget = readFileSync(
+      "ios/Bellwire/BellwireWidgets/BellwireSurfaceWidget.swift",
+      "utf8",
+    );
+    const overviewWidget = readFileSync(
+      "ios/Bellwire/BellwireWidgets/BellwireProjectOverviewWidget.swift",
+      "utf8",
+    );
+    const entities = readFileSync(
+      "ios/Bellwire/BellwireWidgets/BellwireWidgetEntities.swift",
+      "utf8",
+    );
+    const intents = readFileSync(
+      "ios/Bellwire/BellwireWidgets/BellwireWidgetIntents.swift",
+      "utf8",
+    );
+    const nativeDisplay = readFileSync(
+      "ios/Bellwire/Bellwire/NativeDisplayManager.swift",
+      "utf8",
+    );
+    const model = readFileSync("ios/Bellwire/Bellwire/AppModel.swift", "utf8");
+
+    expect(surfaceWidget).toContain("AppIntentConfiguration(");
+    expect(surfaceWidget).toContain('let kind = "BellwireSurfaces"');
+    expect(surfaceWidget).toContain("ViewThatFits(in: .vertical)");
+    expect(surfaceWidget).toContain(".supportedFamilies([.systemSmall, .systemMedium])");
+    expect(overviewWidget).toContain("AppIntentConfiguration(");
+    expect(overviewWidget).toContain('let kind = "BellwireProjectOverview"');
+    expect(overviewWidget).toContain(".supportedFamilies([.systemMedium])");
+    expect(overviewWidget).toContain("ViewThatFits(in: .vertical)");
+    expect(overviewWidget).toContain("showsDetails: false");
+    expect(intents).toContain('@Parameter(title: "Project")');
+    expect(intents).toContain('@Parameter(title: "Card")');
+    expect(entities).toContain("@IntentParameterDependency<BellwireSurfaceWidgetIntent>");
+    expect(nativeDisplay).toContain("surfaces: allNativeSurfaces");
+    expect(nativeDisplay).not.toContain("allNativeSurfaces.prefix(");
+    expect(nativeDisplay).toContain(
+      'WidgetCenter.shared.reloadTimelines(ofKind: "BellwireProjectOverview")',
+    );
+    expect(model).toContain('url.host == "projects"');
+    expect(model).toContain("pendingProjectID = id");
   });
 });

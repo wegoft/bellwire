@@ -103,6 +103,9 @@ struct MainTabView: View {
         .onChange(of: model.pendingEventID) { _, eventID in
             if eventID != nil { selection = .home }
         }
+        .onChange(of: model.pendingProjectID, initial: true) { _, projectID in
+            if projectID != nil { selection = .home }
+        }
         .onChange(of: model.pendingModeRequestNavigation) { _, shouldOpen in
             guard shouldOpen else { return }
             selection = .settings

@@ -16,16 +16,22 @@ final class NativeDisplayManager {
         projects: [ProjectSummary],
         isPro: Bool
     ) async {
-        let allNativeSurfaces = surfaces.map(Self.nativeSurface)
-        let nativeSurfaces = Array(allNativeSurfaces.prefix(10))
+        let projectLogoFilenames = await prepareWidgetLogos(for: surfaces)
+        let allNativeSurfaces = surfaces.map { surface in
+            Self.nativeSurface(
+                surface,
+                projectLogoFilename: projectLogoFilenames[surface.projectId]
+            )
+        }
         writeSnapshot(
             BellwireWidgetSnapshot(
                 isPro: isPro,
                 updatedAt: .now,
-                surfaces: nativeSurfaces
+                surfaces: allNativeSurfaces
             )
         )
         WidgetCenter.shared.reloadTimelines(ofKind: "BellwireSurfaces")
+        WidgetCenter.shared.reloadTimelines(ofKind: "BellwireProjectOverview")
 
         await synchronizePrivateAgentActivities(
             surfaces: surfaces,
@@ -107,10 +113,12 @@ final class NativeDisplayManager {
     }
 
     func clear() async {
+        await ProjectLogoCache.shared.clearWidgetLogos(appGroup: Self.appGroup)
         writeSnapshot(
             BellwireWidgetSnapshot(isPro: false, updatedAt: .now, surfaces: [])
         )
         WidgetCenter.shared.reloadTimelines(ofKind: "BellwireSurfaces")
+        WidgetCenter.shared.reloadTimelines(ofKind: "BellwireProjectOverview")
         for activity in Activity<BellwireActivityAttributes>.activities {
             await activity.end(nil, dismissalPolicy: .immediate)
         }
@@ -197,7 +205,50 @@ final class NativeDisplayManager {
         }
     }
 
-    private static func nativeSurface(_ surface: LiveSurfaceRecord) -> BellwireNativeSurface {
+    private func prepareWidgetLogos(
+        for surfaces: [LiveSurfaceRecord]
+    ) async -> [String: String] {
+        var logoURLsByProject: [String: URL] = [:]
+        for surface in surfaces {
+            guard logoURLsByProject[surface.projectId] == nil,
+                  let rawURL = surface.project?.logoUrl,
+                  let url = URL(string: rawURL),
+                  url.scheme?.lowercased() == "https"
+            else {
+                continue
+            }
+            logoURLsByProject[surface.projectId] = url
+        }
+
+        let appGroup = Self.appGroup
+        return await withTaskGroup(
+            of: (projectID: String, filename: String?).self,
+            returning: [String: String].self
+        ) { group in
+            for (projectID, url) in logoURLsByProject {
+                group.addTask {
+                    let filename = await ProjectLogoCache.shared.widgetLogoFilename(
+                        for: url,
+                        appGroup: appGroup
+                    )
+                    return (projectID, filename)
+                }
+            }
+
+            var filenames: [String: String] = [:]
+            for await result in group {
+                if let filename = result.filename {
+                    filenames[result.projectID] = filename
+                }
+            }
+            return filenames
+        }
+    }
+
+    private static func nativeSurface(
+        _ surface: LiveSurfaceRecord,
+        projectLogoFilename: String? = nil
+    ) -> BellwireNativeSurface {
         let progress: Double?
         if let percentage = surface.content["percentage"]?.numberValue {
             progress = min(max(percentage / 100, 0), 1)
@@ -223,6 +274,7 @@ final class NativeDisplayManager {
             projectID: surface.projectId,
             projectName: surface.project?.name ?? AppConfig.displayName,
             projectIcon: surface.project?.icon ?? "rectangle.3.group",
+            projectLogoFilename: projectLogoFilename,
             surfaceKey: surface.surfaceKey,
             type: surface.type,
             title: surface.title,
